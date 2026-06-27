@@ -1,0 +1,94 @@
+# ─────────────────────────────────────────────────────────────
+# OS / Editor
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# ─────────────────────────────────────────────────────────────
+# Git / Project meta (keep .project/ tracked — it's our cross-session brain)
+# ─────────────────────────────────────────────────────────────
+*.log
+*.tmp
+
+# ─────────────────────────────────────────────────────────────
+# Flutter / Dart — app/
+# ─────────────────────────────────────────────────────────────
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/.pub-cache/
+app/.pub/
+app/build/
+app/.fvm/
+app/.metadata
+app/coverage/
+app/**/generated_plugin_registrant.dart
+app/.idea/libraries.dart
+# iOS
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/ServiceDefinitions.json
+app/ios/Runner/GeneratedPluginRegistrant.*
+app/ios/build/
+app/ios/*.xcworkspace/xcuserdata/
+app/ios/*.xcodeproj/xcuserdata/
+app/ios/**/*.pbxuser
+app/ios/**/*.perspectivev3
+# Android
+app/android/.gradle/
+app/android/build/
+app/android/app/build/
+app/android/captures/
+app/android/local.properties
+app/android/.idea/
+app/android/*.iml
+app/android/**/.cxx/
+app/android/key.properties
+app/android/app/google-services.json
+app/android/app/release/
+# Web
+app/web/icons/
+app/web/favicon.png
+# Generated files
+app/**/*.freezed.dart
+app/**/*.g.dart
+app/**/*.mocks.dart
+
+# ─────────────────────────────────────────────────────────────
+# PlatformIO / Arduino — firmware/
+# ─────────────────────────────────────────────────────────────
+firmware/.pio/
+firmware/.pioenvs/
+firmware/.piolibdeps/
+firmware/.clangd
+firmware/.gcc-flags.json
+firmware/.vscode/.browse.c_cpp_db*
+firmware/.vscode/c_cpp_properties.json
+firmware/.vscode/launch.json
+firmware/.vscode/ipc/
+firmware/build/
+firmware/firmware.bin
+firmware/partitions.bin
+firmware/bootloader.bin
+firmware/bootloader_addresses.txt
+
+# ─────────────────────────────────────────────────────────────
+# Collected data (exported sessions — never commit raw data)
+# ─────────────────────────────────────────────────────────────
+WheelSenseData/
+*.csv
+!docs/**/*.csv
+!app/test/**/*.csv
+*.meta.json
