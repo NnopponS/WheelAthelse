@@ -2,7 +2,7 @@
 
 | # | Subtask | Skill | Status | Started | Completed | Commit |
 |---|---------|-------|--------|---------|-----------|--------|
-| 1 | Scaffolding + monorepo + git/GitHub + BLE/sync/folder protocol spec | git-workflow | pending | - | - | - |
+| 1 | Scaffolding + monorepo + git/GitHub + BLE/sync/folder protocol spec | git-workflow | completed | 2026-06-28 | 2026-06-28 | f10ffd6 |
 | 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards | pending | - | - | - |
 | 3 | Firmware: BLE GATT + time-sync support | cpp-coding-standards | pending | - | - | - |
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | pending | - | - | - |
@@ -14,4 +14,6 @@
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
 
 ## Notes / Blockers
-(ว่าง — อัปเดตเมื่อเริ่มทำงาน)
+- 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthelse (private)
+  - BLE protocol v1.0.0 in docs/ble-protocol.md (UUIDs, packet layout, control/sync/info, CSV schema, folder model)
+  - Next: #2 (firmware IMU) and #4 (Flutter design system) can run in parallel after #1
