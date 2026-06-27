@@ -3,7 +3,7 @@
 | # | Subtask | Skill | Status | Started | Completed | Commit |
 |---|---------|-------|--------|---------|-----------|--------|
 | 1 | Scaffolding + monorepo + git/GitHub + BLE/sync/folder protocol spec | git-workflow | completed | 2026-06-28 | 2026-06-28 | f10ffd6 |
-| 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards | completed | 2026-06-28 | 2026-06-28 | c8301ce |
+| 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards + tdd-workflow + cpp-testing | completed | 2026-06-28 | 2026-06-28 | c8301ce → b019f74 (TDD fix) |
 | 3 | Firmware: BLE GATT + time-sync support | cpp-coding-standards | pending | - | - | - |
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | completed | 2026-06-28 | 2026-06-28 | 9583327 |
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns | pending | - | - | - |
@@ -17,7 +17,16 @@
 - 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthelse (private)
   - BLE protocol v1.0.0 in docs/ble-protocol.md (UUIDs, packet layout, control/sync/info, CSV schema, folder model)
   - Next: #2 (firmware IMU) and #4 (Flutter design system) can run in parallel after #1
-- 2026-06-28: subtask #4 done. Flutter app scaffolded (com.wheelsense, android+ios).
+- 2026-06-28: subtask #2 TDD fix done (commit b019f74). Found 6 bugs via cpp-testing review:
+  - timestamp: all samples in batch got same micros() → interpolated per-sample
+  - FIFO overflow: not detected → now checks INT_STATUS + byte count >= 512
+  - rate validation: accepted arbitrary rates → only 50/100/200 Hz
+  - static_assert(sizeof(ImuSample)==20) added (BLE packet size guarantee)
+  - ES.46 narrowing fix in FIFO byte parsing
+  - extracted pure logic to imu_types.h (host-testable)
+  Tests: 28 Python unit tests (test_imu_types.py) + C++ Unity test file + evidence report
+  (docs/testing/subtask-02-fix.tdd.md). pytest 28/28 PASS, pio run left/right SUCCESS.
+
   - deps: google_fonts, fl_chart. Design system in app/lib/theme/ (palette, dimens, typography,
     WheelSenseColors ThemeExtension for L=blue/R=orange + semantic, light+dark high-contrast ThemeData).
   - components in app/lib/widgets/: ConnectionCard, LiveMetricTile, PrimaryActionButton,
