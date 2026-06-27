@@ -1,4 +1,4 @@
-// imu_reader.cpp — MPU6886 IMU acquisition via hardware FIFO + data-ready
+// imu_reader.cpp — MPU6886 IMU acquisition via hardware FIFO + esp_timer
 //
 // Architecture (per .project/architecture.md §1):
 //   [MPU6886] → data-ready INT → ISR (set flag) → drain FIFO → FreeRTOS queue
@@ -13,6 +13,7 @@
 //   dual-core intent of the architecture and leaving Core 1 free for BLE (#3).
 
 #include "imu_reader.h"
+#include "imu_types.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -30,7 +31,7 @@ constexpr uint8_t ACCEL_CONFIG  = 0x1C;
 constexpr uint8_t FIFO_EN       = 0x23;
 constexpr uint8_t INT_PIN_CFG   = 0x37;
 constexpr uint8_t INT_ENABLE    = 0x38;
-constexpr uint8_t INT_STATUS    = 0x3A;
+constexpr uint8_t INT_STATUS    = 0x3A;   // bit 4 = FIFO_OVERFLOW
 constexpr uint8_t USER_CTRL     = 0x6A;   // bit FIFO_EN=0x40, FIFO_RST=0x04
 constexpr uint8_t PWR_MGMT_1    = 0x6B;
 constexpr uint8_t PWR_MGMT_2    = 0x6C;
@@ -38,25 +39,7 @@ constexpr uint8_t FIFO_COUNTH   = 0x72;
 constexpr uint8_t FIFO_R_W      = 0x74;
 } // namespace reg
 
-// ── Scale tables (constexpr, ES.45) ──────────────────────────────────────────
-// accel_scale[range] = full_scale_g / 32768
-constexpr float ACCEL_SCALE_TABLE[] = {
-    2.0f  / 32768.0f,   // ±2g
-    4.0f  / 32768.0f,   // ±4g
-    8.0f  / 32768.0f,   // ±8g
-    16.0f / 32768.0f,   // ±16g
-};
-
-constexpr float GYRO_SCALE_TABLE[] = {
-    250.0f  / 32768.0f,   // ±250 dps
-    500.0f  / 32768.0f,   // ±500 dps
-    1000.0f / 32768.0f,   // ±1000 dps
-    2000.0f / 32768.0f,   // ±2000 dps
-};
-
-// ACCEL_CONFIG register bits: AFS_SEL << 3
-constexpr uint8_t ACCEL_CONFIG_VAL[] = { 0x00, 0x08, 0x10, 0x18 };
-constexpr uint8_t GYRO_CONFIG_VAL[]  = { 0x00, 0x08, 0x10, 0x18 };
+constexpr uint8_t INT_FIFO_OVERFLOW_BIT = 0x10;
 
 // ── ImuReader methods ────────────────────────────────────────────────────────
 
@@ -94,7 +77,7 @@ void ImuReader::configureSensor() const {
     writeReg(reg::CONFIG, 0x03);
 
     // 3. Sample rate divider: rate = 1000 / (1 + SMPLRT_DIV)
-    const uint16_t div = static_cast<uint16_t>(1000u / rate_hz_ - 1u);
+    const uint16_t div = sampleRateDivisor(rate_hz_);
     writeReg(reg::SMPLRT_DIV, static_cast<uint8_t>(div));
 
     // 4. Accel + gyro ranges
@@ -102,6 +85,7 @@ void ImuReader::configureSensor() const {
     writeReg(reg::GYRO_CONFIG,  GYRO_CONFIG_VAL[static_cast<size_t>(gyro_range_)]);
 
     // 5. Disable all interrupts (we use esp_timer; INT pin not wired reliably)
+    //    But enable FIFO overflow interrupt bit so we can poll INT_STATUS
     writeReg(reg::INT_ENABLE, 0x00);
     writeReg(reg::INT_PIN_CFG, 0x00);
 
@@ -113,7 +97,11 @@ void ImuReader::configureSensor() const {
 }
 
 bool ImuReader::begin(uint16_t rate_hz, AccelRange ar, GyroRange gr) {
-    rate_hz_     = constrain(rate_hz, MIN_SAMPLE_RATE_HZ, MAX_SAMPLE_RATE_HZ);
+    if (!isValidRate(rate_hz)) {
+        Serial.printf("[IMU] Invalid rate %u Hz (must be 50/100/200)\n", rate_hz);
+        return false;
+    }
+    rate_hz_     = rate_hz;
     accel_range_ = ar;
     gyro_range_  = gr;
 
@@ -157,6 +145,7 @@ void ImuReader::start() {
     next_seq_      = 0;
     sample_count_  = 0;
     drop_count_    = 0;
+    fifo_overflow_count_ = 0;
     last_fifo_depth_ = 0;
 
     const uint64_t period_us = 1000000ULL / rate_hz_;
@@ -171,12 +160,15 @@ void ImuReader::stop() {
 }
 
 bool ImuReader::setRate(uint16_t rate_hz) {
-    const uint16_t new_rate = constrain(rate_hz, MIN_SAMPLE_RATE_HZ, MAX_SAMPLE_RATE_HZ);
-    if (new_rate == rate_hz_) return true;
+    if (!isValidRate(rate_hz)) {
+        Serial.printf("[IMU] Invalid rate %u Hz (must be 50/100/200)\n", rate_hz);
+        return false;
+    }
+    if (rate_hz == rate_hz_) return true;
 
     const bool was_running = running_;
     stop();
-    rate_hz_ = new_rate;
+    rate_hz_ = rate_hz;
     configureSensor();
     if (was_running) start();
     return true;
@@ -192,11 +184,11 @@ void ImuReader::setRanges(AccelRange ar, GyroRange gr) {
 }
 
 float ImuReader::accelScale() const {
-    return ACCEL_SCALE_TABLE[static_cast<size_t>(accel_range_)];
+    return wheelsense::accelScale(accel_range_);
 }
 
 float ImuReader::gyroScale() const {
-    return GYRO_SCALE_TABLE[static_cast<size_t>(gyro_range_)];
+    return wheelsense::gyroScale(gyro_range_);
 }
 
 bool ImuReader::popSample(ImuSample& out) {
@@ -205,28 +197,52 @@ bool ImuReader::popSample(ImuSample& out) {
 }
 
 void ImuReader::drainFifo() {
+    // Check FIFO overflow via INT_STATUS register
+    const uint8_t int_status = readReg(reg::INT_STATUS);
+    if (int_status & INT_FIFO_OVERFLOW_BIT) {
+        ++fifo_overflow_count_;
+        // Reset FIFO to clear corrupted data
+        writeReg(reg::USER_CTRL, 0x04);
+        delay(1);
+        writeReg(reg::USER_CTRL, 0x40);
+        last_fifo_depth_ = 0;
+        return;   // skip this drain cycle — data is unreliable
+    }
+
     // Read FIFO count (big-endian uint16)
     uint8_t count_buf[2];
     readRegs(reg::FIFO_COUNTH, count_buf, 2);
     const uint16_t fifo_bytes = (static_cast<uint16_t>(count_buf[0]) << 8) | count_buf[1];
-    const uint16_t n_samples  = fifo_bytes / FIFO_SAMPLE_BYTES;
 
+    // Secondary overflow check: if byte count >= capacity, FIFO overflowed
+    if (fifoOverflowed(fifo_bytes)) {
+        ++fifo_overflow_count_;
+        writeReg(reg::USER_CTRL, 0x04);
+        delay(1);
+        writeReg(reg::USER_CTRL, 0x40);
+        last_fifo_depth_ = 0;
+        return;
+    }
+
+    const uint16_t n_samples = fifo_bytes / FIFO_SAMPLE_BYTES;
     last_fifo_depth_ = n_samples;
 
     if (n_samples == 0) return;
 
+    // Capture drain time once — used to interpolate per-sample timestamps
+    const uint32_t drain_us = micros();
+
     // Read all FIFO data in one burst
-    // (FIFO_R_W returns all bytes; reading count*12 bytes drains exactly that)
     const size_t read_len = static_cast<size_t>(n_samples) * FIFO_SAMPLE_BYTES;
 
     // ESP32 Wire buffer default is 128 bytes; for larger reads use chunks
-    // FIFO_SAMPLE_BYTES=12, so max ~42 samples = 504 bytes → read in chunks of 10 samples
     constexpr size_t CHUNK_SAMPLES = 10;
     constexpr size_t CHUNK_BYTES   = CHUNK_SAMPLES * FIFO_SAMPLE_BYTES;
 
     uint8_t chunk[CHUNK_BYTES];
 
     size_t remaining = read_len;
+    uint16_t global_sample_idx = 0;
     while (remaining > 0) {
         const size_t this_chunk = (remaining > CHUNK_BYTES) ? CHUNK_BYTES : remaining;
         const size_t this_n     = this_chunk / FIFO_SAMPLE_BYTES;
@@ -236,22 +252,19 @@ void ImuReader::drainFifo() {
         for (size_t s = 0; s < this_n; ++s) {
             const uint8_t* p = chunk + s * FIFO_SAMPLE_BYTES;
 
-            // MPU6886 FIFO data is big-endian int16
             ImuSample sample{};
-            sample.seq           = next_seq_++;
-            sample.t_device_us   = micros();
-            sample.ax = static_cast<int16_t>((p[0]  << 8) | p[1]);
-            sample.ay = static_cast<int16_t>((p[2]  << 8) | p[3]);
-            sample.az = static_cast<int16_t>((p[4]  << 8) | p[5]);
-            sample.gx = static_cast<int16_t>((p[6]  << 8) | p[7]);
-            sample.gy = static_cast<int16_t>((p[8]  << 8) | p[9]);
-            sample.gz = static_cast<int16_t>((p[10] << 8) | p[11]);
+            sample.seq = next_seq_++;
+            // Interpolate timestamp: oldest sample gets earliest time
+            sample.t_device_us = interpolateTimestamp(drain_us, rate_hz_,
+                                                      n_samples, global_sample_idx);
+            parseFifoSample(p, sample);
 
             if (xQueueSend(sample_queue_, &sample, 0) != pdTRUE) {
                 ++drop_count_;   // queue full — BLE hasn't drained fast enough
             } else {
                 ++sample_count_;
             }
+            ++global_sample_idx;
         }
         remaining -= this_chunk;
     }
