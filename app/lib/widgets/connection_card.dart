@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/theme.dart';
-import 'status_badge.dart';
+import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelsense/widgets/status_badge.dart';
 
 /// BLE connection state for one wheel device.
 enum ConnectionStatus {

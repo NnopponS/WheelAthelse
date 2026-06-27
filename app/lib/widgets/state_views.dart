@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/theme.dart';
+import 'package:wheelsense/theme/theme.dart';
 
 /// Centered illustration + message used for empty collections (no sessions,
 /// no devices found, etc). Optionally offers a primary action.

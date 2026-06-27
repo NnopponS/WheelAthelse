@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'app_dimens.dart';
-import 'app_palette.dart';
-import 'app_typography.dart';
-import 'wheelsense_colors.dart';
+import 'package:wheelsense/theme/app_dimens.dart';
+import 'package:wheelsense/theme/app_palette.dart';
+import 'package:wheelsense/theme/app_typography.dart';
+import 'package:wheelsense/theme/wheelsense_colors.dart';
 
 /// Builds the WheelSense [ThemeData] for light and dark modes.
 ///

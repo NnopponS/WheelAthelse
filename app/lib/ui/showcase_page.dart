@@ -3,8 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../theme/theme.dart';
-import '../widgets/widgets.dart';
+import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelsense/widgets/widgets.dart';
 
 /// Living style guide: renders every design-system token and reusable
 /// component with mock data. Used during development to review the UI and as a
@@ -74,12 +74,12 @@ class _ShowcasePageState extends State<ShowcasePage> {
                 title: 'Typography',
                 child: _TypographyPreview(),
               ),
-              _Section(
+              const _Section(
                 title: 'Status badges',
                 child: Wrap(
                   spacing: AppSpacing.xs,
                   runSpacing: AppSpacing.xs,
-                  children: const [
+                  children: [
                     StatusBadge(label: 'Connected', tone: BadgeTone.success, icon: Icons.check_circle_rounded),
                     StatusBadge(label: 'Connecting', tone: BadgeTone.warning, icon: Icons.sync_rounded),
                     StatusBadge(label: 'Disconnected', tone: BadgeTone.neutral, icon: Icons.cloud_off_rounded),
@@ -204,9 +204,9 @@ class _ShowcasePageState extends State<ShowcasePage> {
                   onAction: () {},
                 )),
               ),
-              _Section(
+              const _Section(
                 title: 'Loading state',
-                child: const _Framed(
+                child: _Framed(
                   child: LoadingState(message: 'Scanning for WheelSense devices…'),
                 ),
               ),

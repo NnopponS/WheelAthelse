@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'theme/theme.dart';
-import 'ui/showcase_page.dart';
+import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelsense/ui/showcase_page.dart';
 
 void main() => runApp(const WheelSenseApp());
 

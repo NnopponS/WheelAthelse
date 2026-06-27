@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/theme.dart';
+import 'package:wheelsense/theme/theme.dart';
 
 /// A large circular "Mark Event" control used during recording to drop a sync
 /// marker (for aligning IMU data with the camera). Big and centered so it can

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'app_palette.dart';
-import 'wheel_side.dart';
+import 'package:wheelsense/theme/app_palette.dart';
+import 'package:wheelsense/theme/wheel_side.dart';
 
 /// A pair of foreground/background colors used to render a semantic chip,
 /// badge, or accent surface. [container] is a tinted fill; [on] is text/icon

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/theme.dart';
+import 'package:wheelsense/theme/theme.dart';
 
 /// Visual intent for [PrimaryActionButton].
 enum ActionIntent { start, stop, neutral }
