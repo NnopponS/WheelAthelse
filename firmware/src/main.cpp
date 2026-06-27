@@ -1,14 +1,18 @@
-// main.cpp — WheelSense firmware entry point (subtask #2)
+// main.cpp — WheelSense firmware entry point (subtask #2 + #3)
 //
-// Wires ImuReader (MPU6886 FIFO + esp_timer on Core 0) →
-//   StatusDisplay (M5 LCD on Core 1) + Serial CSV debug output.
+// Core 0: IMU acquisition (esp_timer → FIFO → queue)  [imu_reader.cpp]
+// Core 1: Arduino loop — BLE streaming + display + buttons  [this file]
 //
-// BLE GATT will be added in subtask #3 (reads from the same sample queue).
+// BLE GATT (subtask #3):
+//   - BleService handles IMU Data notify, Control commands, Sync, Info
+//   - Scheduled start with countdown beep 3-2-1
+//   - BLE task drains queue → batches → notifies
 
 #include <M5Unified.h>
 
 #include "imu_reader.h"
 #include "display.h"
+#include "ble_service.h"
 
 using namespace wheelsense;
 
@@ -24,13 +28,17 @@ static constexpr char WHEEL = static_cast<char>(WHEEL_ID);
 static const char CSV_HEADER[] =
     "seq,wheel,timestamp_app_ms,timestamp_device_us,ax,ay,az,gx,gy,gz,marker\n";
 
+// ── BLE task (runs on Core 1 via Arduino loop, not a separate FreeRTOS task) ──
+// We call ble().bleTask() from loop() since Arduino loop is already on Core 1.
+// This keeps BLE streaming separate from IMU acquisition (Core 0 esp_timer).
+
 void setup() {
     M5.begin();
 
     // Serial debug
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n=== WheelSense Firmware (subtask #2) ===");
+    Serial.println("\n=== WheelSense Firmware (subtask #2+#3) ===");
     Serial.printf("Wheel: %c\n", WHEEL);
 
     // Initialize display
@@ -46,32 +54,39 @@ void setup() {
         while (true) delay(1000);
     }
 
+    // Initialize BLE GATT server
+    ble().begin(WHEEL);
+
     // Print CSV header for serial debug
     Serial.print(CSV_HEADER);
 
-    // Start acquisition
-    imu().start();
-    Serial.println("[MAIN] Acquisition started");
+    Serial.println("[MAIN] Setup complete — waiting for BLE START command");
 }
 
 void loop() {
     M5.update();
 
-    // Drain sample queue → serial CSV + display stats
-    ImuSample s;
-    while (imu().popSample(s)) {
-        // Serial CSV (raw LSB values; physical conversion done in app per BLE protocol)
-        // marker=0 (no Mark Event in subtask #2; will be added in #8)
-        Serial.printf("%lu,%c,%lu,%lu,%d,%d,%d,%d,%d,%d,0\n",
-                      static_cast<unsigned long>(s.seq),
-                      WHEEL,
-                      static_cast<unsigned long>(millis()),   // timestamp_app_ms (proxy)
-                      static_cast<unsigned long>(s.t_device_us),
-                      s.ax, s.ay, s.az,
-                      s.gx, s.gy, s.gz);
+    // ── BLE tick: countdown beeps + scheduled start + drop count events ──
+    ble().tick();
+
+    // ── BLE streaming: drain queue → batch → notify ──
+    ble().bleTask();
+
+    // ── Serial CSV debug (drain any remaining samples if BLE not connected) ──
+    if (!ble().connected()) {
+        ImuSample s;
+        while (imu().popSample(s)) {
+            Serial.printf("%lu,%c,%lu,%lu,%d,%d,%d,%d,%d,%d,0\n",
+                          static_cast<unsigned long>(s.seq),
+                          WHEEL,
+                          static_cast<unsigned long>(millis()),
+                          static_cast<unsigned long>(s.t_device_us),
+                          s.ax, s.ay, s.az,
+                          s.gx, s.gy, s.gz);
+        }
     }
 
-    // Refresh display (~5 fps, throttled inside refresh())
+    // ── Refresh display ──
     display().refresh(WHEEL,
                       imu().rateHz(),
                       imu().sampleCount(),
@@ -80,18 +95,18 @@ void loop() {
                       static_cast<uint8_t>(M5.Power.getBatteryLevel()),
                       imu().running());
 
-    // Button A (M5 btn) = toggle start/stop
+    // ── Button A (M5 btn) = toggle start/stop (local, without BLE) ──
     if (M5.BtnA.wasPressed()) {
         if (imu().running()) {
             imu().stop();
-            Serial.println("[MAIN] Acquisition stopped");
+            Serial.println("[MAIN] Acquisition stopped (BtnA)");
         } else {
             imu().start();
-            Serial.println("[MAIN] Acquisition started");
+            Serial.println("[MAIN] Acquisition started (BtnA)");
         }
     }
 
-    // Button B = cycle sample rate (50 → 100 → 200 → 50)
+    // ── Button B = cycle sample rate (50 → 100 → 200 → 50) ──
     if (M5.BtnB.wasPressed()) {
         uint16_t new_rate = 50;
         switch (imu().rateHz()) {

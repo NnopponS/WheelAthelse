@@ -1,0 +1,416 @@
+// ble_service.cpp — BLE GATT server for WheelSense
+//
+// Implements docs/ble-protocol.md using NimBLE-Arduino.
+// BLE task runs on Core 1 (separate from IMU acquisition on Core 0).
+
+#include "ble_service.h"
+#include "ble_types.h"
+#include "imu_reader.h"
+
+#include <Arduino.h>
+#include <M5Unified.h>
+#include <NimBLEDevice.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
+
+namespace wheelsense {
+
+// ── NimBLE characteristic callbacks ──────────────────────────────────────────
+
+class ControlCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pChar) override {
+        const size_t len = pChar->getValue().length();
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(pChar->getValue().data());
+        BleService::onControlWrite(data, len);
+    }
+};
+
+class InfoCallbacks : public NimBLECharacteristicCallbacks {
+    void onRead(NimBLECharacteristic* /*pChar*/) override {
+        // Info is updated dynamically — nothing to do here, value is set in begin()
+    }
+};
+
+// ── Server callbacks (connect/disconnect/MTU) ────────────────────────────────
+
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* /*server*/) override {
+        BleService::onConnect();
+    }
+    void onDisconnect(NimBLEServer* /*server*/) override {
+        BleService::onDisconnect();
+    }
+    void onMTUChange(uint16_t MTU, ble_gap_conn_desc* /*desc*/) override {
+        BleService::onMtuExchange(MTU);
+    }
+};
+
+// ── Static members for singleton access ──────────────────────────────────────
+
+static NimBLEServer*       s_server       = nullptr;
+static NimBLEService*       s_service      = nullptr;
+static NimBLECharacteristic* s_char_imu    = nullptr;
+static NimBLECharacteristic* s_char_control = nullptr;
+static NimBLECharacteristic* s_char_sync    = nullptr;
+static NimBLECharacteristic* s_char_info    = nullptr;
+
+// ── BleService methods ───────────────────────────────────────────────────────
+
+void BleService::begin(char wheel_id) {
+    wheel_id_ = wheel_id;
+
+    // Device name: "WheelSense-L" or "WheelSense-R"
+    char device_name[16];
+    snprintf(device_name, sizeof(device_name), "WheelSense-%c", wheel_id);
+
+    NimBLEDevice::init(device_name);
+    NimBLEDevice::setMTU(247);   // request larger MTU for bigger batches
+
+    s_server = NimBLEDevice::createServer();
+    s_server->setCallbacks(new ServerCallbacks());
+
+    s_service = s_server->createService(SERVICE_UUID);
+
+    // IMU Data (Notify)
+    s_char_imu = s_service->createCharacteristic(
+        CHAR_IMU_DATA_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
+    // Control (Write + Write Without Response)
+    s_char_control = s_service->createCharacteristic(
+        CHAR_CONTROL_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    );
+    s_char_control->setCallbacks(new ControlCallbacks());
+
+    // Sync (Notify + Indicate)
+    s_char_sync = s_service->createCharacteristic(
+        CHAR_SYNC_UUID,
+        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::INDICATE
+    );
+
+    // Info (Read)
+    s_char_info = s_service->createCharacteristic(
+        CHAR_INFO_UUID,
+        NIMBLE_PROPERTY::READ
+    );
+    s_char_info->setCallbacks(new InfoCallbacks());
+
+    // Set initial Info value
+    updateInfoCharacteristic();
+
+    s_service->start();
+
+    // Start advertising
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->addServiceUUID(SERVICE_UUID);
+    adv->setScanResponse(true);
+    adv->start();
+
+    state_ = BleState::Advertising;
+    Serial.printf("[BLE] Advertising as '%s'\n", device_name);
+}
+
+void BleService::updateInfoCharacteristic() {
+    uint8_t info_buf[INFO_SIZE];
+    packInfo(static_cast<uint8_t>(wheel_id_),
+             WHEELSENSE_FW_MAJOR, WHEELSENSE_FW_MINOR, WHEELSENSE_FW_PATCH,
+             static_cast<uint8_t>(imu().accelRange()),
+             static_cast<uint8_t>(imu().gyroRange()),
+             imu().accelScale(), imu().gyroScale(),
+             info_buf);
+    s_char_info->setValue(info_buf, INFO_SIZE);
+}
+
+// ── Static callback forwarders ───────────────────────────────────────────────
+
+void BleService::onConnect() {
+    ble().state_ = BleState::Connected;
+    Serial.println("[BLE] Central connected");
+}
+
+void BleService::onDisconnect() {
+    ble().state_ = BleState::Advertising;
+    // Stop acquisition if running
+    if (imu().running()) {
+        imu().stop();
+    }
+    ble().pending_start_ = false;
+    NimBLEDevice::startAdvertising();
+    Serial.println("[BLE] Disconnected — resuming advertising");
+}
+
+void BleService::onMtuExchange(uint16_t mtu) {
+    ble().mtu_ = mtu;
+    Serial.printf("[BLE] MTU exchange: %u\n", mtu);
+}
+
+void BleService::onControlWrite(const uint8_t* data, size_t len) {
+    uint8_t payload[32] = {};
+    size_t payload_len = 0;
+    const Cmd cmd = parseCommand(data, len, payload, payload_len);
+    ble().handleCommand(cmd, payload, payload_len);
+}
+
+// ── Command handlers ─────────────────────────────────────────────────────────
+
+void BleService::handleCommand(Cmd cmd, const uint8_t* payload, size_t len) {
+    switch (cmd) {
+        case Cmd::Start: {
+            if (len >= 4) {
+                uint32_t target_us;
+                std::memcpy(&target_us, payload, 4);
+                handleStart(target_us);
+            } else {
+                handleStart(0);  // immediate
+            }
+            break;
+        }
+        case Cmd::Stop:
+            handleStop();
+            break;
+        case Cmd::SetRate: {
+            if (len >= 2) {
+                uint16_t rate_hz;
+                std::memcpy(&rate_hz, payload, 2);
+                handleSetRate(rate_hz);
+            }
+            break;
+        }
+        case Cmd::SyncPing: {
+            if (len >= 4) {
+                uint32_t t_app_ms;
+                std::memcpy(&t_app_ms, payload, 4);
+                handleSyncPing(t_app_ms);
+            }
+            break;
+        }
+        case Cmd::SetRange: {
+            if (len >= 2) {
+                handleSetRange(payload[0], payload[1]);
+            }
+            break;
+        }
+        case Cmd::Beep: {
+            if (len >= 3) {
+                uint16_t period_ms;
+                std::memcpy(&period_ms, payload + 1, 2);
+                handleBeep(payload[0], period_ms);
+            }
+            break;
+        }
+        case Cmd::ResetSeq:
+            handleResetSeq();
+            break;
+        default:
+            sendCmdNack(static_cast<uint8_t>(cmd));
+            Serial.printf("[BLE] Unknown cmd: 0x%02X\n", static_cast<uint8_t>(cmd));
+            break;
+    }
+}
+
+void BleService::handleStart(uint32_t target_start_us) {
+    target_start_us_ = target_start_us;
+    last_beep_fired_ = -1;
+
+    if (target_start_us == 0) {
+        // Immediate start
+        imu().start();
+        state_ = BleState::Recording;
+        sendStartFired();
+        Serial.println("[BLE] START (immediate)");
+    } else {
+        // Scheduled start — wait in tick()
+        pending_start_ = true;
+        state_ = BleState::Countdown;
+        Serial.printf("[BLE] START scheduled at %u us\n", target_start_us);
+    }
+}
+
+void BleService::handleStop() {
+    if (imu().running()) {
+        imu().stop();
+        flushBatch();   // send remaining samples
+        sendStopFired();
+    }
+    pending_start_ = false;
+    state_ = BleState::Connected;
+    Serial.println("[BLE] STOP");
+}
+
+void BleService::handleSetRate(uint16_t rate_hz) {
+    if (imu().setRate(rate_hz)) {
+        updateInfoCharacteristic();
+        Serial.printf("[BLE] SET_RATE: %u Hz\n", rate_hz);
+    } else {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetRate));
+    }
+}
+
+void BleService::handleSyncPing(uint32_t t_app_ms) {
+    // Capture device time IMMEDIATELY in the callback path (lowest latency)
+    const uint32_t t_device_us = micros();
+    ++sync_ping_count_;
+
+    // Pack and send sync response
+    uint8_t buf[SYNC_RESPONSE_SIZE];
+    packSyncResponse(t_app_ms, t_device_us, sync_ping_count_, buf);
+
+    // Prepend event_id for Sync characteristic
+    uint8_t event_buf[1 + SYNC_RESPONSE_SIZE];
+    packSyncEvent(SyncEvent::SyncResponse, buf, SYNC_RESPONSE_SIZE, event_buf);
+    s_char_sync->setValue(event_buf, 1 + SYNC_RESPONSE_SIZE);
+    s_char_sync->notify();
+}
+
+void BleService::handleSetRange(uint8_t accel_range, uint8_t gyro_range) {
+    if (accel_range > 3 || gyro_range > 3) {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetRange));
+        return;
+    }
+    imu().setRanges(static_cast<AccelRange>(accel_range),
+                    static_cast<GyroRange>(gyro_range));
+    updateInfoCharacteristic();
+    Serial.printf("[BLE] SET_RANGE: accel=%u, gyro=%u\n", accel_range, gyro_range);
+}
+
+void BleService::handleBeep(uint8_t count, uint16_t period_ms) {
+    for (uint8_t i = 0; i < count; ++i) {
+        doBeep(880, 150);
+        delay(period_ms);
+    }
+}
+
+void BleService::handleResetSeq() {
+    // Reset seq by stopping and starting
+    if (imu().running()) {
+        imu().stop();
+        imu().start();
+    }
+    Serial.println("[BLE] RESET_SEQ");
+}
+
+// ── Event senders ────────────────────────────────────────────────────────────
+
+void BleService::sendStartFired() {
+    uint8_t buf[5];
+    packStartFired(micros(), buf);
+    s_char_sync->setValue(buf, 5);
+    s_char_sync->notify();
+}
+
+void BleService::sendStopFired() {
+    uint8_t buf[9];
+    packStopFired(micros(), imu().sampleCount(), buf);
+    s_char_sync->setValue(buf, 9);
+    s_char_sync->notify();
+}
+
+void BleService::sendDropCountEvent() {
+    const uint32_t new_drops = imu().dropCount() - last_drop_count_;
+    if (new_drops > 0) {
+        uint8_t buf[5];
+        packDropCountEvent(new_drops, buf);
+        s_char_sync->setValue(buf, 5);
+        s_char_sync->notify();
+        last_drop_count_ = imu().dropCount();
+    }
+}
+
+void BleService::sendCmdNack(uint8_t cmd) {
+    uint8_t buf[2];
+    packCmdNack(cmd, buf);
+    s_char_sync->setValue(buf, 2);
+    s_char_sync->notify();
+}
+
+// ── Beep ─────────────────────────────────────────────────────────────────────
+
+void BleService::doBeep(uint16_t freq_hz, uint16_t duration_ms) {
+    // M5StickCPlus2 built-in buzzer via M5Unified Speaker
+    M5.Speaker.setVolume(64);   // moderate volume (0-128)
+    M5.Speaker.tone(freq_hz, duration_ms);
+}
+
+// ── Tick: called from main loop (Core 1) ─────────────────────────────────────
+
+void BleService::tick() {
+    // Handle countdown beeps + scheduled start
+    if (pending_start_) {
+        const uint32_t now = micros();
+
+        // Check for beep
+        const int8_t beep_idx = checkBeepSchedule(target_start_us_, now, last_beep_fired_);
+        if (beep_idx >= 0) {
+            const BeepEvent& bp = BEEP_SCHEDULE[beep_idx];
+            doBeep(bp.freq_hz, bp.duration_ms);
+            last_beep_fired_ = beep_idx;
+            Serial.printf("[BLE] Beep %d/4 (T%+ds)\n", beep_idx + 1,
+                          bp.offset_us / 1000000);
+        }
+
+        // Check if it's time to start
+        if (shouldStartNow(target_start_us_, now)) {
+            imu().start();
+            pending_start_ = false;
+            state_ = BleState::Recording;
+            sendStartFired();
+            Serial.println("[BLE] Scheduled START fired");
+        }
+    }
+
+    // Send DROP_COUNT event if new drops occurred
+    if (imu().dropCount() > last_drop_count_) {
+        sendDropCountEvent();
+    }
+}
+
+// ── BLE task: drain queue → batch → notify ──────────────────────────────────
+
+void BleService::bleTask() {
+    if (!connected() || !imu().running()) return;
+
+    const uint8_t max_count = maxBatchCount(mtu_);
+    if (max_count == 0) return;
+
+    // Collect samples into a local array
+    ImuSample samples[12];   // max 12 at MTU 247
+    uint8_t count = 0;
+
+    ImuSample s;
+    while (count < max_count && imu().popSample(s)) {
+        samples[count++] = s;
+    }
+
+    if (count == 0) return;
+
+    // Pack and notify
+    const size_t batch_len = packBatch(samples, count, batch_buf_);
+    s_char_imu->setValue(batch_buf_, batch_len);
+    s_char_imu->notify();
+    ++notify_count_;
+}
+
+void BleService::flushBatch() {
+    // Send any remaining samples in the queue as a final batch
+    bleTask();
+    // Call again until queue is empty
+    ImuSample s;
+    while (imu().popSample(s)) {
+        ImuSample single[1] = {s};
+        const size_t len = packBatch(single, 1, batch_buf_);
+        s_char_imu->setValue(batch_buf_, len);
+        s_char_imu->notify();
+        ++notify_count_;
+    }
+}
+
+// ── Singleton ────────────────────────────────────────────────────────────────
+
+BleService& ble() {
+    static BleService instance;
+    return instance;
+}
+
+} // namespace wheelsense
