@@ -48,4 +48,18 @@ void main() {
     await tester.tap(find.byIcon(Icons.ios_share_rounded));
     expect(shared, isTrue);
   });
+
+  testWidgets('formats sub-1000 sample counts without k suffix', (tester) async {
+    await pumpThemed(
+      tester,
+      const SessionListItem(
+        title: 's',
+        subtitle: 't',
+        duration: Duration(seconds: 5),
+        sampleCount: 742,
+      ),
+    );
+    expect(find.text('742 samples'), findsOneWidget);
+    expect(find.text('5s'), findsOneWidget);
+  });
 }

@@ -10,10 +10,9 @@ import 'package:wheelsense/widgets/widgets.dart';
 /// component with mock data. Used during development to review the UI and as a
 /// reference for the screens built in subtasks #5/#6/#8/#9.
 class ShowcasePage extends StatefulWidget {
-  const ShowcasePage({super.key, required this.onToggleTheme, required this.isDark});
+  const ShowcasePage({super.key, required this.controller});
 
-  final VoidCallback onToggleTheme;
-  final bool isDark;
+  final ThemeModeController controller;
 
   @override
   State<ShowcasePage> createState() => _ShowcasePageState();
@@ -43,18 +42,52 @@ class _ShowcasePageState extends State<ShowcasePage> {
 
   double _wave(double phase, double amp) => math.sin(_t + phase) * amp;
 
+  PopupMenuItem<ThemeMode> _modeItem(
+    ThemeMode mode,
+    String label,
+    ThemeMode current,
+    IconData icon,
+  ) {
+    return PopupMenuItem<ThemeMode>(
+      value: mode,
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: AppSpacing.sm),
+          Text(label),
+          const Spacer(),
+          if (mode == current)
+            const Icon(Icons.check_rounded, size: 18),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('WheelSense UI'),
         actions: [
-          IconButton(
-            onPressed: widget.onToggleTheme,
+          PopupMenuButton<ThemeMode>(
+            tooltip: 'Theme mode',
             icon: Icon(
-              widget.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              widget.controller.isDark(context)
+                  ? Icons.light_mode_rounded
+                  : Icons.dark_mode_rounded,
             ),
-            tooltip: 'Toggle theme',
+            onSelected: widget.controller.set,
+            itemBuilder: (context) {
+              final current = widget.controller.value;
+              return [
+                _modeItem(ThemeMode.system, 'System', current,
+                    Icons.brightness_auto_rounded),
+                _modeItem(ThemeMode.light, 'Light', current,
+                    Icons.light_mode_rounded),
+                _modeItem(ThemeMode.dark, 'Dark', current,
+                    Icons.dark_mode_rounded),
+              ];
+            },
           ),
           const SizedBox(width: AppSpacing.xs),
         ],
@@ -149,11 +182,11 @@ class _ShowcasePageState extends State<ShowcasePage> {
                       onPressed: () => setState(() => _recording = !_recording),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    PrimaryActionButton(
+                    const PrimaryActionButton(
                       label: 'Syncing clocks…',
                       icon: Icons.sync_rounded,
                       busy: true,
-                      onPressed: () {},
+                      onPressed: null,
                     ),
                   ],
                 ),
@@ -262,14 +295,16 @@ class _Framed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: AppRadius.brLg,
-        border: Border.all(color: scheme.outlineVariant),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 220),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: AppRadius.brLg,
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }

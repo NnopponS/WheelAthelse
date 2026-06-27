@@ -17,24 +17,30 @@ class WheelSenseApp extends StatefulWidget {
 }
 
 class _WheelSenseAppState extends State<WheelSenseApp> {
-  ThemeMode _mode = ThemeMode.light;
+  final ThemeModeController _theme = ThemeModeController();
 
-  void _toggle() => setState(() {
-        _mode = _mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-      });
+  @override
+  void dispose() {
+    _theme.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'WheelSense',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: _mode,
-      home: ShowcasePage(
-        onToggleTheme: _toggle,
-        isDark: _mode == ThemeMode.dark,
-      ),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: _theme,
+      builder: (context, mode, _) {
+        return MaterialApp(
+          title: 'WheelSense',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: mode,
+          home: ShowcasePage(
+            controller: _theme,
+          ),
+        );
+      },
     );
   }
 }

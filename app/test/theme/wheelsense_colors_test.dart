@@ -63,4 +63,30 @@ void main() {
   test('left identity color matches the documented palette value', () {
     expect(WheelSenseColors.light.left.solid, AppPalette.left);
   });
+
+  group('copyWith', () {
+    test('returns identical values when called with no arguments', () {
+      final copy = WheelSenseColors.light.copyWith();
+      expect(copy.left.solid, WheelSenseColors.light.left.solid);
+      expect(copy.right.solid, WheelSenseColors.light.right.solid);
+      expect(copy.success.solid, WheelSenseColors.light.success.solid);
+      expect(copy.warning.solid, WheelSenseColors.light.warning.solid);
+      expect(copy.danger.solid, WheelSenseColors.light.danger.solid);
+      expect(copy.chartGrid, WheelSenseColors.light.chartGrid);
+    });
+
+    test('overrides only the supplied fields', () {
+      const newLeft = ColorRole(
+        solid: Color(0xFF123456),
+        on: Color(0xFFFFFFFF),
+        container: Color(0xFF654321),
+        onContainer: Color(0xFFEEEEEE),
+      );
+      final copy = WheelSenseColors.light.copyWith(left: newLeft);
+      expect(copy.left.solid, const Color(0xFF123456));
+      // Untouched fields keep the original.
+      expect(copy.right.solid, WheelSenseColors.light.right.solid);
+      expect(copy.chartGrid, WheelSenseColors.light.chartGrid);
+    });
+  });
 }

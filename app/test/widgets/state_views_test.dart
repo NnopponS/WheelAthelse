@@ -59,4 +59,19 @@ void main() {
     await pumpThemed(tester, const ErrorState(title: 'Boom'));
     expect(find.text('Try again'), findsNothing);
   });
+
+  testWidgets('ErrorState renders message when provided', (tester) async {
+    await pumpThemed(
+      tester,
+      const ErrorState(
+        title: 'Lost connection',
+        message: 'The right wheel dropped off. Move closer and retry.',
+      ),
+    );
+    expect(find.text('Lost connection'), findsOneWidget);
+    expect(
+      find.text('The right wheel dropped off. Move closer and retry.'),
+      findsOneWidget,
+    );
+  });
 }
