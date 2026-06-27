@@ -3,7 +3,7 @@
 | # | Subtask | Skill | Status | Started | Completed | Commit |
 |---|---------|-------|--------|---------|-----------|--------|
 | 1 | Scaffolding + monorepo + git/GitHub + BLE/sync/folder protocol spec | git-workflow | completed | 2026-06-28 | 2026-06-28 | f10ffd6 |
-| 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards | pending | - | - | - |
+| 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards | completed | 2026-06-28 | 2026-06-28 | (pending commit) |
 | 3 | Firmware: BLE GATT + time-sync support | cpp-coding-standards | pending | - | - | - |
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | pending | - | - | - |
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns | pending | - | - | - |
