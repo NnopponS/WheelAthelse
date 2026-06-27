@@ -12,16 +12,25 @@ Flutter app สำหรับ iOS + Android เชื่อม BLE กับ M5
 - **UI:** design system เป็นของตัวเอง (skill: `impeccable` + `ui-ux-pro-max`)
 
 ## สถานะปัจจุบัน
-> [subtask #1] โฟลเดอร์นี้เป็น scaffold ว่าง — code จริงจะถูกเพิ่มเริ่มจาก subtask #4
-> (design system) และ subtask #5 (BLE scan + connect)
+> [subtask #4] design system + theme + reusable components + showcase พร้อมแล้ว
+> หน้า home คือ Showcase (living style guide) — ใช้ `flutter run` ดูได้
+> ถัดไป: subtask #5 (BLE scan + connect) จะนำ theme/components เหล่านี้ไปใช้
 
-## โครงสร้างเป้าหมาย (หลัง subtask #4–#9)
+## โครงสร้าง (ปัจจุบัน + เป้าหมาย)
 ```
 app/
 ├── lib/
-│   ├── main.dart
-│   ├── theme/               # design system (subtask #4)
-│   ├── components/          # reusable UI components
+│   ├── main.dart            # ✅ root + theme wiring (home = showcase)
+│   ├── theme/               # ✅ design system (subtask #4)
+│   │   ├── app_palette.dart      # color primitives
+│   │   ├── app_dimens.dart       # spacing / radius / sizing
+│   │   ├── app_typography.dart   # Inter + JetBrains Mono (tabular metrics)
+│   │   ├── wheelsense_colors.dart# ThemeExtension: L/R + semantic colors
+│   │   ├── wheel_side.dart        # WheelSide enum (L/R)
+│   │   ├── app_theme.dart        # light/dark ThemeData
+│   │   └── theme.dart            # barrel export
+│   ├── widgets/             # ✅ reusable components (subtask #4)
+│   ├── ui/                  # ✅ showcase / preview page
 │   ├── ble/                 # BLE manager + packet parser (#5, #6)
 │   ├── sync/                # clock sync engine (#7)
 │   ├── recording/           # session recorder + mark event (#8)
