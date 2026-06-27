@@ -175,7 +175,7 @@ WheelAthleteData/
 
 ## Folder structure (monorepo)
 ```
-WheelAthelse/
+WheelAthlete/
 ├── firmware/              # PlatformIO project (M5StickCPlus2)
 │   ├── platformio.ini
 │   ├── src/

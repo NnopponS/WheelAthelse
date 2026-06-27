@@ -37,7 +37,7 @@ flutter run -d <device-id>
 
 ## Repo layout
 ```
-WheelAthelse/
+WheelAthlete/
 ├── firmware/      # PlatformIO project (M5StickCPlus2)
 ├── app/           # Flutter project (iOS + Android)
 ├── docs/          # BLE protocol + field protocol

@@ -14,7 +14,7 @@
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
 
 ## Notes / Blockers
-- 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthelse (private)
+- 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthlete (private)
   - BLE protocol v1.0.0 in docs/ble-protocol.md (UUIDs, packet layout, control/sync/info, CSV schema, folder model)
   - Next: #2 (firmware IMU) and #4 (Flutter design system) can run in parallel after #1
 - 2026-06-28: subtask #2 TDD fix done (commit b019f74). Found 6 bugs via cpp-testing review:
