@@ -1,4 +1,4 @@
-// main.cpp — WheelSense firmware entry point (subtask #2 + #3)
+// main.cpp — WheelAthlete firmware entry point (subtask #2 + #3)
 //
 // Core 0: IMU acquisition (esp_timer → FIFO → queue)  [imu_reader.cpp]
 // Core 1: Arduino loop — BLE streaming + display + buttons  [this file]
@@ -14,7 +14,7 @@
 #include "display.h"
 #include "ble_service.h"
 
-using namespace wheelsense;
+using namespace WheelAthlete;
 
 // ── Build-time wheel identity (from platformio.ini build_flags) ──
 // WHEEL_ID is passed as ASCII hex (0x4C='L', 0x52='R') to avoid shell quoting issues
@@ -38,7 +38,7 @@ void setup() {
     // Serial debug
     Serial.begin(115200);
     delay(200);
-    Serial.println("\n=== WheelSense Firmware (subtask #2+#3) ===");
+    Serial.println("\n=== WheelAthlete Firmware (subtask #2+#3) ===");
     Serial.printf("Wheel: %c\n", WHEEL);
 
     // Initialize display

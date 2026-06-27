@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #10: เอกสาร data-collection protocol + field test
 ใช้ tdd-workflow skill เพื่อเขียนเอกสารขั้นตอนเก็บข้อมูล + ทดสอบจริง
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #10 of 10  (ปิด Phase 1)
 - Stack: เอกสาร (Markdown) + field test ของจริง + สคริปต์ Python ตรวจสอบ
 - Depends on: #2-#9 (ระบบครบ)

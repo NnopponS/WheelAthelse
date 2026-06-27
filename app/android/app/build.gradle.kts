@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.wheelsense.wheelsense"
+    namespace = "com.wheelathlete.wheelathlete"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.wheelsense.wheelsense"
+        applicationId = "com.wheelathlete.wheelathlete"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

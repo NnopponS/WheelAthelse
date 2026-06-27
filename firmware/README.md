@@ -1,4 +1,4 @@
-# Firmware — WheelSense (M5StickCPlus2)
+# Firmware — WheelAthlete (M5StickCPlus2)
 
 Firmware สำหรับ M5StickCPlus2 (ESP32) ที่ติดบนล้อวีลแชร์ (ซ้าย/ขวา)
 อ่าน IMU MPU6886 และส่งผ่าน BLE ไปยัง mobile app

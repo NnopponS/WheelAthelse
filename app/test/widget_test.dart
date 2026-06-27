@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:wheelsense/main.dart' as app_entry;
-import 'package:wheelsense/theme/theme_mode_controller.dart';
+import 'package:wheelathlete/main.dart' as app_entry;
+import 'package:wheelathlete/theme/theme_mode_controller.dart';
 
 void main() {
   setUpAll(() {
@@ -39,11 +39,11 @@ void main() {
 
   testWidgets('Showcase renders core components and theme menu opens',
       (tester) async {
-    await tester.pumpWidget(const app_entry.WheelSenseApp());
+    await tester.pumpWidget(const app_entry.WheelAthleteApp());
     await tester.pump();
 
     // Sections + components are present in the initial viewport.
-    expect(find.text('WheelSense UI'), findsOneWidget);
+    expect(find.text('WheelAthlete UI'), findsOneWidget);
     expect(find.text('Left wheel'), findsOneWidget);
     expect(find.text('Right wheel'), findsWidgets);
 
@@ -60,7 +60,7 @@ void main() {
 
   testWidgets('tapping Start recording toggles state and enables Mark button',
       (tester) async {
-    await tester.pumpWidget(const app_entry.WheelSenseApp());
+    await tester.pumpWidget(const app_entry.WheelAthleteApp());
     await tester.pump();
 
     // Scroll down to the primary actions section.
@@ -83,7 +83,7 @@ void main() {
   });
 
   testWidgets('busy sync button renders spinner', (tester) async {
-    await tester.pumpWidget(const app_entry.WheelSenseApp());
+    await tester.pumpWidget(const app_entry.WheelAthleteApp());
     await tester.pump();
 
     // Scroll to the Primary actions section.
@@ -95,14 +95,14 @@ void main() {
 
   testWidgets('tapping connection cards and session items invokes callbacks',
       (tester) async {
-    await tester.pumpWidget(const app_entry.WheelSenseApp());
+    await tester.pumpWidget(const app_entry.WheelAthleteApp());
     await tester.pump();
 
     // Scroll down to connection cards.
-    await dragUntilVisible(tester, find.text('WheelSense-L'));
-    await tester.tap(find.text('WheelSense-L'));
+    await dragUntilVisible(tester, find.text('WheelAthlete-L'));
+    await tester.tap(find.text('WheelAthlete-L'));
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.text('WheelSense-R'));
+    await tester.tap(find.text('WheelAthlete-R'));
     await tester.pump(const Duration(milliseconds: 50));
 
     // Scroll down to session list.
@@ -123,7 +123,7 @@ void main() {
   });
 
   testWidgets('tapping empty-state action and error-state retry', (tester) async {
-    await tester.pumpWidget(const app_entry.WheelSenseApp());
+    await tester.pumpWidget(const app_entry.WheelAthleteApp());
     await tester.pump();
 
     // Scroll down to Empty state.
@@ -142,7 +142,7 @@ void main() {
     // Calling main() directly exercises the entry point.
     app_entry.main();
     await tester.pump();
-    expect(find.text('WheelSense UI'), findsOneWidget);
+    expect(find.text('WheelAthlete UI'), findsOneWidget);
     // Clean up so subsequent tests don't see two apps.
     await tester.pumpWidget(const SizedBox());
   });

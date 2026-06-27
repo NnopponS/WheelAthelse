@@ -14,7 +14,7 @@
 #include <cstring>
 #include "imu_types.h"
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── BLE UUIDs (from docs/ble-protocol.md §1) ─────────────────────────────────
 // Using 128-bit Bluetooth Base UUID: 0000xxxx-0000-1000-8000-00805f9b34fb
@@ -222,4 +222,4 @@ inline Cmd parseCommand(const uint8_t* data, size_t len,
     return static_cast<Cmd>(cmd);
 }
 
-} // namespace wheelsense
+} // namespace WheelAthlete

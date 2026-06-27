@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Raw color primitives for the WheelSense design system.
+/// Raw color primitives for the WheelAthlete design system.
 ///
 /// These are the only place hex literals live. Everything else in the app
-/// references colors through [ColorScheme] or the [WheelSenseColors] theme
+/// references colors through [ColorScheme] or the [WheelAthleteColors] theme
 /// extension. High-chroma, high-contrast values are chosen deliberately so the
 /// UI stays legible on a phone screen under direct sunlight on the field.
 ///

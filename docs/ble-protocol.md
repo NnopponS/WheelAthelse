@@ -1,4 +1,4 @@
-# WheelSense — BLE Protocol
+# WheelAthlete — BLE Protocol
 
 **Contract ระหว่าง Firmware (M5StickCPlus2) ↔ Mobile App (Flutter)**
 
@@ -14,10 +14,10 @@
 
 | ชื่อ | UUID | Type |
 |---|---|---|
-| WheelSense Service | `0000a1b2-0000-1000-8000-00805f9b34fb` | Primary Service |
+| WheelAthlete Service | `0000a1b2-0000-1000-8000-00805f9b34fb` | Primary Service |
 
 > ใช้ 128-bit UUID มาตรฐาน Bluetooth Base คือ `0000xxxx-0000-1000-8000-00805f9b34fb`
-> โดย `xxxx = a1b2` คือ short handle ของ WheelSense (WSEN)
+> โดย `xxxx = a1b2` คือ short handle ของ WheelAthlete (WSEN)
 
 ### 1.1 Characteristics
 
@@ -239,7 +239,7 @@ seq,wheel,timestamp_app_ms,timestamp_device_us,timestamp_synced_ms,ax,ay,az,gx,g
 ## 7. Storage — โครงสร้างโฟลเดอร์ topic/trial
 
 ```
-WheelSenseData/
+WheelAthleteData/
 └── <topic>/                      # เช่น "sprint_test", "athlete_A", "calibration_01"
     ├── topic_meta.json           # คำอธิบายเรื่อง, ผู้ทดสอบ, วันที่สร้าง
     └── trial_<NN>/               # รอบที่เท่าไหร่ (auto-increment: trial_01, trial_02, ...)

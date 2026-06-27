@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #2: Firmware — อ่าน IMU MPU6886 ที่ rate ป�
 ใช้ cpp-coding-standards skill เพื่อเขียน firmware M5StickCPlus2 อ่าน IMU
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #2 of 10
 - Stack: PlatformIO + Arduino framework (ESP32), M5Unified library
 - Hardware: M5StickCPlus2, IMU ในตัว = MPU6886 (accel + gyro 3 แกน)

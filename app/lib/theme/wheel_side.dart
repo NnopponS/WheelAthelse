@@ -1,5 +1,5 @@
 /// Identifies a physical wheel. Left and Right are color-coded consistently
-/// throughout the app via [WheelSenseColors].
+/// throughout the app via [WheelAthleteColors].
 enum WheelSide {
   left('L', 'Left'),
   right('R', 'Right');

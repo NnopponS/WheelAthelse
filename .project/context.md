@@ -45,7 +45,7 @@
 - ปุ่มหลักใหญ่ กดง่ายตอนเคลื่อนไหว, มี empty/loading/error state ครบ
 
 ## D11: บันทึกแบบจัดโฟลเดอร์ topic + trial
-- โครงสร้าง: WheelSenseData/<topic>/trial_<NN>/session_<id>.csv (+ meta.json)
+- โครงสร้าง: WheelAthleteData/<topic>/trial_<NN>/session_<id>.csv (+ meta.json)
 - ผู้ใช้เลือก/สร้าง topic (เรื่องที่เก็บ) ก่อนเริ่ม, trial เพิ่มอัตโนมัติต่อ topic
 - มีหน้า browse: topic → trial → session
 

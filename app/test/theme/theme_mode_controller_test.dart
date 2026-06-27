@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelsense/theme/app_theme.dart';
-import 'package:wheelsense/theme/theme_mode_controller.dart';
+import 'package:wheelathlete/theme/app_theme.dart';
+import 'package:wheelathlete/theme/theme_mode_controller.dart';
 
 void main() {
   group('ThemeModeController.set', () {

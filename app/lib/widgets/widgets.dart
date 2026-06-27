@@ -1,7 +1,7 @@
-/// WheelSense reusable UI components — single import surface.
+/// WheelAthlete reusable UI components — single import surface.
 ///
 /// ```dart
-/// import 'package:wheelsense/widgets/widgets.dart';
+/// import 'package:wheelathlete/widgets/widgets.dart';
 /// ```
 library;
 

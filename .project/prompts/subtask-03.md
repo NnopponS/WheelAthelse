@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #3: Firmware — BLE GATT + time-sync support
 ใช้ cpp-coding-standards skill เพื่อเพิ่ม BLE GATT + การรองรับ time-sync ใน firmware
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #3 of 10
 - Stack: PlatformIO + Arduino C++ (ESP32), NimBLE-Arduino
 - Depends on: #2 (มี imu_reader แล้ว)
@@ -28,7 +28,7 @@ Context:
    - ก่อนถึง target_start_us ให้ beep ที่ T-3s, T-2s, T-1s และ beep ยาว/ต่างโทนที่ T-0 (เริ่มจริง)
    - beep ต้องตรงเวลา (อิง target_start_us) เพราะใช้เป็น marker align กับวิดีโอกล้อง
    - ใส่ event/flag ในข้อมูลตอน beep T-0 ด้วย เพื่อให้รู้ตำแหน่ง marker ใน IMU log
-5. ตั้งชื่อ BLE advertising แยก L/R ("WheelSense-L", "WheelSense-R")
+5. ตั้งชื่อ BLE advertising แยก L/R ("WheelAthlete-L", "WheelAthlete-R")
 6. **BLE task แยก core:** ดึง sample จาก queue ของ #2 (FreeRTOS) → batch → notify บนอีก core
    เพื่อไม่ให้ BLE สะดุดกระทบ acquisition
 7. แสดงสถานะ BLE บนจอ (advertising / connected / countdown / recording)

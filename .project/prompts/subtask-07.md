@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #7: Flutter — Clock sync engine (2 ล้อ sync แบบ
 ใช้ dart-flutter-patterns skill เพื่อสร้างระบบ sync เวลา 2 ล้อแบบสมบูรณ์
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #7 of 10  ← หัวใจของความแม่นยำ ทำให้ L/R sync กันจริง
 - Stack: Flutter, riverpod
 - Depends on: #3 (firmware รองรับ sync_ping + synchronized start) + #6 (มี packet stream)

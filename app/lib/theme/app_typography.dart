@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Typography for WheelSense.
+/// Typography for WheelAthlete.
 ///
 /// Two families only, paired on a contrast axis:
 /// - **Inter** for all UI text — hierarchy comes from scale + weight contrast.

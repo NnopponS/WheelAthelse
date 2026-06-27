@@ -1,8 +1,8 @@
 #pragma once
-// ble_service.h — BLE GATT server for WheelSense
+// ble_service.h — BLE GATT server for WheelAthlete
 //
-// Implements the WheelSense BLE protocol (docs/ble-protocol.md):
-//   - WheelSense Service with 4 characteristics (IMU Data, Control, Sync, Info)
+// Implements the WheelAthlete BLE protocol (docs/ble-protocol.md):
+//   - WheelAthlete Service with 4 characteristics (IMU Data, Control, Sync, Info)
 //   - IMU Data: batched notify from FreeRTOS queue (Core 1 task)
 //   - Control: write commands (START/STOP/SET_RATE/SYNC_PING/SET_RANGE/BEEP/RESET_SEQ)
 //   - Sync: notify sync responses + event notifications (START_FIRED, STOP_FIRED, etc.)
@@ -17,7 +17,7 @@
 
 #include <cstdint>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── BLE connection state ─────────────────────────────────────────────────────
 
@@ -103,4 +103,4 @@ public:
 // Global singleton
 BleService& ble();
 
-} // namespace wheelsense
+} // namespace WheelAthlete

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/app_palette.dart';
-import 'package:wheelsense/theme/wheel_side.dart';
+import 'package:wheelathlete/theme/app_palette.dart';
+import 'package:wheelathlete/theme/wheel_side.dart';
 
 /// A pair of foreground/background colors used to render a semantic chip,
 /// badge, or accent surface. [container] is a tinted fill; [on] is text/icon
@@ -35,13 +35,13 @@ class ColorRole {
       );
 }
 
-/// WheelSense-specific colors that don't fit Material's [ColorScheme]:
+/// WheelAthlete-specific colors that don't fit Material's [ColorScheme]:
 /// per-wheel identity (L/R) and extra semantic roles (success/warning).
-/// Access via `Theme.of(context).extension<WheelSenseColors>()!` or the
+/// Access via `Theme.of(context).extension<WheelAthleteColors>()!` or the
 /// `context.wheelColors` helper.
 @immutable
-class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
-  const WheelSenseColors({
+class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
+  const WheelAthleteColors({
     required this.left,
     required this.right,
     required this.success,
@@ -63,7 +63,7 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
   ColorRole forWheel(WheelSide side) =>
       side == WheelSide.left ? left : right;
 
-  static const WheelSenseColors light = WheelSenseColors(
+  static const WheelAthleteColors light = WheelAthleteColors(
     left: ColorRole(
       solid: AppPalette.left,
       on: AppPalette.white,
@@ -97,7 +97,7 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
     chartGrid: AppPalette.slate200,
   );
 
-  static const WheelSenseColors dark = WheelSenseColors(
+  static const WheelAthleteColors dark = WheelAthleteColors(
     left: ColorRole(
       solid: AppPalette.leftBright,
       on: AppPalette.slate950,
@@ -132,7 +132,7 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
   );
 
   @override
-  WheelSenseColors copyWith({
+  WheelAthleteColors copyWith({
     ColorRole? left,
     ColorRole? right,
     ColorRole? success,
@@ -140,7 +140,7 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
     ColorRole? danger,
     Color? chartGrid,
   }) {
-    return WheelSenseColors(
+    return WheelAthleteColors(
       left: left ?? this.left,
       right: right ?? this.right,
       success: success ?? this.success,
@@ -151,9 +151,9 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
   }
 
   @override
-  WheelSenseColors lerp(ThemeExtension<WheelSenseColors>? other, double t) {
-    if (other is! WheelSenseColors) return this;
-    return WheelSenseColors(
+  WheelAthleteColors lerp(ThemeExtension<WheelAthleteColors>? other, double t) {
+    if (other is! WheelAthleteColors) return this;
+    return WheelAthleteColors(
       left: left.lerp(other.left, t),
       right: right.lerp(other.right, t),
       success: success.lerp(other.success, t),
@@ -164,8 +164,8 @@ class WheelSenseColors extends ThemeExtension<WheelSenseColors> {
   }
 }
 
-/// Ergonomic access to [WheelSenseColors] from a [BuildContext].
-extension WheelSenseColorsX on BuildContext {
-  WheelSenseColors get wheelColors =>
-      Theme.of(this).extension<WheelSenseColors>()!;
+/// Ergonomic access to [WheelAthleteColors] from a [BuildContext].
+extension WheelAthleteColorsX on BuildContext {
+  WheelAthleteColors get wheelColors =>
+      Theme.of(this).extension<WheelAthleteColors>()!;
 }

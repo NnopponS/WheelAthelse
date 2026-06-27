@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/widgets/status_badge.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/status_badge.dart';
 
 /// BLE connection state for one wheel device.
 enum ConnectionStatus {
@@ -30,7 +30,7 @@ class ConnectionCard extends StatelessWidget {
   final WheelSide side;
   final ConnectionStatus status;
 
-  /// Advertised device name (e.g. "WheelSense-L"). Falls back to a placeholder.
+  /// Advertised device name (e.g. "WheelAthlete-L"). Falls back to a placeholder.
   final String? deviceName;
 
   /// 0–100, or null when unknown/disconnected.

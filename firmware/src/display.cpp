@@ -1,10 +1,10 @@
-// display.cpp — M5StickCPlus2 status display for WheelSense
+// display.cpp — M5StickCPlus2 status display for WheelAthlete
 
 #include "display.h"
 
 #include <M5Unified.h>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 void StatusDisplay::begin() {
     M5.Display.setTextSize(1);
@@ -33,7 +33,7 @@ void StatusDisplay::refresh(char wheel_id,
     d.fillRect(0, 0, d.width(), 20, (wheel_id == 'L') ? 0x001F : 0xF800);  // blue=L, red=R
     d.setTextColor(WHITE);
     d.setCursor(6, 4);
-    d.printf("WheelSense  %c", wheel_id);
+    d.printf("WheelAthlete  %c", wheel_id);
 
     // ── Status lines ──
     d.setTextColor(WHITE, BLACK);
@@ -71,4 +71,4 @@ StatusDisplay& display() {
     return instance;
 }
 
-} // namespace wheelsense
+} // namespace WheelAthlete

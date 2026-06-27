@@ -3,8 +3,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/widgets/widgets.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Living style guide: renders every design-system token and reusable
 /// component with mock data. Used during development to review the UI and as a
@@ -67,7 +67,7 @@ class _ShowcasePageState extends State<ShowcasePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WheelSense UI'),
+        title: const Text('WheelAthlete UI'),
         actions: [
           PopupMenuButton<ThemeMode>(
             tooltip: 'Theme mode',
@@ -130,7 +130,7 @@ class _ShowcasePageState extends State<ShowcasePage> {
                     ConnectionCard(
                       side: WheelSide.left,
                       status: ConnectionStatus.connected,
-                      deviceName: 'WheelSense-L',
+                      deviceName: 'WheelAthlete-L',
                       batteryPercent: 82,
                       rssi: -54,
                       onTap: () {},
@@ -139,7 +139,7 @@ class _ShowcasePageState extends State<ShowcasePage> {
                     ConnectionCard(
                       side: WheelSide.right,
                       status: ConnectionStatus.connecting,
-                      deviceName: 'WheelSense-R',
+                      deviceName: 'WheelAthlete-R',
                       batteryPercent: 12,
                       rssi: -78,
                       onTap: () {},
@@ -240,7 +240,7 @@ class _ShowcasePageState extends State<ShowcasePage> {
               const _Section(
                 title: 'Loading state',
                 child: _Framed(
-                  child: LoadingState(message: 'Scanning for WheelSense devices…'),
+                  child: LoadingState(message: 'Scanning for WheelAthlete devices…'),
                 ),
               ),
               _Section(

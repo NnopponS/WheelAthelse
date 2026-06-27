@@ -1,10 +1,10 @@
 ---
 PROMPT FOR SUBTASK #1: Project scaffolding + monorepo + git/GitHub + BLE protocol spec
 ---
-ใช้ git-workflow skill เพื่อ scaffold โปรเจค WheelSense แบบ monorepo และตั้ง git + GitHub
+ใช้ git-workflow skill เพื่อ scaffold โปรเจค WheelAthlete แบบ monorepo และตั้ง git + GitHub
 
 Context:
-- Project: WheelSense (ระบบวิเคราะห์การเคลื่อนไหวนักกีฬาวีลแชร์ด้วย IMU)
+- Project: WheelAthlete (ระบบวิเคราะห์การเคลื่อนไหวนักกีฬาวีลแชร์ด้วย IMU)
 - Subtask: #1 of 10
 - Stack: monorepo (firmware = PlatformIO/Arduino C++, app = Flutter)
 - Depends on: none

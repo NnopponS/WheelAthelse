@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/ui/showcase_page.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/showcase_page.dart';
 
-void main() => runApp(const WheelSenseApp());
+void main() => runApp(const WheelAthleteApp());
 
 /// App root. For subtask #4 the home screen is the design-system showcase
 /// (living style guide). Real screens (scan/connect, live, recording, browse)
 /// are added in subtasks #5+ and will reuse the theme and components defined
 /// here.
-class WheelSenseApp extends StatefulWidget {
-  const WheelSenseApp({super.key});
+class WheelAthleteApp extends StatefulWidget {
+  const WheelAthleteApp({super.key});
 
   @override
-  State<WheelSenseApp> createState() => _WheelSenseAppState();
+  State<WheelAthleteApp> createState() => _WheelAthleteAppState();
 }
 
-class _WheelSenseAppState extends State<WheelSenseApp> {
+class _WheelAthleteAppState extends State<WheelAthleteApp> {
   final ThemeModeController _theme = ThemeModeController();
 
   @override
@@ -31,7 +31,7 @@ class _WheelSenseAppState extends State<WheelSenseApp> {
       valueListenable: _theme,
       builder: (context, mode, _) {
         return MaterialApp(
-          title: 'WheelSense',
+          title: 'WheelAthlete',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),

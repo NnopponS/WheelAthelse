@@ -87,7 +87,7 @@ firmware/bootloader_addresses.txt
 # ─────────────────────────────────────────────────────────────
 # Collected data (exported sessions — never commit raw data)
 # ─────────────────────────────────────────────────────────────
-WheelSenseData/
+WheelAthleteData/
 *.csv
 !docs/**/*.csv
 !app/test/**/*.csv

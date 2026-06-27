@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelathlete/theme/theme.dart';
 
 /// Disables network font fetching for the whole test run. Call once in
 /// `setUpAll`. Tests then use the bundled fallback font, avoiding flaky network
@@ -10,8 +10,8 @@ void disableGoogleFontsFetching() {
   GoogleFonts.config.allowRuntimeFetching = false;
 }
 
-/// Pumps [child] inside a [MaterialApp] using the WheelSense theme so widgets
-/// can resolve [Theme], [ColorScheme], and the [WheelSenseColors] extension.
+/// Pumps [child] inside a [MaterialApp] using the WheelAthlete theme so widgets
+/// can resolve [Theme], [ColorScheme], and the [WheelAthleteColors] extension.
 Future<void> pumpThemed(
   WidgetTester tester,
   Widget child, {

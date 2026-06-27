@@ -1,4 +1,4 @@
-# WheelSense — Architecture (Phase 1: Data Collection)
+# WheelAthlete — Architecture (Phase 1: Data Collection)
 
 ## High-level diagram
 
@@ -117,7 +117,7 @@ columns: seq, wheel, timestamp_app_ms, timestamp_device_us, timestamp_synced_ms,
 ### 5. Storage — จัดเก็บเป็นโฟลเดอร์ตามเรื่อง + รอบการทดลอง
 ตอนจะบันทึก ผู้ใช้เลือก/สร้าง "เรื่องที่เก็บ" (topic/subject) และระบบจัดเลข "รอบ (trial)" อัตโนมัติ:
 ```
-WheelSenseData/
+WheelAthleteData/
 └── <topic>/                      # เช่น "sprint_test", "athlete_A", "calibration_01"
     ├── topic_meta.json           # คำอธิบายเรื่อง, ผู้ทดสอบ, วันที่สร้าง
     └── trial_<NN>/               # รอบที่เท่าไหร่ (auto-increment: trial_01, trial_02, ...)

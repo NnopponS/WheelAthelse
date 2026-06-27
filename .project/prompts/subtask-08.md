@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #8: Flutter — recording session + Mark Event + จัดเ
 ใช้ dart-flutter-patterns skill เพื่อทำระบบบันทึก session + จัดโฟลเดอร์
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #8 of 10
 - Stack: Flutter, riverpod, path_provider
 - Depends on: #6 (stream) + #7 (synced timestamp)
@@ -14,7 +14,7 @@ Context:
 1. **จัดเก็บแบบโฟลเดอร์ topic + trial (ตาม architecture.md หัวข้อ 5):**
    - ก่อนเริ่ม recording: ผู้ใช้เลือก topic เดิม หรือสร้างใหม่ (กรอกชื่อเรื่อง + คำอธิบาย)
    - trial number เพิ่มอัตโนมัติต่อ topic (trial_01, trial_02, ...) — override ได้
-   - โครงสร้าง: WheelSenseData/<topic>/trial_<NN>/  (+ topic_meta.json ระดับ topic)
+   - โครงสร้าง: WheelAthleteData/<topic>/trial_<NN>/  (+ topic_meta.json ระดับ topic)
 2. ระบบ recording session: synchronized start/stop ทั้ง 2 ล้อ (เรียกใช้ sync engine #7)
 3. แต่ละ sample เก็บ: seq, wheel, timestamp_app_ms, timestamp_device_us,
    timestamp_synced_ms, ax,ay,az,gx,gy,gz, marker

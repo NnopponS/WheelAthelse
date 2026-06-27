@@ -1,4 +1,4 @@
-// ble_service.cpp — BLE GATT server for WheelSense
+// ble_service.cpp — BLE GATT server for WheelAthlete
 //
 // Implements docs/ble-protocol.md using NimBLE-Arduino.
 // BLE task runs on Core 1 (separate from IMU acquisition on Core 0).
@@ -13,7 +13,7 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── NimBLE characteristic callbacks ──────────────────────────────────────────
 
@@ -59,9 +59,9 @@ static NimBLECharacteristic* s_char_info    = nullptr;
 void BleService::begin(char wheel_id) {
     wheel_id_ = wheel_id;
 
-    // Device name: "WheelSense-L" or "WheelSense-R"
+    // Device name: "WheelAthlete-L" or "WheelAthlete-R"
     char device_name[16];
-    snprintf(device_name, sizeof(device_name), "WheelSense-%c", wheel_id);
+    snprintf(device_name, sizeof(device_name), "WheelAthlete-%c", wheel_id);
 
     NimBLEDevice::init(device_name);
     NimBLEDevice::setMTU(247);   // request larger MTU for bigger batches
@@ -115,7 +115,7 @@ void BleService::begin(char wheel_id) {
 void BleService::updateInfoCharacteristic() {
     uint8_t info_buf[INFO_SIZE];
     packInfo(static_cast<uint8_t>(wheel_id_),
-             WHEELSENSE_FW_MAJOR, WHEELSENSE_FW_MINOR, WHEELSENSE_FW_PATCH,
+             WheelAthlete_FW_MAJOR, WheelAthlete_FW_MINOR, WheelAthlete_FW_PATCH,
              static_cast<uint8_t>(imu().accelRange()),
              static_cast<uint8_t>(imu().gyroRange()),
              imu().accelScale(), imu().gyroScale(),
@@ -413,4 +413,4 @@ BleService& ble() {
     return instance;
 }
 
-} // namespace wheelsense
+} // namespace WheelAthlete

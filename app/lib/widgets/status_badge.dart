@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelathlete/theme/theme.dart';
 
 /// Semantic tone for a [StatusBadge]. Maps to design-system color roles.
 enum BadgeTone { neutral, info, success, warning, danger, left, right }

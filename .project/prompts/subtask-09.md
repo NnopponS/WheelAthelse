@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #9: Flutter — CSV export (synced/resampled) + folder hierar
 ใช้ dart-flutter-patterns skill เพื่อ export ข้อมูลเป็น CSV ในโครงสร้างโฟลเดอร์
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #9 of 10
 - Stack: Flutter, csv, path_provider, share_plus
 - Depends on: #8 (recording buffer + folder structure)

@@ -1,7 +1,7 @@
-/// WheelSense design system — single import surface.
+/// WheelAthlete design system — single import surface.
 ///
 /// ```dart
-/// import 'package:wheelsense/theme/theme.dart';
+/// import 'package:wheelathlete/theme/theme.dart';
 /// ```
 library;
 
@@ -11,4 +11,4 @@ export 'app_theme.dart';
 export 'app_typography.dart';
 export 'theme_mode_controller.dart';
 export 'wheel_side.dart';
-export 'wheelsense_colors.dart';
+export 'WheelAthlete_colors.dart';

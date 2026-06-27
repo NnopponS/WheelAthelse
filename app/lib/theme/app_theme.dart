@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/app_dimens.dart';
-import 'package:wheelsense/theme/app_palette.dart';
-import 'package:wheelsense/theme/app_typography.dart';
-import 'package:wheelsense/theme/wheelsense_colors.dart';
+import 'package:wheelathlete/theme/app_dimens.dart';
+import 'package:wheelathlete/theme/app_palette.dart';
+import 'package:wheelathlete/theme/app_typography.dart';
+import 'package:wheelathlete/theme/WheelAthlete_colors.dart';
 
-/// Builds the WheelSense [ThemeData] for light and dark modes.
+/// Builds the WheelAthlete [ThemeData] for light and dark modes.
 ///
 /// Light mode is the field default: a near-white surface with strong dark ink
 /// for maximum legibility under sunlight. Dark mode is for indoor review.
@@ -36,7 +36,7 @@ abstract final class AppTheme {
         scaffold: AppPalette.slate50,
         ink: AppPalette.slate900,
         muted: AppPalette.slate600,
-        wheelColors: WheelSenseColors.light,
+        wheelColors: WheelAthleteColors.light,
       );
 
   static ThemeData dark() => _build(
@@ -63,7 +63,7 @@ abstract final class AppTheme {
         scaffold: AppPalette.slate950,
         ink: AppPalette.slate100,
         muted: AppPalette.slate400,
-        wheelColors: WheelSenseColors.dark,
+        wheelColors: WheelAthleteColors.dark,
       );
 
   static ThemeData _build({
@@ -72,7 +72,7 @@ abstract final class AppTheme {
     required Color scaffold,
     required Color ink,
     required Color muted,
-    required WheelSenseColors wheelColors,
+    required WheelAthleteColors wheelColors,
   }) {
     final textTheme = AppTypography.textTheme(ink, muted);
 

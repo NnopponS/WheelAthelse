@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelsense/widgets/session_list_item.dart';
+import 'package:wheelathlete/widgets/session_list_item.dart';
 
 import '../helpers/pump.dart';
 

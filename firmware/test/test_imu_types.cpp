@@ -11,7 +11,7 @@
 #include <cmath>
 #include "../src/imu_types.h"
 
-using namespace wheelsense;
+using namespace WheelAthlete;
 
 void setUp(void) {}
 void tearDown(void) {}

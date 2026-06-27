@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── Constants (constexpr per ES.45 / ES.25) ──────────────────────────────────
 
@@ -146,4 +146,4 @@ inline uint32_t interpolateTimestamp(uint32_t drain_us,
     return drain_us - offset_us;
 }
 
-} // namespace wheelsense
+} // namespace WheelAthlete

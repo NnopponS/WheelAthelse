@@ -1,10 +1,10 @@
 ---
 PROMPT FOR SUBTASK #4: Flutter — design system / theme / reusable components (UI สวย)
 ---
-ใช้ impeccable + ui-ux-pro-max skill เพื่อสร้าง design system ของแอป WheelSense
+ใช้ impeccable + ui-ux-pro-max skill เพื่อสร้าง design system ของแอป WheelAthlete
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #4 of 10
 - Stack: Flutter / Dart (ยังไม่ต่อ BLE จริงในงานนี้ — ใช้ mock data)
 - Depends on: #1. ทำขนานกับ firmware (#2/#3) ได้

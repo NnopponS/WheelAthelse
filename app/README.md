@@ -1,4 +1,4 @@
-# Mobile App — WheelSense (Flutter)
+# Mobile App — WheelAthlete (Flutter)
 
 Flutter app สำหรับ iOS + Android เชื่อม BLE กับ M5StickCPlus2 ทั้ง 2 ตัว
 (ล้อซ้าย + ล้อขวา) แสดงค่า IMU realtime บันทึก session และ export CSV
@@ -25,7 +25,7 @@ app/
 │   │   ├── app_palette.dart      # color primitives
 │   │   ├── app_dimens.dart       # spacing / radius / sizing
 │   │   ├── app_typography.dart   # Inter + JetBrains Mono (tabular metrics)
-│   │   ├── wheelsense_colors.dart# ThemeExtension: L/R + semantic colors
+│   │   ├── WheelAthlete_colors.dart# ThemeExtension: L/R + semantic colors
 │   │   ├── wheel_side.dart        # WheelSide enum (L/R)
 │   │   ├── app_theme.dart        # light/dark ThemeData
 │   │   └── theme.dart            # barrel export

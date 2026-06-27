@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/widgets/live_metric_tile.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/live_metric_tile.dart';
 
 import '../helpers/pump.dart';
 
@@ -45,6 +45,6 @@ void main() {
       ),
     );
     final text = tester.widget<Text>(find.text('+1.00'));
-    expect(text.style?.color, WheelSenseColors.light.right.solid);
+    expect(text.style?.color, WheelAthleteColors.light.right.solid);
   });
 }

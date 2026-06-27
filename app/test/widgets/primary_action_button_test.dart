@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelsense/widgets/primary_action_button.dart';
+import 'package:wheelathlete/widgets/primary_action_button.dart';
 
 import '../helpers/pump.dart';
 

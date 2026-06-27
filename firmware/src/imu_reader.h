@@ -17,7 +17,7 @@
 struct QueueDefinition;
 using QueueHandle = QueueDefinition*;
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── ImuReader — singleton managing MPU6886 + FIFO + queue ────────────────────
 
@@ -89,4 +89,4 @@ private:
 // Global singleton (embedded pattern: one IMU per device)
 ImuReader& imu();
 
-} // namespace wheelsense
+} // namespace WheelAthlete

@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #5: Flutter — scan + เชื่อม 2 devices (L/R) + s
 ใช้ dart-flutter-patterns skill เพื่อสร้างระบบเชื่อม BLE 2 ตัว
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #5 of 10
 - Stack: Flutter, flutter_blue_plus, riverpod
 - Depends on: #1 (protocol), #4 (design system/component). ทำหลัง firmware ได้แต่ test ด้วย mock ก่อนได้
@@ -14,7 +14,7 @@ Context:
 1. สร้าง Flutter project ใน app/ (ถ้ายังไม่มี) รองรับ iOS + Android
 2. เพิ่ม dependency: flutter_blue_plus, flutter_riverpod, permission_handler
 3. ตั้ง permission BLE (Android manifest + iOS Info.plist: bluetooth, location)
-4. หน้า Scan: list อุปกรณ์ WheelSense-L / WheelSense-R (ใช้ ConnectionCard จาก #4)
+4. หน้า Scan: list อุปกรณ์ WheelAthlete-L / WheelAthlete-R (ใช้ ConnectionCard จาก #4)
 5. เชื่อมพร้อมกัน 2 ตัว, จัดการ connection state แยก L/R (connected/connecting/disconnected/reconnecting)
 6. State management ด้วย riverpod: provider เก็บสถานะ 2 connections
 7. UI ใช้ component + theme จาก #4 ให้สวยและสม่ำเสมอ

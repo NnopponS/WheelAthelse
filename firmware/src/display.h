@@ -1,5 +1,5 @@
 #pragma once
-// display.h — M5StickCPlus2 status display for WheelSense
+// display.h — M5StickCPlus2 status display for WheelAthlete
 //
 // Shows: wheel id (L/R), sample rate, sample count, battery %,
 //        FIFO depth, drop count, running state.
@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 class StatusDisplay {
 public:
@@ -30,4 +30,4 @@ private:
 
 StatusDisplay& display();
 
-} // namespace wheelsense
+} // namespace WheelAthlete

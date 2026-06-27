@@ -20,7 +20,7 @@
 #include <esp_timer.h>
 #include <freertos/queue.h>
 
-namespace wheelsense {
+namespace WheelAthlete {
 
 // ── MPU6886 register addresses ───────────────────────────────────────────────
 namespace reg {
@@ -123,7 +123,7 @@ bool ImuReader::begin(uint16_t rate_hz, AccelRange ar, GyroRange gr) {
     timer_args.callback        = &ImuReader::timerCallback;
     timer_args.arg             = this;
     timer_args.dispatch_method = ESP_TIMER_TASK;
-    timer_args.name            = "wheelsense_imu";
+    timer_args.name            = "WheelAthlete_imu";
 
     const esp_err_t err = esp_timer_create(&timer_args,
                                            reinterpret_cast<esp_timer_handle_t*>(&timer_handle_));
@@ -184,11 +184,11 @@ void ImuReader::setRanges(AccelRange ar, GyroRange gr) {
 }
 
 float ImuReader::accelScale() const {
-    return wheelsense::accelScale(accel_range_);
+    return WheelAthlete::accelScale(accel_range_);
 }
 
 float ImuReader::gyroScale() const {
-    return wheelsense::gyroScale(gyro_range_);
+    return WheelAthlete::gyroScale(gyro_range_);
 }
 
 bool ImuReader::popSample(ImuSample& out) {
@@ -280,4 +280,4 @@ ImuReader& imu() {
     return instance;
 }
 
-} // namespace wheelsense
+} // namespace WheelAthlete

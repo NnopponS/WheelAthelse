@@ -4,7 +4,7 @@ PROMPT FOR SUBTASK #6: Flutter — parse packet + realtime display
 ใช้ dart-flutter-patterns skill เพื่อ parse IMU packet และแสดง realtime
 
 Context:
-- Project: WheelSense
+- Project: WheelAthlete
 - Subtask: #6 of 10
 - Stack: Flutter, riverpod, fl_chart
 - Depends on: #3 (firmware ส่ง notify จริง) + #5 (เชื่อมได้) + #4 (component)

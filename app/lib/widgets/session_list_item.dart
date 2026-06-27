@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/widgets/status_badge.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/status_badge.dart';
 
 /// A row in the browse screen (topic → trial → session). Surfaces the most
 /// useful at-a-glance metadata: when it was recorded, how long, sample count,

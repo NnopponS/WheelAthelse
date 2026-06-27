@@ -1,4 +1,4 @@
-# Static analysis configuration for the WheelSense app.
+# Static analysis configuration for the WheelAthlete app.
 # `flutter analyze` runs these checks; they should stay clean (and gate CI).
 include: package:flutter_lints/flutter.yaml
 

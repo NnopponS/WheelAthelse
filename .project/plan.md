@@ -1,4 +1,4 @@
-# WheelSense — Phase 1: Data Collection & Calibration
+# WheelAthlete — Phase 1: Data Collection & Calibration
 
 ## Objective
 สร้างระบบเก็บข้อมูลดิบ (raw data) สำหรับงานวิจัยวิเคราะห์การเคลื่อนไหวนักกีฬาวีลแชร์

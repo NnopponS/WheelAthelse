@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:wheelsense/theme/theme.dart';
+import 'package:wheelathlete/theme/theme.dart';
 
 /// A single live IMU readout (one axis of accel or gyro).
 ///

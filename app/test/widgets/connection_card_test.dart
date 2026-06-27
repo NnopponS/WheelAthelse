@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelsense/theme/theme.dart';
-import 'package:wheelsense/widgets/connection_card.dart';
+import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/connection_card.dart';
 
 import '../helpers/pump.dart';
 
@@ -14,13 +14,13 @@ void main() {
       const ConnectionCard(
         side: WheelSide.left,
         status: ConnectionStatus.connected,
-        deviceName: 'WheelSense-L',
+        deviceName: 'WheelAthlete-L',
         batteryPercent: 82,
         rssi: -54,
       ),
     );
     expect(find.text('Left wheel'), findsOneWidget);
-    expect(find.text('WheelSense-L'), findsOneWidget);
+    expect(find.text('WheelAthlete-L'), findsOneWidget);
     expect(find.text('82%'), findsOneWidget);
     expect(find.text('-54 dBm'), findsOneWidget);
     expect(find.text('Connected'), findsOneWidget);

@@ -43,7 +43,7 @@
 
 
   - deps: google_fonts, fl_chart. Design system in app/lib/theme/ (palette, dimens, typography,
-    WheelSenseColors ThemeExtension for L=blue/R=orange + semantic, light+dark high-contrast ThemeData).
+    WheelAthleteColors ThemeExtension for L=blue/R=orange + semantic, light+dark high-contrast ThemeData).
   - components in app/lib/widgets/: ConnectionCard, LiveMetricTile, PrimaryActionButton,
     MarkEventButton, SessionListItem, StatusBadge, EmptyState, LoadingState, ErrorState.
   - app/lib/ui/showcase_page.dart = living style guide (home), theme toggle, animated mock metrics.
@@ -53,6 +53,6 @@
   - hardened analysis_options.yaml: strict-casts/inference/raw-types + extra lints (const, final,
     unawaited_futures=error, always_use_package_imports, etc). Converted lib/ to package: imports,
     fixed const issues. `flutter analyze` clean under strict config.
-  - added test suite: 34 tests across theme + every component (wheelsense_colors, status_badge,
+  - added test suite: 34 tests across theme + every component (WheelAthlete_colors, status_badge,
     live_metric_tile, primary_action_button, mark_event_button, connection_card, session_list_item,
     state_views) + test/helpers/pump.dart. Coverage 95.2% lines (501/526).
