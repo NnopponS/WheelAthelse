@@ -14,6 +14,7 @@
 
 #include "imu_types.h"
 #include "ble_types.h"
+#include "config_store.h"
 
 #include <cstdint>
 
@@ -76,6 +77,8 @@ public:
     void handleSyncPing(uint32_t t_app_ms);
     void handleSetRange(uint8_t accel_range, uint8_t gyro_range);
     void handleBeep(uint8_t count, uint16_t period_ms);
+    void handleSetName(const uint8_t* name_data, size_t len);
+    void handleSetWheel(uint8_t wheel_id);
     void handleResetSeq();
 
     // ── Internal helpers ──
@@ -86,6 +89,8 @@ public:
     void sendDropCountEvent();
     void sendCmdNack(uint8_t cmd);
     void updateInfoCharacteristic();
+    void updateConfigCharacteristic();
+    void updateAdvertisedName();
     void doBeep(uint16_t freq_hz, uint16_t duration_ms);
     void flushBatch();
 

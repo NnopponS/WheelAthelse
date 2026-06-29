@@ -46,6 +46,8 @@ enum class Cmd : uint8_t {
     SyncPing   = 0x04,
     SetRange   = 0x05,
     Beep       = 0x06,
+    SetName    = 0x07,   // v1.1.0 — 16-byte board name
+    SetWheel   = 0x08,   // v1.1.0 — 0x4C='L' / 0x52='R'
     ResetSeq   = 0xFF,
 };
 

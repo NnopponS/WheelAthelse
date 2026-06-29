@@ -19,11 +19,20 @@ class BleUuids {
       '0000a1b5-0000-1000-8000-00805f9b34fb';
   static const String info =
       '0000a1b6-0000-1000-8000-00805f9b34fb';
+  static const String config =
+      '0000a1b7-0000-1000-8000-00805f9b34fb';
 
-  // ── Packet sizes (§2.1, §4.1, §5) ───────────────────────────────────────
+  // ── Standard Battery Service (v1.1.0) ──────────────────────────────────
+  static const String batteryService =
+      '0000180f-0000-1000-8000-00805f9b34fb';
+  static const String batteryLevel =
+      '00002a19-0000-1000-8000-00805f9b34fb';
+
+  // ── Packet sizes (§2.1, §4.1, §5, §1.2) ─────────────────────────────────
   static const int imuSampleSize = 20;
   static const int syncResponseSize = 12;
   static const int infoSize = 16;
+  static const int configSize = 22;
 
   // ── MTU ─────────────────────────────────────────────────────────────────
   /// App requests MTU 247 on connect (protocol §1 note) so a single IMU

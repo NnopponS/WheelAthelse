@@ -53,6 +53,7 @@ static NimBLECharacteristic* s_char_imu    = nullptr;
 static NimBLECharacteristic* s_char_control = nullptr;
 static NimBLECharacteristic* s_char_sync    = nullptr;
 static NimBLECharacteristic* s_char_info    = nullptr;
+static NimBLECharacteristic* s_char_config  = nullptr;
 
 // ── Battery Service (standard BLE 0x180F) ──
 static NimBLEService*          s_batt_service  = nullptr;
@@ -61,11 +62,16 @@ static NimBLECharacteristic*   s_char_battery  = nullptr;
 // ── BleService methods ───────────────────────────────────────────────────────
 
 void BleService::begin(char wheel_id) {
-    wheel_id_ = wheel_id;
+    // Use config store values (loaded from NVS before begin)
+    wheel_id_ = configStore().wheelChar();
+    const char* device_name = configStore().name();
 
-    // Device name: "WheelAthlete-L" or "WheelAthlete-R"
-    char device_name[16];
-    snprintf(device_name, sizeof(device_name), "WheelAthlete-%c", wheel_id);
+    // If config store has default name, build from wheel_id
+    char default_name[24];
+    if (strlen(device_name) == 0) {
+        snprintf(default_name, sizeof(default_name), "WheelAthlete-%c", wheel_id_);
+        device_name = default_name;
+    }
 
     NimBLEDevice::init(device_name);
     NimBLEDevice::setMTU(247);   // request larger MTU for bigger batches
@@ -101,8 +107,15 @@ void BleService::begin(char wheel_id) {
     );
     s_char_info->setCallbacks(new InfoCallbacks());
 
-    // Set initial Info value
+    // Config (Read) — v1.1.0: board name/wheel/rate/fw version
+    s_char_config = s_service->createCharacteristic(
+        CHAR_CONFIG_UUID,
+        NIMBLE_PROPERTY::READ
+    );
+
+    // Set initial Info + Config values
     updateInfoCharacteristic();
+    updateConfigCharacteristic();
 
     s_service->start();
 
@@ -139,6 +152,23 @@ void BleService::updateInfoCharacteristic() {
     s_char_info->setValue(info_buf, INFO_SIZE);
 }
 
+void BleService::updateConfigCharacteristic() {
+    uint8_t config_buf[CONFIG_SIZE];
+    packConfig(configStore().name(),
+               configStore().wheelId(),
+               configStore().rateHz(),
+               WheelAthlete_FW_MAJOR, WheelAthlete_FW_MINOR, WheelAthlete_FW_PATCH,
+               config_buf);
+    if (s_char_config) {
+        s_char_config->setValue(config_buf, CONFIG_SIZE);
+    }
+}
+
+void BleService::updateAdvertisedName() {
+    // Update the BLE device name after SET_NAME or SET_WHEEL
+    NimBLEDevice::setDeviceName(configStore().name());
+}
+
 void BleService::updateBatteryLevel() {
     // Throttle: only update every ~5 seconds
     const uint32_t now_ms = millis();
@@ -172,6 +202,8 @@ void BleService::onDisconnect() {
         imu().stop();
     }
     ble().pending_start_ = false;
+    // Persist config to NVS on disconnect (limit wear)
+    configStore().save();
     NimBLEDevice::startAdvertising();
     Serial.println("[BLE] Disconnected — resuming advertising");
 }
@@ -235,6 +267,16 @@ void BleService::handleCommand(Cmd cmd, const uint8_t* payload, size_t len) {
             }
             break;
         }
+        case Cmd::SetName: {
+            handleSetName(payload, len);
+            break;
+        }
+        case Cmd::SetWheel: {
+            if (len >= 1) {
+                handleSetWheel(payload[0]);
+            }
+            break;
+        }
         case Cmd::ResetSeq:
             handleResetSeq();
             break;
@@ -276,7 +318,9 @@ void BleService::handleStop() {
 
 void BleService::handleSetRate(uint16_t rate_hz) {
     if (imu().setRate(rate_hz)) {
+        configStore().setRate(rate_hz);   // cache in RAM, persist on disconnect
         updateInfoCharacteristic();
+        updateConfigCharacteristic();
         Serial.printf("[BLE] SET_RATE: %u Hz\n", rate_hz);
     } else {
         sendCmdNack(static_cast<uint8_t>(Cmd::SetRate));
@@ -324,6 +368,36 @@ void BleService::handleResetSeq() {
         imu().start();
     }
     Serial.println("[BLE] RESET_SEQ");
+}
+
+void BleService::handleSetName(const uint8_t* name_data, size_t len) {
+    if (!name_data || len == 0) {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetName));
+        return;
+    }
+    // Build a null-terminated name from the payload (up to 16 bytes)
+    char name_buf[NAME_MAX_LEN + 1] = {};
+    size_t copy_len = len < NAME_MAX_LEN ? len : NAME_MAX_LEN;
+    std::memcpy(name_buf, name_data, copy_len);
+    name_buf[NAME_MAX_LEN] = '\0';
+
+    configStore().setName(name_buf);
+    updateConfigCharacteristic();
+    updateAdvertisedName();
+    Serial.printf("[BLE] SET_NAME: '%s'\n", configStore().name());
+}
+
+void BleService::handleSetWheel(uint8_t wheel_id) {
+    if (!isValidWheel(wheel_id)) {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetWheel));
+        return;
+    }
+    configStore().setWheel(wheel_id);
+    wheel_id_ = static_cast<char>(wheel_id);
+    updateInfoCharacteristic();
+    updateConfigCharacteristic();
+    updateAdvertisedName();
+    Serial.printf("[BLE] SET_WHEEL: %c\n", wheel_id_);
 }
 
 // ── Event senders ────────────────────────────────────────────────────────────
