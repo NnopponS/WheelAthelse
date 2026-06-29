@@ -54,6 +54,10 @@ static NimBLECharacteristic* s_char_control = nullptr;
 static NimBLECharacteristic* s_char_sync    = nullptr;
 static NimBLECharacteristic* s_char_info    = nullptr;
 
+// ── Battery Service (standard BLE 0x180F) ──
+static NimBLEService*          s_batt_service  = nullptr;
+static NimBLECharacteristic*   s_char_battery  = nullptr;
+
 // ── BleService methods ───────────────────────────────────────────────────────
 
 void BleService::begin(char wheel_id) {
@@ -102,9 +106,21 @@ void BleService::begin(char wheel_id) {
 
     s_service->start();
 
-    // Start advertising
+    // ── Standard Battery Service (0x180F) — second GATT service ──
+    s_batt_service = s_server->createService(BATTERY_SERVICE_UUID);
+    s_char_battery = s_batt_service->createCharacteristic(
+        BATTERY_LEVEL_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    // Set initial battery level
+    battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+    s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
+    s_batt_service->start();
+
+    // Start advertising — advertise both services
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(SERVICE_UUID);
+    adv->addServiceUUID(BATTERY_SERVICE_UUID);
     adv->setScanResponse(true);
     adv->start();
 
@@ -121,6 +137,25 @@ void BleService::updateInfoCharacteristic() {
              imu().accelScale(), imu().gyroScale(),
              info_buf);
     s_char_info->setValue(info_buf, INFO_SIZE);
+}
+
+void BleService::updateBatteryLevel() {
+    // Throttle: only update every ~5 seconds
+    const uint32_t now_ms = millis();
+    if (now_ms - last_battery_ms_ < 5000 && last_battery_ms_ != 0) {
+        return;
+    }
+    last_battery_ms_ = now_ms;
+
+    const uint8_t new_level = clampBatteryLevel(M5.Power.getBatteryLevel());
+    if (new_level != battery_level_) {
+        battery_level_ = new_level;
+        if (s_char_battery) {
+            s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
+            s_char_battery->notify();
+            Serial.printf("[BLE] Battery level: %u%%\n", battery_level_);
+        }
+    }
 }
 
 // ── Static callback forwarders ───────────────────────────────────────────────
@@ -364,6 +399,9 @@ void BleService::tick() {
     if (imu().dropCount() > last_drop_count_) {
         sendDropCountEvent();
     }
+
+    // Update battery level periodically (~5s) + notify on change
+    updateBatteryLevel();
 }
 
 // ── BLE task: drain queue → batch → notify ──────────────────────────────────

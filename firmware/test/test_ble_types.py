@@ -26,6 +26,11 @@ CMD_SET_RANGE = 0x05
 CMD_BEEP = 0x06
 CMD_RESET_SEQ = 0xFF
 
+# Battery Service (standard BLE)
+BATTERY_SERVICE_UUID_SHORT = 0x180F
+BATTERY_LEVEL_CHAR_UUID_SHORT = 0x2A19
+BATTERY_LEVEL_SIZE = 1   # uint8 0-100
+
 # Sync events
 EVENT_SYNC_RESPONSE = 0x00
 EVENT_DROP_COUNT = 0x10
@@ -95,6 +100,16 @@ def should_start_now(target_start_us, current_us):
     if target_start_us == 0:
         return True
     return current_us >= target_start_us
+
+def clamp_battery_level(raw):
+    """Clamp raw battery reading to valid BLE Battery Level range [0, 100].
+    M5.Power.getBatteryLevel() may return -1 (unknown) or values > 100.
+    Returns 0 for negative/unknown, caps at 100."""
+    if raw < 0:
+        return 0
+    if raw > 100:
+        return 100
+    return raw
 
 # ── Test cases ────────────────────────────────────────────────────────────────
 
@@ -317,6 +332,35 @@ class TestScheduledStart(unittest.TestCase):
 
     def test_wait_when_not_yet(self):
         self.assertFalse(should_start_now(5_000_000, 4_999_999))
+
+
+class TestBatteryLevel(unittest.TestCase):
+    """AC: Battery Service 0x180F + 0x2A19 — battery % must be uint8 0-100"""
+
+    def test_clamp_normal_value(self):
+        self.assertEqual(clamp_battery_level(75), 75)
+
+    def test_clamp_zero(self):
+        self.assertEqual(clamp_battery_level(0), 0)
+
+    def test_clamp_full(self):
+        self.assertEqual(clamp_battery_level(100), 100)
+
+    def test_clamp_negative_unknown(self):
+        """M5.Power.getBatteryLevel() returns -1 when unknown → 0"""
+        self.assertEqual(clamp_battery_level(-1), 0)
+
+    def test_clamp_above_100(self):
+        """Some power ICs report >100 when fully charged + USB power"""
+        self.assertEqual(clamp_battery_level(101), 100)
+        self.assertEqual(clamp_battery_level(255), 100)
+
+    def test_battery_level_is_single_byte(self):
+        """0x2A19 Battery Level is a single uint8"""
+        level = clamp_battery_level(50)
+        self.assertEqual(level, 50)
+        self.assertTrue(0 <= level <= 100)
+        self.assertEqual(level.to_bytes(1, 'little'), b'\x32')
 
 
 if __name__ == '__main__':

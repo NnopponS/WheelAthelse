@@ -46,6 +46,10 @@ public:
     // Returns true if acquisition should be running.
     void tick();
 
+    // Update battery level on the Battery Service characteristic.
+    // Reads M5.Power.getBatteryLevel(), clamps to 0-100, notifies on change.
+    void updateBatteryLevel();
+
     // ── Accessors for display ──
     BleState   state()        const { return state_; }
     bool       connected()    const { return state_ == BleState::Connected ||
@@ -56,6 +60,7 @@ public:
     uint32_t   notifyCount()  const { return notify_count_; }
     uint32_t   targetStartUs()const { return target_start_us_; }
     bool       hasPendingStart() const { return pending_start_; }
+    uint8_t    batteryLevel() const { return battery_level_; }
 
     // ── GATT callbacks (static, public — called from NimBLE callbacks) ──
     static void onConnect();
@@ -94,6 +99,10 @@ public:
     bool       pending_start_    = false;    // scheduled start waiting
     int8_t     last_beep_fired_  = -1;
     uint32_t   last_drop_count_  = 0;        // for DROP_COUNT event
+
+    // ── Battery Service state ──
+    uint8_t    battery_level_    = 0;        // last reported battery % (0-100)
+    uint32_t   last_battery_ms_  = 0;        // millis() of last battery update
 
     // ── Batch buffer ──
     static constexpr size_t MAX_BATCH_BUF = 1 + 12 * IMU_SAMPLE_SIZE;  // max 12 samples

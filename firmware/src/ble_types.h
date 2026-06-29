@@ -25,11 +25,16 @@ constexpr const char* CHAR_CONTROL_UUID    = "0000a1b4-0000-1000-8000-00805f9b34
 constexpr const char* CHAR_SYNC_UUID       = "0000a1b5-0000-1000-8000-00805f9b34fb";
 constexpr const char* CHAR_INFO_UUID       = "0000a1b6-0000-1000-8000-00805f9b34fb";
 
+// ── Standard BLE Battery Service (§1.2 — added v1.1.0) ───────────────────────
+constexpr const char* BATTERY_SERVICE_UUID     = "0000180f-0000-1000-8000-00805f9b34fb";
+constexpr const char* BATTERY_LEVEL_CHAR_UUID  = "00002a19-0000-1000-8000-00805f9b34fb";
+
 // ── Packet sizes (from protocol) ─────────────────────────────────────────────
 
 constexpr size_t IMU_SAMPLE_SIZE    = 20;   // §2.1
 constexpr size_t SYNC_RESPONSE_SIZE = 12;   // §4.1
 constexpr size_t INFO_SIZE          = 16;   // §5
+constexpr size_t BATTERY_LEVEL_SIZE = 1;    // §1.2 — uint8 0-100%
 constexpr size_t SYNC_EVENT_HEADER  = 1;    // event_id byte
 
 // ── Control commands (§3.1) ──────────────────────────────────────────────────
@@ -203,6 +208,15 @@ inline int8_t checkBeepSchedule(uint32_t target_start_us,
 inline bool shouldStartNow(uint32_t target_start_us, uint32_t current_us) {
     if (target_start_us == 0) return true;
     return current_us >= target_start_us;
+}
+
+// Clamp a raw battery reading to the valid BLE Battery Level range [0, 100].
+// M5.Power.getBatteryLevel() may return -1 (unknown) or values > 100.
+// Returns 0 for negative/unknown, caps at 100.
+inline uint8_t clampBatteryLevel(int32_t raw) {
+    if (raw < 0) return 0;
+    if (raw > 100) return 100;
+    return static_cast<uint8_t>(raw);
 }
 
 // Parse a Control command from the write buffer.

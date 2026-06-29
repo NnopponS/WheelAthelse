@@ -5,7 +5,7 @@
 เอกสารนี้เป็น source of truth สำหรับทั้งสองฝั่ง — firmware และ app ต้อง implement
 ตามนี้เป๊ะ ห้ามเปลี่ยนโดยไม่ update เอกสารนี้ก่อน
 
-- เวอร์ชัน: `1.0.0` (subtask #1)
+- เวอร์ชัน: `1.1.0` (subtask #11 — Battery Service)
 - อ้างอิง: `.project/architecture.md` หัวข้อ 4 (Time Sync) และหัวข้อ 5 (Storage)
 
 ---
@@ -30,6 +30,25 @@
 
 > App ควร request MTU 247 ตอน connect เพื่อให้ใส่ batch ได้มากขึ้น
 > Firmware ต้อง support MTU exchange (NimBLE รองรับ default)
+
+### 1.2 Battery Service (standard BLE, v1.1.0)
+
+นอกจาก WheelAthlete Service แล้ว firmware ยัง advertise **Battery Service**
+มาตรฐานของ Bluetooth (UUID `0x180F`) เพื่อให้ app อ่าน/subscribe battery %
+ได้โดยตรง
+
+| Characteristic | UUID | Properties | ทิศทาง | ขนาด |
+|---|---|---|---|---|
+| Battery Level | `00002a19-0000-1000-8000-00805f9b34fb` | Read + Notify | Firmware → App | 1 B |
+
+**Battery Level (1 byte, uint8):**
+- ค่า 0–100 = เปอร์เซ็นต์แบตเตอรี่
+- Firmware อ่านจาก `M5.Power.getBatteryLevel()` ทุก ~5 วินาที
+- Notify เฉพาะเมื่อค่าเปลี่ยน (ลด noise)
+- ค่าที่อ่านได้ -1 (unknown) → firmware clamp เป็น 0
+- ค่า > 100 → firmware clamp เป็น 100
+
+> App สามารถ subscribe ได้ทันทีหลัง connect เพื่อแสดง battery % แบบ realtime
 
 ---
 
