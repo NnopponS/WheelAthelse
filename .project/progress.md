@@ -6,7 +6,7 @@
 | 2 | Firmware: IMU read + display + serial debug | cpp-coding-standards + tdd-workflow + cpp-testing | completed | 2026-06-28 | 2026-06-28 | c8301ce → b019f74 (TDD fix) |
 | 3 | Firmware: BLE GATT + time-sync support | cpp-coding-standards + tdd-workflow + cpp-testing + gateguard + intent-driven-development + latency-critical-systems | completed | 2026-06-28 | 2026-06-28 | dace23b |
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | completed | 2026-06-28 | 2026-06-28 | 9583327 |
-| 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | (commit pending) |
+| 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | 3d132fc |
 | 6 | Flutter: parse packet + realtime display | dart-flutter-patterns | pending | - | - | - |
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns | pending | - | - | - |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns | pending | - | - | - |
