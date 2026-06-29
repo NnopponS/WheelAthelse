@@ -44,6 +44,21 @@ void setup() {
     // Initialize display
     display().begin();
 
+    // Power up the MPU6886 via M5Unified (AXP192 power management on
+    // M5StickCPlus2 must be enabled before any I2C traffic to the IMU).
+    // M5.Imu.init() sends the standard init sequence; our ImuReader then
+    // uses M5.Imu.update() + getImuData() to read float values and converts
+    // them to raw int16 for the BLE packet.
+    if (!M5.Imu.init()) {
+        Serial.println("[FATAL] M5.Imu.init() failed — MPU6886 not detected");
+        M5.Display.fillScreen(RED);
+        M5.Display.setTextColor(WHITE);
+        M5.Display.setCursor(10, 50);
+        M5.Display.print("IMU FAIL");
+        while (true) delay(1000);
+    }
+    Serial.println("[MAIN] M5.Imu.init() OK — MPU6886 powered up");
+
     // Initialize IMU reader (default 100 Hz, ±4g, ±2000 dps)
     if (!imu().begin()) {
         Serial.println("[FATAL] IMU init failed — check wiring");

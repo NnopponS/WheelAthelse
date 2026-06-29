@@ -57,16 +57,8 @@ public:
     bool        running()     const { return running_; }
 
 private:
-    // MPU6886 register helpers
-    void     writeReg(uint8_t reg, uint8_t val) const;
-    uint8_t  readReg(uint8_t reg) const;
-    void     readRegs(uint8_t reg, uint8_t* buf, size_t len) const;
-
-    // Configure sensor registers for current rate + ranges + FIFO
-    void     configureSensor() const;
-
-    // Drain FIFO → push samples to queue (called by esp_timer callback)
-    void     drainFifo();
+    // Acquire one sample from M5.Imu and push to queue (called by esp_timer)
+    void     acquireSample();
 
     // esp_timer callback (static → forwards to instance)
     static void timerCallback(void* arg);

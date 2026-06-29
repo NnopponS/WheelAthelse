@@ -234,7 +234,13 @@ class FlutterBluePlusBleRepository implements BleRepository {
           await imuChar.setNotifyValue(true);
         }
         final sub = imuChar.lastValueStream.listen(
-          controller.add,
+          (bytes) {
+            // flutter_blue_plus emits an empty list on subscribe (before any
+            // notify arrives) and can also deliver empty payloads on reconnect.
+            // Filter them here so the parser never sees an empty batch.
+            if (bytes.isEmpty) return;
+            controller.add(bytes);
+          },
           onError: controller.addError,
           onDone: controller.close,
         );
@@ -266,7 +272,10 @@ class FlutterBluePlusBleRepository implements BleRepository {
           await syncChar.setNotifyValue(true);
         }
         final sub = syncChar.lastValueStream.listen(
-          controller.add,
+          (bytes) {
+            if (bytes.isEmpty) return;
+            controller.add(bytes);
+          },
           onError: controller.addError,
           onDone: controller.close,
         );
