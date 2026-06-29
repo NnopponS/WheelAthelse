@@ -85,6 +85,19 @@ abstract class BleRepository {
   /// responsible for parsing via [ImuPacketParser]. Throws if [deviceId] is
   /// not connected.
   Stream<List<int>> imuData(String deviceId);
+
+  /// Live Sync characteristic notify stream for [deviceId] (§4).
+  ///
+  /// Each event is the raw bytes of one Sync notification
+  /// (`[uint8 event_id][payload...]`). The caller parses via
+  /// `SyncEvent.parse`. Throws if [deviceId] is not connected.
+  Stream<List<int>> syncData(String deviceId);
+
+  /// Writes [bytes] to the Control characteristic of [deviceId] (§3).
+  ///
+  /// The caller encodes the command via `ControlCommand.*`. Throws if
+  /// [deviceId] is not connected or the write fails.
+  Future<void> writeControl(String deviceId, List<int> bytes);
 }
 
 // ── flutter_blue_plus implementation ──────────────────────────────────────
@@ -108,6 +121,8 @@ class FlutterBluePlusBleRepository implements BleRepository {
   final fbp.Guid _serviceGuid = fbp.Guid(BleUuids.service);
   final fbp.Guid _infoGuid = fbp.Guid(BleUuids.info);
   final fbp.Guid _imuGuid = fbp.Guid(BleUuids.imuData);
+  final fbp.Guid _syncGuid = fbp.Guid(BleUuids.sync);
+  final fbp.Guid _controlGuid = fbp.Guid(BleUuids.control);
 
   StreamSubscription<List<fbp.ScanResult>>? _scanSub;
   final StreamController<List<ScannedDevice>> _scanController =
@@ -235,6 +250,45 @@ class FlutterBluePlusBleRepository implements BleRepository {
     return controller.stream;
   }
 
+  @override
+  Stream<List<int>> syncData(String deviceId) {
+    // Same pattern as imuData: resolve the Sync characteristic from the
+    // cached servicesList, enable notify, and forward lastValueStream.
+    final controller = StreamController<List<int>>.broadcast();
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    () async {
+      try {
+        final services = device.servicesList;
+        final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+        final syncChar = service.characteristics
+            .firstWhere((c) => c.characteristicUuid == _syncGuid);
+        if (!syncChar.isNotifying) {
+          await syncChar.setNotifyValue(true);
+        }
+        final sub = syncChar.lastValueStream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        controller.onCancel = () => sub.cancel();
+      } on Object catch (e, st) {
+        controller.addError(e, st);
+        await controller.close();
+      }
+    }();
+    return controller.stream;
+  }
+
+  @override
+  Future<void> writeControl(String deviceId, List<int> bytes) async {
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    final services = device.servicesList;
+    final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+    final controlChar = service.characteristics
+        .firstWhere((c) => c.characteristicUuid == _controlGuid);
+    await controlChar.write(bytes.toList(), withoutResponse: false);
+  }
+
   // flutter_blue_plus 2.x BluetoothConnectionState only has disconnected /
   // connected (the old connecting/disconnecting values were removed). We map
   // the two remaining values to our coarser enum.
@@ -273,6 +327,7 @@ class FakeBleRepository implements BleRepository {
   final _scanController = StreamController<List<ScannedDevice>>.broadcast();
   final _states = <String, StreamController<BleConnectionState>>{};
   final _imuControllers = <String, StreamController<List<int>>>{};
+  final _syncControllers = <String, StreamController<List<int>>>{};
   bool _scanning = false;
 
   @override
@@ -342,8 +397,34 @@ class FakeBleRepository implements BleRepository {
   StreamController<List<int>>? imuController(String deviceId) =>
       _imuControllers[deviceId];
 
+  @override
+  Stream<List<int>> syncData(String deviceId) => _syncController(deviceId).stream;
+
+  /// Exposes the Sync notify stream controller for a device so tests can
+  /// inject raw Sync event bytes. Same `sync: true` contract as
+  /// [imuController].
+  StreamController<List<int>>? syncController(String deviceId) =>
+      _syncControllers[deviceId];
+
+  /// Records the last Control command written for [deviceId] (or null if
+  /// none). Tests inspect this to verify the app sent the right bytes.
+  List<int>? lastControlWrite(String deviceId) => _lastControlWrites[deviceId];
+
+  @override
+  Future<void> writeControl(String deviceId, List<int> bytes) async {
+    _lastControlWrites[deviceId] = bytes;
+  }
+
+  final Map<String, List<int>> _lastControlWrites = {};
+
   StreamController<List<int>> _imuController(String deviceId) =>
       _imuControllers.putIfAbsent(
+        deviceId,
+        () => StreamController<List<int>>.broadcast(sync: true),
+      );
+
+  StreamController<List<int>> _syncController(String deviceId) =>
+      _syncControllers.putIfAbsent(
         deviceId,
         () => StreamController<List<int>>.broadcast(sync: true),
       );

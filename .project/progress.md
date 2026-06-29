@@ -8,7 +8,7 @@
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | completed | 2026-06-28 | 2026-06-28 | 9583327 |
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | 3d132fc |
 | 6 | Flutter: parse packet + realtime display | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | 9b0e199 |
-| 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns | pending | - | - | - |
+| 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | (see commit) |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns | pending | - | - | - |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns | pending | - | - | - |
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
@@ -113,3 +113,39 @@
     not code — delete ndk\28.2.13676358 and re-download).
   - Evidence: docs/testing/subtask-06.tdd.md
   - Next: #7 (clock sync engine) needs #6 stream + #3 firmware sync support.
+- 2026-06-29: subtask #7 done. Clock sync engine (offset/drift/scheduled start).
+  - new lib: ble/sync_packet.dart (SyncEvent.parse sealed class — parses
+    [event_id][payload] notify payloads verified against firmware ble_service.cpp
+    handleSyncPing: SyncResponseEvent 0x00 13B, DropCountEvent 0x10 5B,
+    CmdNackEvent 0x20 2B, StartFiredEvent 0x30 5B, StopFiredEvent 0x40 9B,
+    throws ArgumentError on truncated, FormatException on unknown),
+    ble/control_command.dart (ControlCommand encoders for all §3.1 commands:
+    START 5B, STOP 1B, SET_RATE 3B validates 50/100/200, SYNC_PING 5B,
+    SET_RANGE 3B validates 0-3, BEEP 4B validates count>0, RESET_SEQ 1B),
+    state/sync_engine.dart (OffsetEstimate.compute NTP-lite §4.2 RTT+offset,
+    MinRttTracker keeps lowest-RTT estimate, DriftFit.fit OLS linear regression
+    §4.3 slope+intercept+residualRMS+toSyncedMs, ScheduledStart.compute §3.2
+    phone→device micros conversion), state/sync_providers.dart
+    (SyncEngineNotifier Riverpod: sendPing writes SYNC_PING + records T1
+    relative to first ping to fit uint32, startListening subscribes to
+    BleRepository.syncData + dispatches SyncEvent subclasses to update state,
+    sendStart/sendStop/sendResetSeq write Control commands, ref.mounted guards,
+    error handling).
+  - modified: ble/ble_repository.dart (+syncData stream abstract + FlutterBluePlus
+    impl using servicesList+lastValueStream broadcast + Fake with sync: true
+    controllers + syncController test helper + writeControl abstract + impl +
+    Fake with lastControlWrite recorder).
+  - bugs caught by TDD: uint32 overflow (DateTime.now().millisecondsSinceEpoch
+    ~1.78e12 overflows uint32 t_app_ms → fixed with relative timestamps),
+    test offset expectations (RTT ~4ms not 0 with sync controller → range-based
+    assertions), first ping t_app_ms=0 (relative → >= 0 not > 0), copyWith
+    sentinel pattern (Object? not PendingPing?), unused seqPing pattern
+    variable, dangling library doc comment (added library;), fake repos in
+    connection_manager_test missing new abstract methods.
+  - Tests: 59 new (13 sync_packet + 13 control_command + 18 sync_engine +
+    15 sync_providers) = 204 total PASS. flutter analyze clean.
+    Coverage: sync_packet 95.5%, control_command 100%, sync_engine 100%,
+    sync_providers 92.6%, ble_repository 100% testable.
+  - Evidence: docs/testing/subtask-07.tdd.md
+  - Next: #8 (recording session + Mark Event + folder topic/trial) needs #7
+    sync + #6 IMU stream.

@@ -1,0 +1,95 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wheelathlete/ble/control_command.dart';
+
+void main() {
+  group('ControlCommand encode (§3.1)', () {
+    test('START with target_start_us → [0x01][u32 LE]', () {
+      final bytes = ControlCommand.start(123456789);
+      expect(bytes, [0x01, ..._u32LE(123456789)]);
+      expect(bytes.length, 5);
+    });
+
+    test('START with 0 (immediate) → [0x01][0x00000000]', () {
+      expect(ControlCommand.start(0), [0x01, 0, 0, 0, 0]);
+    });
+
+    test('STOP → [0x02] (1 byte, no payload)', () {
+      expect(ControlCommand.stop(), [0x02]);
+    });
+
+    test('SET_RATE with 100 Hz → [0x03][u16 LE]', () {
+      final bytes = ControlCommand.setRate(100);
+      expect(bytes, [0x03, ..._u16LE(100)]);
+      expect(bytes.length, 3);
+    });
+
+    test('SET_RATE with 50 and 200 Hz', () {
+      expect(ControlCommand.setRate(50), [0x03, 50, 0]);
+      expect(ControlCommand.setRate(200), [0x03, 0xC8, 0]);
+    });
+
+    test('SET_RATE throws ArgumentError for invalid rate', () {
+      expect(() => ControlCommand.setRate(75), throwsArgumentError);
+      expect(() => ControlCommand.setRate(0), throwsArgumentError);
+      expect(() => ControlCommand.setRate(500), throwsArgumentError);
+    });
+
+    test('SYNC_PING with t_app_ms → [0x04][u32 LE]', () {
+      final bytes = ControlCommand.syncPing(999999);
+      expect(bytes, [0x04, ..._u32LE(999999)]);
+      expect(bytes.length, 5);
+    });
+
+    test('SET_RANGE → [0x05][accel_range][gyro_range]', () {
+      final bytes = ControlCommand.setRange(accelRange: 2, gyroRange: 1);
+      expect(bytes, [0x05, 2, 1]);
+      expect(bytes.length, 3);
+    });
+
+    test('SET_RANGE throws ArgumentError for out-of-range codes', () {
+      expect(() => ControlCommand.setRange(accelRange: 4, gyroRange: 0),
+          throwsArgumentError);
+      expect(() => ControlCommand.setRange(accelRange: 0, gyroRange: 5),
+          throwsArgumentError);
+    });
+
+    test('BEEP → [0x06][count][period_ms u16 LE]', () {
+      final bytes = ControlCommand.beep(count: 3, periodMs: 1000);
+      expect(bytes, [0x06, 3, ..._u16LE(1000)]);
+      expect(bytes.length, 4);
+    });
+
+    test('BEEP throws ArgumentError for count=0', () {
+      expect(() => ControlCommand.beep(count: 0, periodMs: 500),
+          throwsArgumentError);
+    });
+
+    test('RESET_SEQ → [0xFF] (1 byte, no payload)', () {
+      expect(ControlCommand.resetSeq(), [0xFF]);
+    });
+  });
+
+  group('ControlCommand.cmd constants', () {
+    test('match the protocol §3.1 values', () {
+      expect(ControlCommandId.start, 0x01);
+      expect(ControlCommandId.stop, 0x02);
+      expect(ControlCommandId.setRate, 0x03);
+      expect(ControlCommandId.syncPing, 0x04);
+      expect(ControlCommandId.setRange, 0x05);
+      expect(ControlCommandId.beep, 0x06);
+      expect(ControlCommandId.resetSeq, 0xFF);
+    });
+  });
+}
+
+List<int> _u32LE(int v) {
+  final b = ByteData(4)..setUint32(0, v, Endian.little);
+  return b.buffer.asUint8List();
+}
+
+List<int> _u16LE(int v) {
+  final b = ByteData(2)..setUint16(0, v, Endian.little);
+  return b.buffer.asUint8List();
+}
