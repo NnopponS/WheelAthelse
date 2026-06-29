@@ -2,11 +2,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
+import 'package:wheelathlete/export/export_actions.dart';
+import 'package:wheelathlete/export/export_providers.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/browse_page.dart';
+
+/// Fake [ExportActions] that records the last share call instead of invoking
+/// share_plus / file_picker.
+class _RecordingExportActions extends ExportActions {
+  _RecordingExportActions() : super(_NoopOps(), InMemoryStorageRepository());
+
+  ExportLevel? lastLevel;
+  String? lastTopic;
+  int? lastTrial;
+  String? lastSession;
+
+  @override
+  Future<void> share({
+    required ExportLevel level,
+    required String topic,
+    int? trialNumber,
+    String? sessionId,
+  }) async {
+    lastLevel = level;
+    lastTopic = topic;
+    lastTrial = trialNumber;
+    lastSession = sessionId;
+  }
+
+  @override
+  Future<List<String>> saveToDevice({
+    required ExportLevel level,
+    required String topic,
+    int? trialNumber,
+    String? sessionId,
+    required DirectoryPicker pickDirectory,
+    required FileSink writeFile,
+  }) async {
+    lastLevel = level;
+    lastTopic = topic;
+    return const [];
+  }
+}
+
+class _NoopOps implements ExportOperations {
+  @override
+  Future<void> shareSession({
+    required String topic,
+    required int trialNumber,
+    required String sessionId,
+  }) async {}
+
+  @override
+  Future<void> shareTrial({required String topic, required int trialNumber}) async {}
+
+  @override
+  Future<void> shareTopic({required String topic}) async {}
+}
 
 SessionMeta _meta({String id = 'abc123', int trial = 1}) => SessionMeta(
       sessionId: id,
@@ -121,7 +176,10 @@ void main() {
       await tester.tap(find.text('trial_01').first);
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.ios_share_rounded), findsNWidgets(2));
+      // 2 session rows + 1 share-trial AppBar button.
+      expect(find.byIcon(Icons.ios_share_rounded), findsNWidgets(3));
+      // Save-to-device buttons too.
+      expect(find.byIcon(Icons.save_alt_rounded), findsNWidgets(3));
     });
 
     testWidgets('back button returns to topic list from trial list',
@@ -260,6 +318,114 @@ void main() {
       expect(meta, isNotNull);
       expect(meta!.notes, 'updated notes');
       expect(meta.videoFileName, 'cam_01.mp4');
+    });
+  });
+
+  group('BrowsePage — share/export wiring', () {
+    testWidgets('tapping a session share button invokes ExportActions.share',
+        (tester) async {
+      final fakeActions = _RecordingExportActions();
+      final container2 = ProviderContainer(
+        overrides: [
+          storageRepositoryProvider.overrideWith((ref) => storage),
+          exportActionsProvider.overrideWith((ref) => fakeActions),
+        ],
+      );
+      addTearDown(container2.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container2,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            home: const BrowsePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Session-row share buttons have tooltip 'Share' (AppBar uses 'Share
+      // trial'). Tap the first one — corresponds to the first session row.
+      await tester.tap(find.byTooltip('Share').first);
+      await tester.pumpAndSettle();
+
+      expect(fakeActions.lastLevel, ExportLevel.session);
+      expect(fakeActions.lastTopic, 'sprint_test');
+      expect(fakeActions.lastTrial, 1);
+      // First session in the list is abc123.
+      expect(fakeActions.lastSession, 'abc123');
+    });
+
+    testWidgets('tapping the trial AppBar share button invokes trial share',
+        (tester) async {
+      final fakeActions = _RecordingExportActions();
+      final container2 = ProviderContainer(
+        overrides: [
+          storageRepositoryProvider.overrideWith((ref) => storage),
+          exportActionsProvider.overrideWith((ref) => fakeActions),
+        ],
+      );
+      addTearDown(container2.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container2,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            home: const BrowsePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Share trial'));
+      await tester.pumpAndSettle();
+
+      expect(fakeActions.lastLevel, ExportLevel.trial);
+      expect(fakeActions.lastTopic, 'sprint_test');
+      expect(fakeActions.lastTrial, 1);
+    });
+
+    testWidgets('tapping the topic AppBar share button invokes topic share',
+        (tester) async {
+      final fakeActions = _RecordingExportActions();
+      final container2 = ProviderContainer(
+        overrides: [
+          storageRepositoryProvider.overrideWith((ref) => storage),
+          exportActionsProvider.overrideWith((ref) => fakeActions),
+        ],
+      );
+      addTearDown(container2.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container2,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            home: const BrowsePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Share topic'));
+      await tester.pumpAndSettle();
+
+      expect(fakeActions.lastLevel, ExportLevel.topic);
+      expect(fakeActions.lastTopic, 'sprint_test');
     });
   });
 }

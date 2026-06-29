@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wheelathlete/export/export_actions.dart';
+import 'package:wheelathlete/export/export_providers.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -232,7 +234,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
   }
 }
 
-class _TrialListView extends ConsumerWidget {
+class _TrialListView extends ConsumerStatefulWidget {
   const _TrialListView({
     required this.topic,
     required this.onBack,
@@ -243,17 +245,71 @@ class _TrialListView extends ConsumerWidget {
   final ValueChanged<int> onTrialTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TrialListView> createState() => _TrialListViewState();
+}
+
+class _TrialListViewState extends ConsumerState<_TrialListView> {
+  Future<void> _shareTopic(BuildContext context) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await actions.share(level: ExportLevel.topic, topic: widget.topic);
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  Future<void> _saveTopicToDevice(BuildContext context) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final written = await actions.saveToDevice(
+        level: ExportLevel.topic,
+        topic: widget.topic,
+        pickDirectory: pickDirectory,
+        writeFile: writeCsvFile,
+      );
+      if (!mounted) return;
+      if (written.isEmpty) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved ${written.length} file(s) to device')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final exportState = ref.watch(exportProvider);
     return Scaffold(
       appBar: AppBar(
-        title: Text(topic),
+        title: Text(widget.topic),
         leading: IconButton(
-          onPressed: onBack,
+          onPressed: widget.onBack,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
+        actions: [
+          IconButton(
+            onPressed: exportState.isExporting
+                ? null
+                : () => _shareTopic(context),
+            icon: const Icon(Icons.ios_share_rounded),
+            tooltip: 'Share topic',
+          ),
+          IconButton(
+            onPressed: exportState.isExporting
+                ? null
+                : () => _saveTopicToDevice(context),
+            icon: const Icon(Icons.save_alt_rounded),
+            tooltip: 'Save topic to device',
+          ),
+        ],
       ),
       body: FutureBuilder<List<int>>(
-        future: ref.read(storageRepositoryProvider).listTrials(topic),
+        future: ref.read(storageRepositoryProvider).listTrials(widget.topic),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -261,7 +317,7 @@ class _TrialListView extends ConsumerWidget {
           final trials = snapshot.data ?? [];
           if (trials.isEmpty) {
             return Center(
-              child: Text('No trials in $topic',
+              child: Text('No trials in ${widget.topic}',
                   style: Theme.of(context).textTheme.bodyMedium),
             );
           }
@@ -276,7 +332,7 @@ class _TrialListView extends ConsumerWidget {
                   leading: const Icon(Icons.layers_rounded),
                   title: Text('trial_${trial.toString().padLeft(2, '0')}'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => onTrialTap(trial),
+                  onTap: () => widget.onTrialTap(trial),
                 ),
               );
             },
@@ -352,8 +408,48 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     }
   }
 
+  Future<void> _shareSession(SessionMeta meta) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await actions.share(
+        level: ExportLevel.session,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+        sessionId: meta.sessionId,
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  Future<void> _saveSessionToDevice(SessionMeta meta) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final written = await actions.saveToDevice(
+        level: ExportLevel.session,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+        sessionId: meta.sessionId,
+        pickDirectory: pickDirectory,
+        writeFile: writeCsvFile,
+      );
+      if (!mounted) return;
+      if (written.isEmpty) return; // user cancelled
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved ${written.length} file(s) to device')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final exportState = ref.watch(exportProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text('trial_${widget.trialNumber.toString().padLeft(2, '0')}'),
@@ -361,6 +457,22 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
           onPressed: widget.onBack,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
+        actions: [
+          IconButton(
+            onPressed: exportState.isExporting
+                ? null
+                : () => _shareTrial(context),
+            icon: const Icon(Icons.ios_share_rounded),
+            tooltip: 'Share trial',
+          ),
+          IconButton(
+            onPressed: exportState.isExporting
+                ? null
+                : () => _saveTrialToDevice(context),
+            icon: const Icon(Icons.save_alt_rounded),
+            tooltip: 'Save trial to device',
+          ),
+        ],
       ),
       body: FutureBuilder<List<SessionMeta>>(
         future: _future,
@@ -393,7 +505,12 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                 syncQuality: meta.driftResidualRmsMsLeft != null
                     ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                     : null,
-                onShare: () => _share(context, meta),
+                onShare: exportState.isExporting
+                    ? null
+                    : () => _shareSession(meta),
+                onSave: exportState.isExporting
+                    ? null
+                    : () => _saveSessionToDevice(meta),
                 onEdit: () => _editSessionMeta(meta),
               );
             },
@@ -403,12 +520,41 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     );
   }
 
-  Future<void> _share(BuildContext context, SessionMeta meta) async {
-    // Share is handled by the export provider (subtask #18); here we just show
-    // a snackbar placeholder until the export wiring lands.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sharing ${meta.sessionId}...')),
-    );
+  Future<void> _shareTrial(BuildContext context) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await actions.share(
+        level: ExportLevel.trial,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  Future<void> _saveTrialToDevice(BuildContext context) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final written = await actions.saveToDevice(
+        level: ExportLevel.trial,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+        pickDirectory: pickDirectory,
+        writeFile: writeCsvFile,
+      );
+      if (!mounted) return;
+      if (written.isEmpty) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved ${written.length} file(s) to device')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
   }
 }
 

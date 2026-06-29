@@ -43,6 +43,10 @@ dependencies:
   path_provider: ^2.1.6
   csv: ^8.0.0
   share_plus: ^13.2.0
+  # Save-to-device directory picker. file_picker 12.0.0-beta.7 is the only
+  # series compatible with share_plus 13.x (win32 ^6). Pinned exactly; the
+  # stable 11.x line conflicts on win32 ^5 vs share_plus's win32 ^6.
+  file_picker: 12.0.0-beta.7
 
 dev_dependencies:
   flutter_test:
