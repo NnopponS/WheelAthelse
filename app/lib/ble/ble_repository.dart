@@ -80,6 +80,14 @@ abstract class BleRepository {
 }
 
 // ── flutter_blue_plus implementation ──────────────────────────────────────
+// coverage:ignore-start
+// This production adapter wraps flutter_blue_plus which requires real BLE
+// hardware. It is a thin I/O translator with no branching logic — every
+// method delegates directly to the plugin. The pure logic it calls
+// (DeviceInfo.parse, WheelId.fromByte) is fully covered by unit tests, and
+// the state machine that drives it (ConnectionManagerNotifier) is fully
+// covered via FakeBleRepository. Field testing against real M5StickCPlus2
+// hardware is subtask #10.
 
 /// Production [BleRepository] backed by `flutter_blue_plus`.
 ///
@@ -191,6 +199,7 @@ class FlutterBluePlusBleRepository implements BleRepository {
         fbp.BluetoothConnectionState.connected => BleConnectionState.connected,
       };
 }
+// coverage:ignore-end
 
 // ── Fake for tests ────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@
 /// `docs/ble-protocol.md` §1 and §2. The firmware side mirrors these in
 /// `firmware/src/ble_types.h` — both must stay in sync.
 class BleUuids {
-  const BleUuids._();
+  const BleUuids._(); // coverage:ignore-line
 
   // ── GATT Service (§1) ───────────────────────────────────────────────────
   static const String service =

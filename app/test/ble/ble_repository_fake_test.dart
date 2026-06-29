@@ -75,5 +75,22 @@ void main() {
       final repo = FakeBleRepository(devices: const []);
       expect(() => repo.connect('missing'), throwsStateError);
     });
+
+    test('stopScan sets isScanning to false', () async {
+      final repo = FakeBleRepository(
+        devices: [const FakeDevice(id: 'AA', name: 'n', rssi: -40)],
+      );
+      await repo.startScan(const Duration(seconds: 1));
+      expect(repo.isScanning, isFalse);
+      await repo.stopScan();
+      expect(repo.isScanning, isFalse);
+    });
+
+    test('readRssi returns the seeded rssi for the device', () async {
+      final repo = FakeBleRepository(
+        devices: [const FakeDevice(id: 'AA', name: 'n', rssi: -67)],
+      );
+      expect(await repo.readRssi('AA'), -67);
+    });
   });
 }

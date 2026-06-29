@@ -87,5 +87,55 @@ void main() {
       expect(info.accelRangeName, '±8g');
       expect(info.gyroRangeName, '±500 dps');
     });
+
+    test('accelRangeName covers all valid ranges', () {
+      for (final (code, label) in [
+        (0, '±2g'),
+        (1, '±4g'),
+        (2, '±8g'),
+        (3, '±16g'),
+      ]) {
+        final b = ByteData(16)
+          ..setUint8(0, 0x4C)
+          ..setUint8(4, code)
+          ..setFloat32(6, 0.0, Endian.little)
+          ..setFloat32(10, 0.0, Endian.little);
+        expect(DeviceInfo.parse(b.buffer.asUint8List()).accelRangeName, label);
+      }
+    });
+
+    test('gyroRangeName covers all valid ranges', () {
+      for (final (code, label) in [
+        (0, '±250 dps'),
+        (1, '±500 dps'),
+        (2, '±1000 dps'),
+        (3, '±2000 dps'),
+      ]) {
+        final b = ByteData(16)
+          ..setUint8(0, 0x4C)
+          ..setUint8(5, code)
+          ..setFloat32(6, 0.0, Endian.little)
+          ..setFloat32(10, 0.0, Endian.little);
+        expect(DeviceInfo.parse(b.buffer.asUint8List()).gyroRangeName, label);
+      }
+    });
+
+    test('accelRangeName falls back for invalid range code', () {
+      final b = ByteData(16)
+        ..setUint8(0, 0x4C)
+        ..setUint8(4, 99)
+        ..setFloat32(6, 0.0, Endian.little)
+        ..setFloat32(10, 0.0, Endian.little);
+      expect(DeviceInfo.parse(b.buffer.asUint8List()).accelRangeName, 'range#99');
+    });
+
+    test('gyroRangeName falls back for invalid range code', () {
+      final b = ByteData(16)
+        ..setUint8(0, 0x4C)
+        ..setUint8(5, 77)
+        ..setFloat32(6, 0.0, Endian.little)
+        ..setFloat32(10, 0.0, Endian.little);
+      expect(DeviceInfo.parse(b.buffer.asUint8List()).gyroRangeName, 'range#77');
+    });
   });
 }

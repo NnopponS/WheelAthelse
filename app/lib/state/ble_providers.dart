@@ -64,17 +64,21 @@ class ConnectionManagerState {
   final Map<WheelSide, WheelConnection> bySide;
   final String? error;
 
+  /// Sentinel so `copyWith` can distinguish "don't touch error" from
+  /// "clear error to null". Pass `error: null` to clear; omit it to preserve.
+  static const Object _unsetError = Object();
+
   ConnectionManagerState copyWith({
     bool? isScanning,
     List<ScannedDevice>? scanResults,
     Map<WheelSide, WheelConnection>? bySide,
-    String? error,
+    Object? error = _unsetError,
   }) =>
       ConnectionManagerState(
         isScanning: isScanning ?? this.isScanning,
         scanResults: scanResults ?? this.scanResults,
         bySide: bySide ?? this.bySide,
-        error: error,
+        error: identical(error, _unsetError) ? this.error : error as String?,
       );
 
   /// Sentinel: a fresh idle state with both wheels disconnected.

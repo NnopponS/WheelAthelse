@@ -135,4 +135,138 @@ void main() {
     await manager.stopScan();
     expect(state().isScanning, isFalse);
   });
+
+  group('WheelConnection.copyWith', () {
+    test('copies all fields', () {
+      const conn = WheelConnection(
+        status: ConnectionStatus.connected,
+        deviceId: 'ABC',
+        deviceName: 'WheelAthlete-L',
+        rssi: -42,
+      );
+      final copy = conn.copyWith(rssi: -50);
+      expect(copy.status, ConnectionStatus.connected);
+      expect(copy.deviceId, 'ABC');
+      expect(copy.deviceName, 'WheelAthlete-L');
+      expect(copy.rssi, -50);
+    });
+
+    test('defaults preserve original values when null', () {
+      const conn = WheelConnection(
+        status: ConnectionStatus.connected,
+        deviceId: 'ABC',
+        deviceName: 'WheelAthlete-L',
+        rssi: -42,
+      );
+      final copy = conn.copyWith();
+      expect(copy.status, ConnectionStatus.connected);
+      expect(copy.deviceId, 'ABC');
+      expect(copy.deviceName, 'WheelAthlete-L');
+      expect(copy.rssi, -42);
+    });
+  });
+
+  test('ConnectionManagerState.initial() returns idle state', () {
+    final s = ConnectionManagerState.initial();
+    expect(s.isScanning, isFalse);
+    expect(s.scanResults, isEmpty);
+    expect(s.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
+    expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.disconnected);
+    expect(s.error, isNull);
+  });
+
+  test('bleRepositoryProvider builds FlutterBluePlusBleRepository by default',
+      () {
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    final repo = c.read(bleRepositoryProvider);
+    expect(repo, isA<FlutterBluePlusBleRepository>());
+  });
+
+  test('startScan sets error when repository throws', () async {
+    final bleThrow = _ThrowingBleRepository();
+    final c = ProviderContainer(
+      overrides: [bleRepositoryProvider.overrideWith((ref) => bleThrow)],
+    );
+    addTearDown(c.dispose);
+    final manager = c.read(connectionManagerProvider.notifier);
+    await manager.startScan();
+    expect(c.read(connectionManagerProvider).error, isNotNull);
+    expect(c.read(connectionManagerProvider).isScanning, isFalse);
+  });
+
+  test('startScan sets error when scanResults stream emits an error', () async {
+    final bleErrorScan = _ErrorScanBleRepository();
+    final c = ProviderContainer(
+      overrides: [bleRepositoryProvider.overrideWith((ref) => bleErrorScan)],
+    );
+    addTearDown(c.dispose);
+    final manager = c.read(connectionManagerProvider.notifier);
+    await manager.startScan();
+    expect(c.read(connectionManagerProvider).error, isNotNull);
+  });
+}
+
+/// A fake that throws on startScan — exercises the catch branch.
+class _ThrowingBleRepository implements BleRepository {
+  @override
+  Stream<List<ScannedDevice>> get scanResults =>
+      const Stream<List<ScannedDevice>>.empty();
+
+  @override
+  bool get isScanning => false;
+
+  @override
+  Future<void> startScan(Duration timeout) async {
+    throw StateError('scan failed');
+  }
+
+  @override
+  Future<void> stopScan() async {}
+
+  @override
+  Future<ConnectedDevice> connect(String deviceId) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Stream<BleConnectionState> connectionState(String deviceId) =>
+      const Stream<BleConnectionState>.empty();
+
+  @override
+  Future<void> disconnect(String deviceId) async {}
+
+  @override
+  Future<int> readRssi(String deviceId) async => 0;
+}
+
+/// A fake whose scanResults stream emits an error — exercises onError handler.
+class _ErrorScanBleRepository implements BleRepository {
+  @override
+  Stream<List<ScannedDevice>> get scanResults =>
+      Stream<List<ScannedDevice>>.error(StateError('scan stream error'));
+
+  @override
+  bool get isScanning => false;
+
+  @override
+  Future<void> startScan(Duration timeout) async {}
+
+  @override
+  Future<void> stopScan() async {}
+
+  @override
+  Future<ConnectedDevice> connect(String deviceId) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Stream<BleConnectionState> connectionState(String deviceId) =>
+      const Stream<BleConnectionState>.empty();
+
+  @override
+  Future<void> disconnect(String deviceId) async {}
+
+  @override
+  Future<int> readRssi(String deviceId) async => 0;
 }
