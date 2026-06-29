@@ -247,7 +247,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 |---|---------|--------|-------|-------|--------|---------|-----------|--------|----|
 | 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | b141325 | - |
 | 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | completed | 2026-06-29 | 2026-06-29 | 889792e | - |
-| 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
+| 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | completed | 2026-06-29 | 2026-06-29 | ff86781 | - |
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
 | 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
@@ -286,3 +286,18 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
     → removed duplicate, reuse from imu_types.h.
   - Tests: 20 new config tests (test_config_store.py) = 88 total PASS.
     pio run left/right SUCCESS. Protocol doc v1.1.0 §5.1 + §3.1 updated.
+- 2026-06-29: subtask #13 done (commit ff86781). SET_UTC + UTC_SET + START_FIRED UTC stamp:
+  - New Control command SET_UTC (0x09, uint64 LE epoch ms). Board stores UTC epoch in
+    RAM (utc_epoch_ms_, utc_set_ flag). Emits UTC_SET echo event (0x50, uint64) on receipt.
+  - Extended START_FIRED event (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+    = 13B. utc_start_ms = utc_epoch + (target_start_us - now_us)/1000 for scheduled start,
+    = utc_epoch for immediate start, = 0 if UTC not set.
+  - App mirrors: ControlCommand.setUtc() in control_command.dart; SyncEvent.parse handles
+    extended START_FIRED (13B) + legacy (5B) + new UTC_SET event; UtcSetEvent class;
+    StartFiredEvent.utcStartMs field; WheelSyncState gains utcEpochMs + utcStartMs fields;
+    sync_providers _handleEvent handles UtcSetEvent + extended StartFiredEvent.
+  - Bug caught: non_exhaustive_switch_statement in sync_providers.dart after adding
+    UtcSetEvent to sealed class → added case for UtcSetEvent.
+  - Tests: 19 new firmware tests (SET_UTC encoding, UTC_SET parsing, extended START_FIRED)
+    = 103 total pytest PASS. 298 flutter tests PASS. flutter analyze clean.
+    pio run left/right SUCCESS. Protocol doc v1.1.0 §3.1 + §4.4 updated.
