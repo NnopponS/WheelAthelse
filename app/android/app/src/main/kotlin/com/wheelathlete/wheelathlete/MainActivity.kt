@@ -1,4 +1,4 @@
-package com.WheelAthlete.WheelAthlete
+package com.wheelathlete.wheelathlete
 
 import io.flutter.embedding.android.FlutterActivity
 
