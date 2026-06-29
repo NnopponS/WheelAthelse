@@ -36,6 +36,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^8.1.0
   fl_chart: ^1.2.0
+  # BLE — pinned; flutter_blue_plus 2.3.9 published 8 days ago (≥7d rule).
+  flutter_blue_plus: ^2.3.9
+  # State management — Riverpod 3.x (no codegen; uses Notifier/NotifierProvider).
+  flutter_riverpod: ^3.3.2
 
 dev_dependencies:
   flutter_test:

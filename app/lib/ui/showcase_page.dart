@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/connect_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Living style guide: renders every design-system token and reusable
@@ -69,6 +70,13 @@ class _ShowcasePageState extends State<ShowcasePage> {
       appBar: AppBar(
         title: const Text('WheelAthlete UI'),
         actions: [
+          IconButton(
+            tooltip: 'Connect wheels',
+            icon: const Icon(Icons.bluetooth_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ConnectPage()),
+            ),
+          ),
           PopupMenuButton<ThemeMode>(
             tooltip: 'Theme mode',
             icon: Icon(

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/showcase_page.dart';
 
-void main() => runApp(const WheelAthleteApp());
+void main() => runApp(const ProviderScope(child: WheelAthleteApp()));
 
 /// App root. For subtask #4 the home screen is the design-system showcase
 /// (living style guide). Real screens (scan/connect, live, recording, browse)
