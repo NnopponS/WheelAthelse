@@ -246,7 +246,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | # | Subtask | Branch | Issue | Skill | Status | Started | Completed | Commit | PR |
 |---|---------|--------|-------|-------|--------|---------|-----------|--------|----|
 | 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | b141325 | - |
-| 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | pending | - | - | - | - |
+| 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | completed | 2026-06-29 | 2026-06-29 | 889792e | - |
 | 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
@@ -271,3 +271,18 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
   - Tests: 6 new battery tests in test_ble_types.py (clamp normal/zero/full/
     negative/over-100/single-byte) = 68 total PASS. pio run left/right SUCCESS.
   - Protocol doc updated to v1.1.0 with §1.2 Battery Service documentation.
+- 2026-06-29: subtask #12 done (commit 889792e). Board config + NVS + Config char:
+  - New config_store.h (pure logic: packConfig 22B, isValidWheel, sanitizeName,
+    BoardConfig struct) + config_store.cpp (NVS via Preferences namespace "wacfg":
+    begin/load, save on disconnect, setName/setWheel/setRate cache in RAM).
+  - New Control commands: SET_NAME (0x07, 16-byte name), SET_WHEEL (0x08, 0x4C/0x52).
+    SET_RATE (0x03) now persists to config store. All persist to NVS on disconnect.
+  - New Config read characteristic (UUID a1b7): [name 16B][wheel_id 1B][rate_hz 2B LE]
+    [fw_major 1B][fw_minor 1B][fw_patch 1B] = 22B. Updated on SET_NAME/SET_WHEEL/SET_RATE.
+  - On boot: configStore().begin() loads from NVS before ble().begin(); BLE device
+    name + wheel_id from config. SET_WHEEL updates advertised name + Info wheel_id.
+  - App: ble_uuids.dart mirrors config UUID + configSize=22 + batteryService/batteryLevel.
+  - Bug caught: isValidRate redefinition conflict between imu_types.h and config_store.h
+    → removed duplicate, reuse from imu_types.h.
+  - Tests: 20 new config tests (test_config_store.py) = 88 total PASS.
+    pio run left/right SUCCESS. Protocol doc v1.1.0 §5.1 + §3.1 updated.
