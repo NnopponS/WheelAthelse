@@ -11,7 +11,7 @@
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | f604f32 |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 52a3662 |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | c0932c7 |
-| 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
+| 10 | Docs: data-collection protocol + field test (verify sync) | python-patterns + article-writing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | (see commit) |
 
 ## Notes / Blockers
 - 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthlete (private)
@@ -216,3 +216,21 @@
     browse_page 85.8%, storage_repository 92.5%.
   - Evidence: docs/testing/subtask-09.tdd.md
   - Next: #10 (docs data-collection protocol + field test).
+- 2026-06-29: subtask #10 done. Data-collection protocol + field test tool + lessons.
+  - new docs: docs/data-collection-protocol.md (8 sections: equipment, M5 mounting
+    with axis orientation + balance, camera setup, step-by-step recording flow
+    with countdown + beep + Mark Event, pre-trial checklist, video file naming
+    convention, export + validation with check_session.py, troubleshooting),
+    tools/check_session.py (Python CSV validator: schema check, sample count,
+    both wheels present, seq gap/packet loss, effective sample rate ±5%,
+    marker diff L/R < 10ms, matplotlib plot accel/gyro 6 axes L vs R with
+    marker vertical lines, --meta for expected rate, --no-plot, --save-plot),
+    tools/test_data/session_test123.csv (200-row mock CSV for testing),
+    .project/lessons.md (9 lessons from #1-#9: uint32 overflow, seq gaps,
+    widget test async hang, FutureBuilder infinite rebuild, share_plus v13
+    API, abstract repo in-memory fakes, BuildContext mounted, clock sync
+    engine, Windows Unicode encoding).
+  - tested: check_session.py passes 5/5 checks on good CSV, correctly
+    reports on bad CSV. Unicode box-drawing chars fixed for Windows cp1252.
+  - Phase 1 COMPLETE. All 10 subtasks done.
+  - Next: Phase 2 (train model with Python + PyTorch).
