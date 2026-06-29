@@ -19,7 +19,10 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [bleRepositoryProvider.overrideWith((ref) => ble)],
+        overrides: [
+          bleRepositoryProvider.overrideWith((ref) => ble),
+          rssiPollIntervalProvider.overrideWith((ref) => null),
+        ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),

@@ -75,7 +75,10 @@ void main() {
 
   Future<void> pumpLivePage(WidgetTester tester) async {
     container = ProviderContainer(
-      overrides: [bleRepositoryProvider.overrideWith((ref) => ble)],
+      overrides: [
+        bleRepositoryProvider.overrideWith((ref) => ble),
+        rssiPollIntervalProvider.overrideWith((ref) => null),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(

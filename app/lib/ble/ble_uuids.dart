@@ -20,6 +20,15 @@ class BleUuids {
   static const String info =
       '0000a1b6-0000-1000-8000-00805f9b34fb';
 
+  // ── Standard Battery Service (Phase 2 §1) ───────────────────────────────
+  /// Standard BLE Battery Service UUID (0x180F).
+  static const String batteryService =
+      '0000180f-0000-1000-8000-00805f9b34fb';
+
+  /// Battery Level characteristic UUID (0x2A19) — Notify, uint8 0–100.
+  static const String batteryLevel =
+      '00002a19-0000-1000-8000-00805f9b34fb';
+
   // ── Packet sizes (§2.1, §4.1, §5) ───────────────────────────────────────
   static const int imuSampleSize = 20;
   static const int syncResponseSize = 12;

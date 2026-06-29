@@ -50,6 +50,7 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => ble),
         storageRepositoryProvider.overrideWith((ref) => storage),
+        rssiPollIntervalProvider.overrideWith((ref) => null),
       ],
     );
     addTearDown(container.dispose);

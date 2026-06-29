@@ -13,6 +13,13 @@ final bleRepositoryProvider = Provider<BleRepository>(
   (ref) => FlutterBluePlusBleRepository(),
 );
 
+/// Interval for periodic RSSI polling after connect. Set to null to
+/// disable polling (useful in tests to avoid pending timers). Defaults to
+/// 2 seconds in production.
+final rssiPollIntervalProvider = Provider<Duration?>(
+  (ref) => const Duration(seconds: 2),
+);
+
 /// Constructs the production [StorageRepository]. Override in tests with an
 /// [InMemoryStorageRepository] via `storageRepositoryProvider.overrideWith`.
 final storageRepositoryProvider = Provider<StorageRepository>(
@@ -26,6 +33,7 @@ class WheelConnection {
     this.deviceId,
     this.deviceName,
     this.rssi,
+    this.batteryPercent,
     this.info,
   });
 
@@ -36,22 +44,32 @@ class WheelConnection {
   final String? deviceId;
   final String? deviceName;
   final int? rssi;
+
+  /// Battery level 0–100 from the Battery Service (0x2A19), or null when
+  /// unknown / not yet received.
+  final int? batteryPercent;
   final DeviceInfo? info;
 
   WheelConnection copyWith({
     ConnectionStatus? status,
     String? deviceId,
     String? deviceName,
-    int? rssi,
+    Object? rssi = _unset,
+    Object? batteryPercent = _unset,
     DeviceInfo? info,
   }) =>
       WheelConnection(
         status: status ?? this.status,
         deviceId: deviceId ?? this.deviceId,
         deviceName: deviceName ?? this.deviceName,
-        rssi: rssi ?? this.rssi,
+        rssi: identical(rssi, _unset) ? this.rssi : rssi as int?,
+        batteryPercent: identical(batteryPercent, _unset)
+            ? this.batteryPercent
+            : batteryPercent as int?,
         info: info ?? this.info,
       );
+
+  static const Object _unset = Object();
 }
 
 /// Whole connection-manager state: scan results + per-side connections.
@@ -100,16 +118,24 @@ class ConnectionManagerState {
 class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
   StreamSubscription<List<ScannedDevice>>? _scanSub;
   final _connSubs = <String, StreamSubscription<BleConnectionState>>{};
+  final _batterySubs = <String, StreamSubscription<int>>{};
+  final _rssiPolling = <String, bool>{}; // active flags for RSSI poll loops
 
   @override
   ConnectionManagerState build() {
-    // Clean up scan + connection subscriptions when the notifier is disposed.
+    // Clean up scan + connection + battery subscriptions + RSSI polling
+    // flags when the notifier is disposed.
     ref.onDispose(() {
       _scanSub?.cancel();
       for (final s in _connSubs.values) {
         s.cancel();
       }
       _connSubs.clear();
+      for (final s in _batterySubs.values) {
+        s.cancel();
+      }
+      _batterySubs.clear();
+      _rssiPolling.clear();
     });
     return ConnectionManagerState();
   }
@@ -152,6 +178,14 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
       final conn = await _ble.connect(deviceId);
       if (!ref.mounted) return;
       final side = conn.info.wheelId.toWheelSide();
+      // Read RSSI immediately so the card shows signal strength right away.
+      int? initialRssi;
+      try {
+        initialRssi = await _ble.readRssi(deviceId);
+      } on Object {
+        // RSSI read may fail on some platforms — non-fatal, leave null.
+      }
+      if (!ref.mounted) return;
       state = state.copyWith(
         bySide: {
           ...state.bySide,
@@ -159,11 +193,14 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
             status: ConnectionStatus.connected,
             deviceId: conn.id,
             deviceName: conn.name,
+            rssi: initialRssi,
             info: conn.info,
           ),
         },
       );
       _watchConnection(deviceId, side);
+      _subscribeBattery(deviceId, side);
+      _startRssiPolling(deviceId, side);
     } on Object catch (e) {
       if (ref.mounted) state = state.copyWith(error: '$e');
     }
@@ -173,6 +210,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
     final conn = state.bySide[side];
     final deviceId = conn?.deviceId;
     if (deviceId == null) return;
+    _stopTelemetry(deviceId);
     await _ble.disconnect(deviceId);
     if (!ref.mounted) return;
     state = state.copyWith(
@@ -188,6 +226,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
     _connSubs[deviceId] = _ble.connectionState(deviceId).listen((s) {
       if (!ref.mounted) return;
       if (s == BleConnectionState.disconnected) {
+        _stopTelemetry(deviceId);
         state = state.copyWith(
           bySide: {
             ...state.bySide,
@@ -197,6 +236,72 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
         _connSubs.remove(deviceId)?.cancel();
       }
     });
+  }
+
+  /// Subscribes to the Battery Level notify stream (0x2A19) and updates the
+  /// per-side [WheelConnection.batteryPercent] on each notification.
+  void _subscribeBattery(String deviceId, WheelSide side) {
+    _batterySubs[deviceId]?.cancel();
+    _batterySubs[deviceId] = _ble.batteryLevel(deviceId).listen(
+      (pct) {
+        if (!ref.mounted) return;
+        final cur = state.bySide[side]!;
+        state = state.copyWith(
+          bySide: {
+            ...state.bySide,
+            side: cur.copyWith(batteryPercent: pct),
+          },
+        );
+      },
+      onError: (Object e) {
+        // Battery stream errors are non-fatal — the card just keeps the last
+        // known value (or null).
+      },
+    );
+  }
+
+  /// Starts a periodic poll that reads RSSI at the interval from
+  /// [rssiPollIntervalProvider] while the device is connected, updating
+  /// [WheelConnection.rssi]. Uses a recursive [Future.delayed] loop
+  /// guarded by a per-device flag so it stops cleanly when the device
+  /// disconnects or the notifier is disposed. No-op if the interval
+  /// provider returns null (used in tests to avoid pending timers).
+  void _startRssiPolling(String deviceId, WheelSide side) {
+    final interval = ref.read(rssiPollIntervalProvider);
+    if (interval == null) return;
+    _rssiPolling[deviceId] = true;
+    _pollRssiLoop(deviceId, side, interval);
+  }
+
+  Future<void> _pollRssiLoop(
+    String deviceId,
+    WheelSide side,
+    Duration interval,
+  ) async {
+    while (_rssiPolling[deviceId] == true && ref.mounted) {
+      try {
+        await Future<void>.delayed(interval);
+        if (!ref.mounted || _rssiPolling[deviceId] != true) return;
+        final rssi = await _ble.readRssi(deviceId);
+        if (!ref.mounted || _rssiPolling[deviceId] != true) return;
+        final cur = state.bySide[side]!;
+        if (cur.deviceId != deviceId) return; // side reassigned
+        state = state.copyWith(
+          bySide: {
+            ...state.bySide,
+            side: cur.copyWith(rssi: rssi),
+          },
+        );
+      } on Object {
+        // RSSI read failure — non-fatal, keep last known value.
+      }
+    }
+  }
+
+  /// Stops battery subscription + RSSI polling for [deviceId].
+  void _stopTelemetry(String deviceId) {
+    _batterySubs.remove(deviceId)?.cancel();
+    _rssiPolling[deviceId] = false;
   }
 }
 
