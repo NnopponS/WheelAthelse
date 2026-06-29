@@ -25,6 +25,7 @@ class ConnectionCard extends StatelessWidget {
     this.batteryPercent,
     this.rssi,
     this.onTap,
+    this.onSettings,
   });
 
   final WheelSide side;
@@ -40,6 +41,9 @@ class ConnectionCard extends StatelessWidget {
   final int? rssi;
 
   final VoidCallback? onTap;
+
+  /// Opens the Board Settings screen for this wheel. Only shown when connected.
+  final VoidCallback? onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +90,21 @@ class ConnectionCard extends StatelessWidget {
                           ),
                         ),
                         _StatusBadge(status: status),
+                        if (connected && onSettings != null) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          IconButton(
+                            tooltip: 'Board settings',
+                            iconSize: 20,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            onPressed: onSettings,
+                            icon: const Icon(Icons.settings_rounded),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: AppSpacing.md),

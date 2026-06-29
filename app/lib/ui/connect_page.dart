@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/board_settings_page.dart';
 import 'package:wheelathlete/ui/live_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
@@ -52,7 +53,14 @@ class ConnectPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          _ConnectionPair(state: state),
+          _ConnectionPair(
+            state: state,
+            onSettings: (side) => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => BoardSettingsPage(side: side),
+              ),
+            ),
+          ),
           const SizedBox(height: AppSpacing.md),
           if (state.error != null) _ErrorBanner(message: state.error!),
           const SizedBox(height: AppSpacing.sm),
@@ -70,8 +78,9 @@ class ConnectPage extends ConsumerWidget {
 }
 
 class _ConnectionPair extends StatelessWidget {
-  const _ConnectionPair({required this.state});
+  const _ConnectionPair({required this.state, required this.onSettings});
   final ConnectionManagerState state;
+  final void Function(WheelSide side) onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +94,9 @@ class _ConnectionPair extends StatelessWidget {
           deviceName: left.deviceName,
           batteryPercent: left.batteryPercent,
           rssi: left.rssi,
+          onSettings: left.status == ConnectionStatus.connected
+              ? () => onSettings(WheelSide.left)
+              : null,
         ),
         const SizedBox(height: AppSpacing.sm),
         ConnectionCard(
@@ -93,6 +105,9 @@ class _ConnectionPair extends StatelessWidget {
           deviceName: right.deviceName,
           batteryPercent: right.batteryPercent,
           rssi: right.rssi,
+          onSettings: right.status == ConnectionStatus.connected
+              ? () => onSettings(WheelSide.right)
+              : null,
         ),
       ],
     );

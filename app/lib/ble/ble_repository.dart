@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:wheelathlete/ble/ble_uuids.dart';
+import 'package:wheelathlete/ble/board_config.dart';
 import 'package:wheelathlete/ble/device_info.dart';
 
 /// Coarse BLE link state for one device, mirrored from
@@ -103,6 +104,11 @@ abstract class BleRepository {
   /// 0x2A19). Emits the battery percentage (0–100) on each notification.
   /// Throws if [deviceId] is not connected.
   Stream<int> batteryLevel(String deviceId);
+
+  /// Reads the Config characteristic (a1b7, 22 bytes) and returns a parsed
+  /// [BoardConfig] with the current board name, wheel side, sample rate,
+  /// and firmware version. Throws if [deviceId] is not connected.
+  Future<BoardConfig> readConfig(String deviceId);
 }
 
 // ── flutter_blue_plus implementation ──────────────────────────────────────
@@ -130,6 +136,7 @@ class FlutterBluePlusBleRepository implements BleRepository {
   final fbp.Guid _controlGuid = fbp.Guid(BleUuids.control);
   final fbp.Guid _batteryServiceGuid = fbp.Guid(BleUuids.batteryService);
   final fbp.Guid _batteryLevelGuid = fbp.Guid(BleUuids.batteryLevel);
+  final fbp.Guid _configGuid = fbp.Guid(BleUuids.config);
 
   StreamSubscription<List<fbp.ScanResult>>? _scanSub;
   final StreamController<List<ScannedDevice>> _scanController =
@@ -347,6 +354,17 @@ class FlutterBluePlusBleRepository implements BleRepository {
         fbp.BluetoothConnectionState.disconnected => BleConnectionState.disconnected,
         fbp.BluetoothConnectionState.connected => BleConnectionState.connected,
       };
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    final services = device.servicesList;
+    final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+    final configChar = service.characteristics
+        .firstWhere((c) => c.characteristicUuid == _configGuid);
+    final bytes = await configChar.read();
+    return BoardConfig.parse(bytes);
+  }
 }
 // coverage:ignore-end
 
@@ -369,10 +387,15 @@ class FakeBleRepository implements BleRepository {
   FakeBleRepository({
     required this.devices,
     this.infoFor = const {},
+    this.configFor = const {},
   });
 
   final List<FakeDevice> devices;
   final Map<String, DeviceInfo> infoFor;
+
+  /// Seeded Config char payloads (22 bytes) per device id. If a device is
+  /// not in this map, `readConfig` throws.
+  final Map<String, List<int>> configFor;
 
   final _scanController = StreamController<List<ScannedDevice>>.broadcast();
   final _states = <String, StreamController<BleConnectionState>>{};
@@ -465,6 +488,15 @@ class FakeBleRepository implements BleRepository {
   /// can inject battery percentage values. `sync: true` for immediate delivery.
   StreamController<int>? batteryController(String deviceId) =>
       _batteryControllers[deviceId];
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    final bytes = configFor[deviceId];
+    if (bytes == null) {
+      throw StateError('No Config payload seeded for device $deviceId');
+    }
+    return BoardConfig.parse(bytes);
+  }
 
   /// Records the last Control command written for [deviceId] (or null if
   /// none). Tests inspect this to verify the app sent the right bytes.

@@ -71,15 +71,71 @@ void main() {
     });
   });
 
-  group('ControlCommand.cmd constants', () {
-    test('match the protocol §3.1 values', () {
-      expect(ControlCommandId.start, 0x01);
-      expect(ControlCommandId.stop, 0x02);
-      expect(ControlCommandId.setRate, 0x03);
-      expect(ControlCommandId.syncPing, 0x04);
-      expect(ControlCommandId.setRange, 0x05);
-      expect(ControlCommandId.beep, 0x06);
-      expect(ControlCommandId.resetSeq, 0xFF);
+  group('ControlCommand new encoders (Phase 2 §3.1)', () {
+    test('SET_NAME → [0x07][16-byte name null-padded]', () {
+      final bytes = ControlCommand.setName('MyBoard');
+      expect(bytes[0], 0x07);
+      expect(bytes.length, 17);
+      // 'MyBoard' = 7 chars, rest null.
+      expect(bytes.sublist(1, 8), 'MyBoard'.codeUnits);
+      expect(bytes.sublist(8), everyElement(0));
+    });
+
+    test('SET_NAME truncates to 16 bytes', () {
+      final bytes = ControlCommand.setName('A very long board name!');
+      expect(bytes.length, 17);
+      expect(bytes.sublist(1).where((b) => b != 0).length, 16);
+    });
+
+    test('SET_NAME with empty string → all nulls after cmd', () {
+      final bytes = ControlCommand.setName('');
+      expect(bytes[0], 0x07);
+      expect(bytes.sublist(1), everyElement(0));
+    });
+
+    test('SET_WHEEL with 0x4C (L) → [0x08][0x4C]', () {
+      expect(ControlCommand.setWheel(0x4C), [0x08, 0x4C]);
+    });
+
+    test('SET_WHEEL with 0x52 (R) → [0x08][0x52]', () {
+      expect(ControlCommand.setWheel(0x52), [0x08, 0x52]);
+    });
+
+    test('SET_WHEEL throws ArgumentError for invalid byte', () {
+      expect(() => ControlCommand.setWheel(0x00), throwsArgumentError);
+      expect(() => ControlCommand.setWheel(0x41), throwsArgumentError);
+    });
+
+    test('SET_UTC → [0x09][uint64 LE epoch ms]', () {
+      const epochMs = 1780000000000; // ~2026
+      final bytes = ControlCommand.setUtc(epochMs);
+      expect(bytes[0], 0x09);
+      expect(bytes.length, 9);
+      // Verify the uint64 LE value.
+      final lo = bytes[1] | (bytes[2] << 8) | (bytes[3] << 16) | (bytes[4] << 24);
+      final hi = bytes[5] | (bytes[6] << 8) | (bytes[7] << 16) | (bytes[8] << 24);
+      final value = (hi << 32) | lo;
+      expect(value, epochMs);
+    });
+
+    test('SET_UTC with 0 → all zeros after cmd', () {
+      final bytes = ControlCommand.setUtc(0);
+      expect(bytes[0], 0x09);
+      expect(bytes.sublist(1), everyElement(0));
+    });
+  });
+
+  group('ControlCommand.cmd constants (Phase 2)', () {
+    test('SET_NAME is 0x07', () {
+      expect(ControlCommandId.setName, 0x07);
+    });
+
+    test('SET_WHEEL is 0x08', () {
+      expect(ControlCommandId.setWheel, 0x08);
+    });
+
+    test('SET_UTC is 0x09', () {
+      expect(ControlCommandId.setUtc, 0x09);
     });
   });
 }

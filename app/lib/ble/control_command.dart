@@ -12,6 +12,9 @@ class ControlCommandId {
   static const int syncPing = 0x04;
   static const int setRange = 0x05;
   static const int beep = 0x06;
+  static const int setName = 0x07;
+  static const int setWheel = 0x08;
+  static const int setUtc = 0x09;
   static const int resetSeq = 0xFF;
 }
 
@@ -84,6 +87,43 @@ class ControlCommand {
       ..setUint8(0, ControlCommandId.beep)
       ..setUint8(1, count)
       ..setUint16(2, periodMs, Endian.little);
+    return b.buffer.asUint8List();
+  }
+
+  /// `SET_NAME` (0x07): set the board name (persisted to NVS by firmware).
+  /// [name] is truncated/padded to exactly 16 bytes (ASCII, null-padded).
+  static List<int> setName(String name) {
+    final encoded = name.codeUnits.take(16).toList();
+    final padded = List<int>.filled(17, 0);
+    padded[0] = ControlCommandId.setName;
+    for (var i = 0; i < encoded.length; i++) {
+      padded[1 + i] = encoded[i] & 0xFF;
+    }
+    return padded;
+  }
+
+  /// `SET_WHEEL` (0x08): set the wheel side. [wheelByte] must be 0x4C ('L')
+  /// or 0x52 ('R').
+  static List<int> setWheel(int wheelByte) {
+    if (wheelByte != 0x4C && wheelByte != 0x52) {
+      throw ArgumentError(
+        'wheelByte must be 0x4C (L) or 0x52 (R), got 0x${wheelByte.toRadixString(16)}',
+        'wheelByte',
+      );
+    }
+    return Uint8List.fromList([ControlCommandId.setWheel, wheelByte]);
+  }
+
+  /// `SET_UTC` (0x09): set the board's UTC epoch reference (ms since Unix
+  /// epoch). Used for camera alignment — the board stamps START_FIRED with
+  /// the UTC instant. Payload is uint64 LE (8 bytes).
+  static List<int> setUtc(int epochMs) {
+    final b = ByteData(9)
+      ..setUint8(0, ControlCommandId.setUtc);
+    // Write uint64 LE manually (ByteData.setUint64 may not be available on
+    // all platforms; use two uint32 writes).
+    b.setUint32(1, epochMs & 0xFFFFFFFF, Endian.little);
+    b.setUint32(5, (epochMs >> 32) & 0xFFFFFFFF, Endian.little);
     return b.buffer.asUint8List();
   }
 
