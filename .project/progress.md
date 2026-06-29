@@ -11,7 +11,7 @@
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | f604f32 |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 52a3662 |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | c0932c7 |
-| 10 | Docs: data-collection protocol + field test (verify sync) | python-patterns + article-writing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | (see commit) |
+| 10 | Docs: data-collection protocol + field test (verify sync) | python-patterns + article-writing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | 4a479df |
 
 ## Notes / Blockers
 - 2026-06-28: subtask #1 done. Repo: https://github.com/NnopponS/WheelAthlete (private)
