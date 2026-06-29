@@ -136,6 +136,11 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
   /// so they fit in the protocol's uint32 field (§4.1).
   int? _tAppRefMs;
 
+  /// Exposes the reference phone timestamp so other providers (e.g. the
+  /// countdown notifier) can convert absolute phone ms to the same relative
+  /// timeline the sync engine uses. Returns null if no ping has been sent.
+  int? get tAppRefMs => _tAppRefMs;
+
   @override
   SyncEngineState build() {
     ref.onDispose(() {

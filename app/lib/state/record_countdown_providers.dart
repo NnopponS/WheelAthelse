@@ -214,15 +214,18 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       await sync.sendStart(side, targetStartUs: 0);
       return;
     }
-    // Reconstruct the reference points used by the sync engine. The sync
-    // engine stores t_app as relative ms since its first ping; the device
-    // timestamp is absolute micros. ScheduledStart.compute maps T_start
-    // (absolute phone ms) to device-local micros.
-    const tAppRefMs = 0; // sync engine uses relative t_app; ref is 0.
-    const tDeviceRefUs = 0; // offset already accounts for the device ref.
+    // The sync engine uses a *relative* phone timeline (ms since first ping)
+    // to avoid uint32 overflow in the protocol. We must convert T_start
+    // (absolute epoch ms) to the same relative timeline before computing
+    // the device-local target micros.
+    final tAppRefMs = sync.tAppRefMs ?? tStartPhoneMs;
+    final tStartRelMs = tStartPhoneMs - tAppRefMs;
+    // tDeviceRefUs = 0 because the offset already accounts for the device
+    // reference point (offset = T2_device - (T1_app_rel*1000 + RTT/2)).
+    const tDeviceRefUs = 0;
     final targetStartUs = ScheduledStart.compute(
-      tStartPhoneMs: tStartPhoneMs,
-      tAppRefMs: tAppRefMs,
+      tStartPhoneMs: tStartRelMs,
+      tAppRefMs: 0, // already relative
       offsetUs: offset.offsetUs,
       tDeviceRefUs: tDeviceRefUs,
     );

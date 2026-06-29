@@ -125,16 +125,26 @@ void BleService::begin(char wheel_id) {
         BATTERY_LEVEL_CHAR_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    // Set initial battery level (voltage-based, same logic as updateBatteryLevel)
-    const int16_t init_batt_mv = M5.Power.getBatteryVoltage();
-    if (init_batt_mv > 0) {
-        int level = (init_batt_mv - 3200) * 100 / (4150 - 3200);
-        if (level < 0) level = 0;
-        if (level > 100) level = 100;
-        if (M5.Power.isCharging() && level >= 100) level = 99;
-        battery_level_ = static_cast<uint8_t>(level);
-    } else {
-        battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+    // Set initial battery level (averaged + rounded to 5%, same as updateBatteryLevel)
+    {
+        int32_t mv_sum = 0;
+        int sc = 0;
+        for (int i = 0; i < 8; i++) {
+            const int16_t mv = M5.Power.getBatteryVoltage();
+            if (mv > 0) { mv_sum += mv; sc++; }
+            delay(2);
+        }
+        if (sc > 0) {
+            int level = ((mv_sum / sc) - 3200) * 100 / (4150 - 3200);
+            if (level < 0) level = 0;
+            if (level > 100) level = 100;
+            level = ((level + 2) / 5) * 5;
+            if (level > 100) level = 100;
+            if (M5.Power.isCharging() && level >= 100) level = 99;
+            battery_level_ = static_cast<uint8_t>(level);
+        } else {
+            battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+        }
     }
     s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
     s_batt_service->start();
@@ -179,29 +189,44 @@ void BleService::updateAdvertisedName() {
 }
 
 void BleService::updateBatteryLevel() {
-    // Throttle: only update every ~5 seconds
+    // Throttle: only update every ~10 seconds (longer interval reduces
+    // noise from transient load spikes during BLE TX).
     const uint32_t now_ms = millis();
-    if (now_ms - last_battery_ms_ < 5000 && last_battery_ms_ != 0) {
+    if (now_ms - last_battery_ms_ < 10000 && last_battery_ms_ != 0) {
         return;
     }
     last_battery_ms_ = now_ms;
 
-    // Use raw battery voltage for a more granular reading than
-    // getBatteryLevel() which saturates at 100% when charging via USB.
-    // M5StickCPlus2 (AXP192) battery voltage range: ~3000–4200 mV.
-    const int16_t batt_mv = M5.Power.getBatteryVoltage();
+    // Sample battery voltage multiple times and average to reduce ADC noise.
+    // The AXP192 ADC has significant sample-to-sample jitter (±20-30 mV),
+    // which maps to ±2-3% in the level calculation — enough to make the
+    // reading bounce between e.g. 89% and 97%.
     const bool charging = (M5.Power.isCharging() != 0);
+    int32_t mv_sum = 0;
+    int sample_count = 0;
+    for (int i = 0; i < 8; i++) {
+        const int16_t mv = M5.Power.getBatteryVoltage();
+        if (mv > 0) {
+            mv_sum += mv;
+            sample_count++;
+        }
+        delay(2); // small delay between ADC reads
+    }
 
     uint8_t new_level;
-    if (batt_mv <= 0) {
+    if (sample_count == 0) {
         // Voltage not available — fall back to getBatteryLevel().
         new_level = clampBatteryLevel(M5.Power.getBatteryLevel());
     } else {
+        const int32_t avg_mv = mv_sum / sample_count;
         // Voltage-based mapping: 3200 mV = 0%, 4150 mV = 100%.
-        // This is wider than M5Unified's default (3300–4100) so the
-        // reading doesn't peg at 100% the moment USB is plugged in.
-        int level = (batt_mv - 3200) * 100 / (4150 - 3200);
+        int level = (avg_mv - 3200) * 100 / (4150 - 3200);
         if (level < 0) level = 0;
+        if (level > 100) level = 100;
+        // Round to nearest 5% to eliminate residual jitter. The AXP192
+        // ADC doesn't have enough resolution to distinguish 1% steps
+        // reliably, so rounding to 5% gives a stable display.
+        level = ((level + 2) / 5) * 5;
         if (level > 100) level = 100;
         // When charging, cap at 99% so the user can tell it's not
         // actually full (the voltage is inflated by the charger).
@@ -209,13 +234,19 @@ void BleService::updateBatteryLevel() {
         new_level = static_cast<uint8_t>(level);
     }
 
-    if (new_level != battery_level_) {
+    // Deadband: only notify if the level changed by >= 5% (one rounded
+    // step). This prevents spurious notifications from noise that
+    // survives the averaging + rounding.
+    const int8_t delta = (int8_t)new_level - (int8_t)battery_level_;
+    if (delta >= 5 || delta <= -5) {
         battery_level_ = new_level;
         if (s_char_battery) {
             s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
             s_char_battery->notify();
-            Serial.printf("[BLE] Battery level: %u%% (V=%dmV, charging=%d)\n",
-                          battery_level_, batt_mv, charging ? 1 : 0);
+            Serial.printf("[BLE] Battery level: %u%% (avg_V=%dmV, charging=%d)\n",
+                          battery_level_,
+                          sample_count > 0 ? (int)(mv_sum / sample_count) : 0,
+                          charging ? 1 : 0);
         }
     }
 }
