@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/showcase_page.dart';
 
-void main() => runApp(const ProviderScope(child: WheelAthleteApp()));
+void main() {
+  // Disable runtime font fetching so the app works offline and doesn't
+  // crash on devices without network access. Falls back to bundled fonts.
+  GoogleFonts.config.allowRuntimeFetching = false;
+  runApp(const ProviderScope(child: WheelAthleteApp()));
+}
 
 /// App root. For subtask #4 the home screen is the design-system showcase
 /// (living style guide). Real screens (scan/connect, live, recording, browse)
