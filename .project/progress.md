@@ -251,7 +251,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
 | 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
-| 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
+| 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | 025041b | - |
 | 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | pending | - | - | - | - |
 
@@ -259,3 +259,4 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 - 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
 - Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
 - Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.
+- 2026-06-29: #17 completed (commit 025041b). Added `renameTopic`, `updateTopicDescription`, `updateSessionMeta` to `StorageRepository` interface + both impls; topic overflow menu (rename/description) + session overflow menu (notes/video) in BrowsePage; widget + unit tests green.
