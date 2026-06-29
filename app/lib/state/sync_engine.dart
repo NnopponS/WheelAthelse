@@ -181,6 +181,29 @@ class ScheduledStart {
   }
 }
 
+/// Computes the UTC start instant (epoch ms) for a scheduled start, used to
+/// stamp session meta for camera alignment (Phase 2 §4 / subtask #16).
+///
+/// The phone clock's "now" (`nowPhoneMs`) and the UTC epoch "now"
+/// (`utcEpochNowMs`) are both captured at the same instant. The scheduled
+/// start is at `tStartPhoneMs` on the phone clock. The corresponding UTC
+/// instant is:
+///
+/// ```
+/// utc_start_ms = utc_epoch_now + (T_start - now_phone)
+/// ```
+///
+/// This is independent of the firmware — the app computes it from its own
+/// UTC clock so the session meta carries a real-world instant even if the
+/// board's RTC is not set.
+int computeUtcStartMs({
+  required int utcEpochNowMs,
+  required int nowPhoneMs,
+  required int tStartPhoneMs,
+}) {
+  return utcEpochNowMs + (tStartPhoneMs - nowPhoneMs);
+}
+
 /// Extension to expose `sqrt()` on `num` without importing `dart:math`.
 extension _Sqrt on num {
   double sqrt() => _sqrt(this);

@@ -1,0 +1,348 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wheelathlete/ble/ble_repository.dart';
+import 'package:wheelathlete/ble/control_command.dart';
+import 'package:wheelathlete/ble/sync_packet.dart';
+import 'package:wheelathlete/records/session_model.dart';
+import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/recording_providers.dart';
+import 'package:wheelathlete/state/sync_engine.dart';
+import 'package:wheelathlete/state/sync_providers.dart';
+import 'package:wheelathlete/theme/theme.dart';
+
+/// Status of the record countdown state machine (subtask #16).
+///
+/// Flow: idle → syncing → counting → recording → stopped.
+/// Cancel path: counting → idle (sends STOP before T_start).
+enum RecordCountdownStatus { idle, syncing, counting, recording, stopped, error }
+
+/// State surfaced to the countdown UI.
+class RecordCountdownState {
+  const RecordCountdownState({
+    this.status = RecordCountdownStatus.idle,
+    this.countdownSeconds = 0,
+    this.tStartPhoneMs,
+    this.utcStartMs,
+    this.error,
+  });
+
+  final RecordCountdownStatus status;
+
+  /// Current countdown number shown in-app (5 → 1, 0 at T_start).
+  final int countdownSeconds;
+
+  /// Scheduled start instant on the phone clock (epoch ms), or null when
+  /// no countdown is active.
+  final int? tStartPhoneMs;
+
+  /// UTC epoch ms of the scheduled start instant (for session meta), or null.
+  final int? utcStartMs;
+
+  final String? error;
+
+  RecordCountdownState copyWith({
+    RecordCountdownStatus? status,
+    int? countdownSeconds,
+    Object? tStartPhoneMs = _unset,
+    Object? utcStartMs = _unset,
+    Object? error = _unset,
+  }) =>
+      RecordCountdownState(
+        status: status ?? this.status,
+        countdownSeconds: countdownSeconds ?? this.countdownSeconds,
+        tStartPhoneMs: identical(tStartPhoneMs, _unset)
+            ? this.tStartPhoneMs
+            : tStartPhoneMs as int?,
+        utcStartMs:
+            identical(utcStartMs, _unset) ? this.utcStartMs : utcStartMs as int?,
+        error: identical(error, _unset) ? this.error : error as String?,
+      );
+
+  static const Object _unset = Object();
+}
+
+/// Number of SYNC_PING round trips sent to each wheel during the sync burst
+/// before a scheduled start. More pings → better min-RTT offset estimate.
+const int kSyncBurstCount = 5;
+
+/// Interval between SYNC_PINGs in the burst (ms). Short enough to keep the
+/// burst under ~250ms, long enough for the firmware to echo each one.
+const Duration kSyncBurstInterval = Duration(milliseconds: 30);
+
+/// Countdown duration before the scheduled start. The in-app UI shows
+/// 5-4-3-2-1; the firmware beeps 3-2-1 on the M5 speaker.
+const Duration kCountdownDuration = Duration(seconds: 5);
+
+/// Notifier that orchestrates the record countdown flow (subtask #16):
+///
+/// 1. **syncing** — sends a SYNC_PING burst to both wheels to refresh the
+///    min-RTT offset estimate (§4.2).
+/// 2. Sends SET_UTC to both wheels with the phone's current UTC epoch ms.
+/// 3. Computes `T_start = now_phone + countdownDuration` and the
+///    corresponding UTC start instant (`utc_start_ms`).
+/// 4. Sends a scheduled START (via [ScheduledStart.compute]) to both wheels
+///    so they begin acquisition together at T_start. The firmware beeps
+///    3-2-1 during its own countdown.
+/// 5. **counting** — shows 5-4-3-2-1 in-app (cancellable). On cancel, sends
+///    STOP to both wheels before T_start and returns to idle.
+/// 6. On START_FIRED from both wheels, hands off to [RecordingNotifier] to
+///    begin buffering IMU samples → **recording**.
+class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
+  Timer? _displayTimer;
+  Timer? _startTimer;
+  final _startFiredSubs = <WheelSide, StreamSubscription<List<int>>>{};
+  final _startFired = <WheelSide, bool>{};
+  SessionConfig? _pendingConfig;
+  int? _utcStartMs;
+  bool _cancelled = false;
+
+  @override
+  RecordCountdownState build() {
+    ref.onDispose(() {
+      _displayTimer?.cancel();
+      _startTimer?.cancel();
+      for (final s in _startFiredSubs.values) {
+        s.cancel();
+      }
+      _startFiredSubs.clear();
+    });
+    return const RecordCountdownState();
+  }
+
+  BleRepository get _ble => ref.read(bleRepositoryProvider);
+
+  /// Begins the countdown flow for [config]. Both wheels must be connected.
+  ///
+  /// Sends a SYNC_PING burst, SET_UTC, and a scheduled START to both wheels,
+  /// then drives the in-app countdown. On START_FIRED from both wheels,
+  /// delegates to [RecordingNotifier.startRecording] with the UTC start
+  /// stamp baked into the config.
+  Future<void> start(SessionConfig config) async {
+    if (state.status != RecordCountdownStatus.idle &&
+        state.status != RecordCountdownStatus.stopped &&
+        state.status != RecordCountdownStatus.error) {
+      throw StateError('Countdown already in progress');
+    }
+    _cancelled = false;
+    _pendingConfig = config;
+    _startFired
+      ..clear()
+      ..[WheelSide.left] = false
+      ..[WheelSide.right] = false;
+    state = const RecordCountdownState(status: RecordCountdownStatus.syncing);
+
+    final connState = ref.read(connectionManagerProvider);
+    final leftDevice = connState.bySide[WheelSide.left]!.deviceId;
+    final rightDevice = connState.bySide[WheelSide.right]!.deviceId;
+    if (leftDevice == null || rightDevice == null) {
+      state = const RecordCountdownState(
+        status: RecordCountdownStatus.error,
+        error: 'Both wheels must be connected to start a countdown',
+      );
+      return;
+    }
+
+    // 1. SYNC_PING burst to refresh offset estimates.
+    final sync = ref.read(syncEngineProvider.notifier);
+    for (var i = 0; i < kSyncBurstCount; i++) {
+      if (_cancelled) return;
+      await sync.sendPing(WheelSide.left);
+      await sync.sendPing(WheelSide.right);
+      if (i < kSyncBurstCount - 1) {
+        await Future<void>.delayed(kSyncBurstInterval);
+      }
+    }
+    if (_cancelled || !ref.mounted) return;
+
+    // 2. Capture phone + UTC instants and compute T_start + utc_start_ms.
+    final nowPhoneMs = DateTime.now().millisecondsSinceEpoch;
+    final utcEpochNowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final countdownMs = ref.read(countdownDurationProvider).inMilliseconds;
+    final tStartPhoneMs = nowPhoneMs + countdownMs;
+    final utcStartMs = computeUtcStartMs(
+      utcEpochNowMs: utcEpochNowMs,
+      nowPhoneMs: nowPhoneMs,
+      tStartPhoneMs: tStartPhoneMs,
+    );
+    _utcStartMs = utcStartMs;
+
+    // 3. Send SET_UTC to both wheels.
+    await _ble.writeControl(leftDevice, ControlCommand.setUtc(utcEpochNowMs));
+    if (_cancelled || !ref.mounted) return;
+    await _ble.writeControl(rightDevice, ControlCommand.setUtc(utcEpochNowMs));
+    if (_cancelled || !ref.mounted) return;
+
+    // 4. Send scheduled START to both wheels (firmware beeps 3-2-1).
+    await _sendScheduledStart(WheelSide.left, tStartPhoneMs);
+    if (_cancelled || !ref.mounted) return;
+    await _sendScheduledStart(WheelSide.right, tStartPhoneMs);
+    if (_cancelled || !ref.mounted) return;
+
+    // 5. Subscribe to START_FIRED events from both wheels.
+    await _subscribeStartFired(WheelSide.left, leftDevice);
+    await _subscribeStartFired(WheelSide.right, rightDevice);
+
+    // 6. Begin the in-app countdown display.
+    state = RecordCountdownState(
+      status: RecordCountdownStatus.counting,
+      countdownSeconds: (countdownMs / 1000).ceil(),
+      tStartPhoneMs: tStartPhoneMs,
+      utcStartMs: utcStartMs,
+    );
+    _startDisplayTimer(tStartPhoneMs);
+  }
+
+  Future<void> _sendScheduledStart(WheelSide side, int tStartPhoneMs) async {
+    final sync = ref.read(syncEngineProvider.notifier);
+    final syncState = ref.read(syncEngineProvider).bySide[side]!;
+    final offset = syncState.offset;
+    if (offset == null) {
+      // No offset estimate — fall back to immediate start (target=0).
+      await sync.sendStart(side, targetStartUs: 0);
+      return;
+    }
+    // Reconstruct the reference points used by the sync engine. The sync
+    // engine stores t_app as relative ms since its first ping; the device
+    // timestamp is absolute micros. ScheduledStart.compute maps T_start
+    // (absolute phone ms) to device-local micros.
+    const tAppRefMs = 0; // sync engine uses relative t_app; ref is 0.
+    const tDeviceRefUs = 0; // offset already accounts for the device ref.
+    final targetStartUs = ScheduledStart.compute(
+      tStartPhoneMs: tStartPhoneMs,
+      tAppRefMs: tAppRefMs,
+      offsetUs: offset.offsetUs,
+      tDeviceRefUs: tDeviceRefUs,
+    );
+    await sync.sendStart(side, targetStartUs: targetStartUs);
+  }
+
+  void _startDisplayTimer(int tStartPhoneMs) {
+    _displayTimer?.cancel();
+    _displayTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (!ref.mounted || _cancelled) {
+        _displayTimer?.cancel();
+        return;
+      }
+      final remainingMs = tStartPhoneMs - DateTime.now().millisecondsSinceEpoch;
+      if (remainingMs <= 0) {
+        _displayTimer?.cancel();
+        state = state.copyWith(countdownSeconds: 0);
+        return;
+      }
+      final seconds = (remainingMs / 1000).ceil();
+      if (seconds != state.countdownSeconds) {
+        state = state.copyWith(countdownSeconds: seconds);
+      }
+    });
+  }
+
+  Future<void> _subscribeStartFired(WheelSide side, String deviceId) async {
+    await _startFiredSubs[side]?.cancel();
+    _startFiredSubs[side] = _ble.syncData(deviceId).listen(
+      (bytes) {
+        try {
+          final event = SyncEvent.parse(bytes);
+          if (event is StartFiredEvent) {
+            _onStartFired(side);
+          }
+        } on Object {
+          // Parse errors are handled by the sync engine; ignore here.
+        }
+      },
+      onError: (Object e) {
+        if (!ref.mounted) return;
+        state = state.copyWith(
+          status: RecordCountdownStatus.error,
+          error: 'Sync stream error ($side): $e',
+        );
+      },
+    );
+  }
+
+  void _onStartFired(WheelSide side) {
+    if (!ref.mounted || _cancelled) return;
+    _startFired[side] = true;
+    if (_startFired[WheelSide.left]! && _startFired[WheelSide.right]!) {
+      _beginRecording();
+    }
+  }
+
+  Future<void> _beginRecording() async {
+    _displayTimer?.cancel();
+    for (final s in _startFiredSubs.values) {
+      await s.cancel();
+    }
+    _startFiredSubs.clear();
+    if (!ref.mounted || _cancelled || _pendingConfig == null) return;
+    state = state.copyWith(status: RecordCountdownStatus.recording);
+    final config = SessionConfig(
+      topic: _pendingConfig!.topic,
+      trialNumber: _pendingConfig!.trialNumber,
+      sampleRateHz: _pendingConfig!.sampleRateHz,
+      athleteName: _pendingConfig!.athleteName,
+      notes: _pendingConfig!.notes,
+      utcStartMs: _utcStartMs,
+      startTime: DateTime.now(),
+    );
+    try {
+      await ref.read(recordingProvider.notifier).startRecording(config);
+    } on Object catch (e) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        status: RecordCountdownStatus.error,
+        error: 'Failed to begin recording: $e',
+      );
+    }
+  }
+
+  /// Cancels an in-progress countdown. Sends STOP to both wheels before
+  /// T_start and returns to idle. No-op if not counting/syncing.
+  Future<void> cancel() async {
+    if (state.status != RecordCountdownStatus.syncing &&
+        state.status != RecordCountdownStatus.counting) {
+      return;
+    }
+    _cancelled = true;
+    _displayTimer?.cancel();
+    for (final s in _startFiredSubs.values) {
+      await s.cancel();
+    }
+    _startFiredSubs.clear();
+    // Send STOP to both wheels in case a scheduled START was already sent.
+    final sync = ref.read(syncEngineProvider.notifier);
+    try {
+      await sync.sendStop(WheelSide.left);
+      await sync.sendStop(WheelSide.right);
+    } on Object {
+      // Best-effort — the wheels may not have started yet.
+    }
+    if (!ref.mounted) return;
+    state = const RecordCountdownState(status: RecordCountdownStatus.idle);
+  }
+
+  /// Resets to idle after recording stops (called when RecordingNotifier
+  /// transitions to stopped, or manually to clear an error).
+  void reset() {
+    _displayTimer?.cancel();
+    for (final s in _startFiredSubs.values) {
+      s.cancel();
+    }
+    _startFiredSubs.clear();
+    _cancelled = false;
+    _pendingConfig = null;
+    _utcStartMs = null;
+    state = const RecordCountdownState();
+  }
+}
+
+/// Countdown duration before the scheduled start. Override in tests to a
+/// short duration so the countdown completes quickly.
+final countdownDurationProvider = Provider<Duration>(
+  (ref) => kCountdownDuration,
+);
+
+final recordCountdownProvider =
+    NotifierProvider<RecordCountdownNotifier, RecordCountdownState>(
+  RecordCountdownNotifier.new,
+);

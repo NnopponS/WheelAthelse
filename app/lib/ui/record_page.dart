@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
@@ -60,6 +61,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   @override
   Widget build(BuildContext context) {
     final rec = ref.watch(recordingProvider);
+    final countdown = ref.watch(recordCountdownProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -69,15 +71,142 @@ class _RecordPageState extends ConsumerState<RecordPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            switch (rec.status) {
-              RecordingStatus.idle => _buildIdleView(context, theme),
-              RecordingStatus.recording => _buildRecordingView(context, theme, rec),
-              RecordingStatus.stopped => _buildStoppedView(context, theme, rec),
+            // Countdown states take precedence over the recording state
+            // machine while a countdown is in progress.
+            switch (countdown.status) {
+              RecordCountdownStatus.syncing =>
+                _buildSyncingView(context, theme),
+              RecordCountdownStatus.counting =>
+                _buildCountingView(context, theme, countdown),
+              RecordCountdownStatus.error when rec.status == RecordingStatus.idle =>
+                _buildCountdownErrorView(context, theme, countdown),
+              _ => switch (rec.status) {
+                  RecordingStatus.idle => _buildIdleView(context, theme),
+                  RecordingStatus.recording =>
+                    _buildRecordingView(context, theme, rec),
+                  RecordingStatus.stopped =>
+                    _buildStoppedView(context, theme, rec),
+                },
             },
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSyncingView(BuildContext context, ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 56,
+            height: 56,
+            child: CircularProgressIndicator(strokeWidth: 4),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Syncing time with both wheels…',
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Estimating clock offset for synchronized start',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountingView(
+    BuildContext context,
+    ThemeData theme,
+    RecordCountdownState countdown,
+  ) {
+    final seconds = countdown.countdownSeconds;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Starting in',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: Text(
+              '$seconds',
+              key: ValueKey(seconds),
+              style: theme.textTheme.displayLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Beep 3-2-1 on the M5 speakers',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          FilledButton.tonalIcon(
+            onPressed: () => _cancelCountdown(),
+            icon: const Icon(Icons.cancel_rounded),
+            label: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCountdownErrorView(
+    BuildContext context,
+    ThemeData theme,
+    RecordCountdownState countdown,
+  ) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline_rounded,
+              size: 48, color: theme.colorScheme.error),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            countdown.error ?? 'Countdown failed',
+            style: theme.textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          FilledButton(
+            onPressed: () =>
+                ref.read(recordCountdownProvider.notifier).reset(),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _cancelCountdown() async {
+    try {
+      await ref.read(recordCountdownProvider.notifier).cancel();
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cancel failed: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildIdleView(BuildContext context, ThemeData theme) {
@@ -240,6 +369,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           icon: Icons.refresh_rounded,
           onPressed: () {
             ref.read(recordingProvider.notifier).reset();
+            ref.read(recordCountdownProvider.notifier).reset();
             _refreshTopics();
           },
         ),
@@ -263,7 +393,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       sampleRateHz: 100,
     );
     try {
-      await ref.read(recordingProvider.notifier).startRecording(config);
+      await ref.read(recordCountdownProvider.notifier).start(config);
     } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
