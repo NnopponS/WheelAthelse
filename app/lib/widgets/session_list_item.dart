@@ -17,6 +17,8 @@ class SessionListItem extends StatelessWidget {
     this.syncQuality,
     this.onTap,
     this.onShare,
+    this.onSave,
+    this.onEdit,
   });
 
   final String title;
@@ -34,6 +36,13 @@ class SessionListItem extends StatelessWidget {
 
   final VoidCallback? onTap;
   final VoidCallback? onShare;
+
+  /// Optional save-to-device callback. When set, a save icon button is shown.
+  final VoidCallback? onSave;
+
+  /// Optional edit callback. When set, an overflow menu is shown that lets the
+  /// user edit the session's notes / video filename.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +98,31 @@ class SessionListItem extends StatelessWidget {
                       onPressed: onShare,
                       icon: const Icon(Icons.ios_share_rounded),
                       tooltip: 'Share',
+                    ),
+                  if (onSave != null)
+                    IconButton(
+                      onPressed: onSave,
+                      icon: const Icon(Icons.save_alt_rounded),
+                      tooltip: 'Save to device',
+                    ),
+                  if (onEdit != null)
+                    PopupMenuButton<String>(
+                      tooltip: 'More',
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onSelected: (value) {
+                        if (value == 'edit') onEdit?.call();
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(
+                            leading: Icon(Icons.edit_note_rounded),
+                            title: Text('Edit notes / video'),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                          ),
+                        ),
+                      ],
                     ),
                 ],
               ),

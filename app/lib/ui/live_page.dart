@@ -108,6 +108,10 @@ class _WheelPanel extends StatelessWidget {
     final wc = context.wheelColors;
     final role = wc.forWheel(side);
 
+    // Per-axis colors from the design system: x = wheel identity, y = success,
+    // z = warning. Distinct within each chart and consistent across wheels.
+    final axisColors = [role.solid, wc.success.solid, wc.warning.solid];
+
     return Card(
       color: role.container,
       child: Padding(
@@ -123,7 +127,11 @@ class _WheelPanel extends StatelessWidget {
                 child: Text('Not connected'),
               )
             else
-              _MetricGrid(imuState: imuState, side: side),
+              _MetricGrid(
+                imuState: imuState,
+                side: side,
+                axisColors: axisColors,
+              ),
             if (imuState.error != null)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.xs),
@@ -191,9 +199,14 @@ class _LiveDot extends StatelessWidget {
 }
 
 class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.imuState, required this.side});
+  const _MetricGrid({
+    required this.imuState,
+    required this.side,
+    required this.axisColors,
+  });
   final WheelImuState imuState;
   final WheelSide side;
+  final List<Color> axisColors;
 
   @override
   Widget build(BuildContext context) {
@@ -210,6 +223,20 @@ class _MetricGrid extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Realtime scrolling line charts (subtask #19): accel above gyro.
+        ImuChart(
+          readings: imuState.recent,
+          isAccel: true,
+          axisColors: axisColors,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        ImuChart(
+          readings: imuState.recent,
+          isAccel: false,
+          axisColors: axisColors,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Compact numeric tile summary retained below the charts.
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,

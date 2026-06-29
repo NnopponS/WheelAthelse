@@ -238,4 +238,59 @@ void main() {
     ctrl.add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
     expect(ctrl.hasListener, isFalse);
   });
+
+  test('IMU notify accumulates readings into the rolling chart buffer',
+      () async {
+    await container.read(connectionManagerProvider.notifier).connect('L1');
+    final notifier = container.read(imuStreamProvider.notifier);
+    await notifier.start(WheelSide.left);
+
+    // First batch: 2 samples.
+    ble.imuController('L1')!.add(buildBatch([
+      buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
+      buildSample(seq: 1, tDeviceUs: 10000, ax: 16384),
+    ]));
+    var s = state().bySide[WheelSide.left]!;
+    expect(s.recent.length, 2);
+    expect(s.recent.first.seq, 0);
+    expect(s.recent.last.seq, 1);
+
+    // Second batch: 1 more sample → buffer grows to 3.
+    ble.imuController('L1')!.add(buildBatch([
+      buildSample(seq: 2, tDeviceUs: 20000, ax: 16384),
+    ]));
+    s = state().bySide[WheelSide.left]!;
+    expect(s.recent.length, 3);
+    expect(s.recent.last.seq, 2);
+  });
+
+  test('chart buffer is capped at WheelImuState.chartBufferCap', () async {
+    await container.read(connectionManagerProvider.notifier).connect('L1');
+    final notifier = container.read(imuStreamProvider.notifier);
+    await notifier.start(WheelSide.left);
+    final ctrl = ble.imuController('L1')!;
+
+    // Feed enough batches to exceed the cap (300). Each batch has 1 sample.
+    for (var i = 0; i < WheelImuState.chartBufferCap + 50; i++) {
+      ctrl.add(buildBatch([buildSample(seq: i, tDeviceUs: i * 1000)]));
+    }
+    final s = state().bySide[WheelSide.left]!;
+    expect(s.recent.length, WheelImuState.chartBufferCap);
+    // Oldest entries dropped; the buffer holds the most recent readings.
+    expect(s.recent.last.seq, WheelImuState.chartBufferCap + 50 - 1);
+  });
+
+  test('start resets the chart buffer', () async {
+    await container.read(connectionManagerProvider.notifier).connect('L1');
+    final notifier = container.read(imuStreamProvider.notifier);
+    await notifier.start(WheelSide.left);
+    ble.imuController('L1')!.add(buildBatch([
+      buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
+    ]));
+    expect(state().bySide[WheelSide.left]!.recent.length, 1);
+
+    // Restart — buffer should be cleared.
+    await notifier.start(WheelSide.left);
+    expect(state().bySide[WheelSide.left]!.recent, isEmpty);
+  });
 }

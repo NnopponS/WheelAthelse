@@ -251,14 +251,15 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | 60bb885 | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 1c8bccd | - |
 | 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | 238fc33 | - |
-| 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
-| 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
-| 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | pending | - | - | - | - |
+| 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | 025041b | - |
+| 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | d2a2510 | - |
+| 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | 6540469 | - |
 
 ## Phase 2 Notes / Blockers
 - 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
 - Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
 - Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.
+<<<<<<< HEAD
 - 2026-06-29: subtask #11 done (commit b141325). Battery Service 0x180F + 0x2A19:
   - Added standard BLE Battery Service (0x180F) as second GATT service alongside
     custom WheelAthlete service. Multi-service advertising verified (both UUIDs
@@ -310,3 +311,6 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
   - ConnectPage _ConnectionPair: passes batteryPercent to ConnectionCard (already had the field, just wasn't wired).
   - rssiPollIntervalProvider added so tests can disable polling (widget tests fail with pending Timer otherwise).
   - Tests: 14 new (battery UUIDs, FakeBleRepository.batteryLevel, WheelConnection.batteryPercent copyWith, connect sets rssi, battery stream updates, both wheels independent, disconnect clears). 305 total PASS. flutter analyze clean.
+- 2026-06-29: #17 completed (commit 025041b). Added `renameTopic`, `updateTopicDescription`, `updateSessionMeta` to `StorageRepository` interface + both impls; topic overflow menu (rename/description) + session overflow menu (notes/video) in BrowsePage; widget + unit tests green.
+- 2026-06-29: #18 completed (commit d2a2510). Added `ExportActions` (share dispatch + save-to-device via file_picker) + `ExportOperations` interface; wired share/save at session/trial/topic levels in BrowsePage; `file_picker 12.0.0-beta.7` pinned (only series compatible with share_plus 13.x win32 ^6); errors surfaced via SnackBar, actions disabled while `isExporting`; unit + widget tests green.
+- 2026-06-29: #19 completed (commit 6540469). Added rolling `recent` ring buffer (cap 300) to `WheelImuState` appended on each IMU batch in `ImuStreamNotifier`; new `ImuChart` widget (fl_chart `LineChart`) renders per-axis accel (ax/ay/az) + gyro (gx/gy/gz) scrolling line charts with a ~5s window, decimated to ~80 points (cap/trim/decimate pure logic in `ImuChartBuffer`); per-axis colors from design system (x=wheel identity, y=success, z=warning); numeric `LiveMetricTile` summary retained below charts; `LineChart` duration zero (no infinite animation — pumpAndSettle-safe); unit + widget tests green (333 passing).

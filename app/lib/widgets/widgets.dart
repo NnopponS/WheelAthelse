@@ -6,6 +6,7 @@
 library;
 
 export 'connection_card.dart';
+export 'imu_chart.dart';
 export 'live_metric_tile.dart';
 export 'mark_event_button.dart';
 export 'primary_action_button.dart';

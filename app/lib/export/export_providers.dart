@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
+import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/resampler.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 
@@ -23,7 +27,7 @@ class ExportState {
 /// Export writes a CSV file to the storage repository's trial folder using
 /// [CsvExporter] for streaming writes. Optional resampling via [Resampler]
 /// aligns both wheels to a common time grid.
-class ExportNotifier extends Notifier<ExportState> {
+class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
   @override
   ExportState build() => const ExportState();
 
@@ -110,6 +114,7 @@ class ExportNotifier extends Notifier<ExportState> {
   }
 
   /// Shares a single session CSV file via `share_plus`.
+  @override
   Future<void> shareSession({
     required String topic,
     required int trialNumber,
@@ -126,6 +131,7 @@ class ExportNotifier extends Notifier<ExportState> {
   }
 
   /// Shares all session CSVs in a trial.
+  @override
   Future<void> shareTrial({
     required String topic,
     required int trialNumber,
@@ -141,6 +147,7 @@ class ExportNotifier extends Notifier<ExportState> {
   }
 
   /// Shares all session CSVs in a topic.
+  @override
   Future<void> shareTopic({required String topic}) async {
     final paths = await exportTopic(topic: topic);
     if (paths.isEmpty) return;
@@ -161,3 +168,28 @@ class ExportNotifier extends Notifier<ExportState> {
 final exportProvider = NotifierProvider<ExportNotifier, ExportState>(
   ExportNotifier.new,
 );
+
+/// Production [DirectoryPicker] backed by file_picker's `getDirectoryPath`.
+// coverage:ignore-start
+Future<String?> pickDirectory() async {
+  return FilePicker.getDirectoryPath(
+    dialogTitle: 'Choose where to save CSV files',
+  );
+}
+// coverage:ignore-end
+
+/// Production [FileSink] that writes [content] to the file at [path].
+// coverage:ignore-start
+Future<void> writeCsvFile(String path, String content) async {
+  final file = File(path);
+  await file.writeAsString(content);
+}
+// coverage:ignore-end
+
+/// Constructs an [ExportActions] bound to the live [ExportNotifier] +
+/// [StorageRepository]. Override in tests.
+final exportActionsProvider = Provider<ExportActions>((ref) {
+  final notifier = ref.read(exportProvider.notifier);
+  final storage = ref.read(storageRepositoryProvider);
+  return ExportActions(notifier, storage);
+});

@@ -11,7 +11,8 @@ import 'package:wheelathlete/theme/theme.dart';
 /// `latest` is the most recent [ImuReading] (physical units) — null until the
 /// first sample arrives. `sampleCount` and `dropCount` accumulate across
 /// batches for the lifetime of the current streaming session (reset on
-/// [ImuStreamNotifier.start]).
+/// [ImuStreamNotifier.start]). `recent` is a rolling ring buffer of the last
+/// ~300 readings used by the realtime charts (subtask #19).
 class WheelImuState {
   const WheelImuState({
     this.streaming = false,
@@ -19,6 +20,7 @@ class WheelImuState {
     this.sampleCount = 0,
     this.dropCount = 0,
     this.error,
+    this.recent = const [],
   });
 
   final bool streaming;
@@ -27,12 +29,20 @@ class WheelImuState {
   final int dropCount;
   final String? error;
 
+  /// Rolling buffer of recent readings (capped at [_chartBufferCap]) for the
+  /// realtime line charts.
+  final List<ImuReading> recent;
+
+  /// Maximum number of readings kept in [recent] (≈3 s at 100 Hz).
+  static const int chartBufferCap = 300;
+
   WheelImuState copyWith({
     bool? streaming,
     ImuReading? latest,
     int? sampleCount,
     int? dropCount,
     Object? error = _unset,
+    List<ImuReading>? recent,
   }) =>
       WheelImuState(
         streaming: streaming ?? this.streaming,
@@ -41,6 +51,7 @@ class WheelImuState {
         sampleCount: sampleCount ?? this.sampleCount,
         dropCount: dropCount ?? this.dropCount,
         error: identical(error, _unset) ? this.error : error as String?,
+        recent: recent ?? this.recent,
       );
 
   static const Object _unset = Object();
@@ -116,9 +127,17 @@ class ImuStreamNotifier extends Notifier<ImuStreamState> {
         final tracker = _trackers[side]!;
         try {
           final result = ImuPacketParser.parseBatchWithGaps(bytes, tracker);
-          final latest = result.samples.last.toReading(info);
+          final readings =
+              result.samples.map((s) => s.toReading(info)).toList();
+          final latest = readings.last;
           if (!ref.mounted) return;
           final cur = state.bySide[side]!;
+          // Append to the rolling chart buffer + cap.
+          var buffer = [...cur.recent, ...readings];
+          if (buffer.length > WheelImuState.chartBufferCap) {
+            buffer = buffer.sublist(
+                buffer.length - WheelImuState.chartBufferCap);
+          }
           state = state.copyWithSide(
             side,
             cur.copyWith(
@@ -127,6 +146,7 @@ class ImuStreamNotifier extends Notifier<ImuStreamState> {
               sampleCount: cur.sampleCount + result.samples.length,
               dropCount: cur.dropCount + result.newGaps,
               error: null,
+              recent: buffer,
             ),
           );
         } on Object catch (e) {
