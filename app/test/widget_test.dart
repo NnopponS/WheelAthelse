@@ -10,7 +10,7 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  // The showcase page has a Timer.periodic (120 ms) that keeps scheduling
+  // The showcase page has a continuous Ticker animation that keeps scheduling
   // frames, so pumpAndSettle would time out. Use pump() with a small duration
   // instead to process pending frames without waiting for quiescence.
 

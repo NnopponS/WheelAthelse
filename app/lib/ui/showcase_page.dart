@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/connect_page.dart';
@@ -19,8 +19,16 @@ class ShowcasePage extends StatefulWidget {
   State<ShowcasePage> createState() => _ShowcasePageState();
 }
 
-class _ShowcasePageState extends State<ShowcasePage> {
-  Timer? _timer;
+class _ShowcasePageState extends State<ShowcasePage>
+    with SingleTickerProviderStateMixin {
+  // Frame-driven ticker — tied to the SchedulerBinding frame callbacks, so it
+  // cannot tick after the widget tree is disposed. This replaces a
+  // Timer.periodic that could leave a pending timer at tearDownAll under
+  // coverage instrumentation (the original cause of the flaky widget test).
+  // A raw Ticker is used instead of AnimationController.repeat() to avoid a
+  // framework assertion (elapsedInSeconds >= 0.0) that fires when runApp()'s
+  // scheduleWarmUpFrame interacts with the test binding's fake clock.
+  Ticker? _ticker;
   double _t = 0;
   int _markers = 3;
   bool _recording = false;
@@ -29,15 +37,17 @@ class _ShowcasePageState extends State<ShowcasePage> {
   void initState() {
     super.initState();
     // Animate the mock IMU values so live readouts look alive in the preview.
-    _timer = Timer.periodic(const Duration(milliseconds: 120), (_) {
+    _ticker = createTicker((Duration elapsed) {
       if (!mounted) return;
-      setState(() => _t += 0.12);
+      _t = elapsed.inMicroseconds * 2 * math.pi / 1e6;
+      setState(() {});
     });
+    _ticker!.start();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _ticker?.dispose();
     super.dispose();
   }
 
