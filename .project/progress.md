@@ -245,7 +245,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 
 | # | Subtask | Branch | Issue | Skill | Status | Started | Completed | Commit | PR |
 |---|---------|--------|-------|-------|--------|---------|-----------|--------|----|
-| 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | pending | - | - | - | - |
+| 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | b141325 | - |
 | 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | pending | - | - | - | - |
 | 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
@@ -259,3 +259,15 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 - 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
 - Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
 - Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.
+- 2026-06-29: subtask #11 done (commit b141325). Battery Service 0x180F + 0x2A19:
+  - Added standard BLE Battery Service (0x180F) as second GATT service alongside
+    custom WheelAthlete service. Multi-service advertising verified (both UUIDs
+    in advertising payload).
+  - Battery Level char (0x2A19): Read + Notify, uint8 0-100%. Reads
+    M5.Power.getBatteryLevel() every ~5s via tick()→updateBatteryLevel(), notifies
+    only on change. clampBatteryLevel() pure helper in ble_types.h handles -1
+    (unknown→0) and >100 (clamp to 100).
+  - Pure logic: clampBatteryLevel(int32_t) in ble_types.h (host-testable).
+  - Tests: 6 new battery tests in test_ble_types.py (clamp normal/zero/full/
+    negative/over-100/single-byte) = 68 total PASS. pio run left/right SUCCESS.
+  - Protocol doc updated to v1.1.0 with §1.2 Battery Service documentation.
