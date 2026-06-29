@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/ble/device_info.dart';
+import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/connection_card.dart';
 
@@ -10,6 +11,12 @@ import 'package:wheelathlete/widgets/connection_card.dart';
 /// [FakeBleRepository] via `bleRepositoryProvider.overrideWith((ref) => fake)`.
 final bleRepositoryProvider = Provider<BleRepository>(
   (ref) => FlutterBluePlusBleRepository(),
+);
+
+/// Constructs the production [StorageRepository]. Override in tests with an
+/// [InMemoryStorageRepository] via `storageRepositoryProvider.overrideWith`.
+final storageRepositoryProvider = Provider<StorageRepository>(
+  (ref) => PathProviderStorageRepository(),
 );
 
 /// Per-side connection snapshot shown in the ConnectionCard.

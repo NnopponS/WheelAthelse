@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/record_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Realtime IMU display: shows live accel/gyro values for both wheels using
@@ -29,7 +30,22 @@ class LivePage extends ConsumerWidget {
         imu.bySide.values.any((s) => s.streaming);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Live IMU')),
+      appBar: AppBar(
+        title: const Text('Live IMU'),
+        actions: [
+          IconButton(
+            onPressed: anyConnected
+                ? () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const RecordPage(),
+                      ),
+                    )
+                : null,
+            icon: const Icon(Icons.fiber_manual_record_rounded),
+            tooltip: 'Record',
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(

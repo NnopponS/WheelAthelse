@@ -40,6 +40,7 @@ dependencies:
   flutter_blue_plus: ^2.3.9
   # State management — Riverpod 3.x (no codegen; uses Notifier/NotifierProvider).
   flutter_riverpod: ^3.3.2
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

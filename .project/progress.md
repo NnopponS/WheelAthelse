@@ -9,7 +9,7 @@
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | 3d132fc |
 | 6 | Flutter: parse packet + realtime display | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | 9b0e199 |
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | f604f32 |
-| 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns | pending | - | - | - |
+| 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | (see commit) |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns | pending | - | - | - |
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
 
@@ -149,3 +149,40 @@
   - Evidence: docs/testing/subtask-07.tdd.md
   - Next: #8 (recording session + Mark Event + folder topic/trial) needs #7
     sync + #6 IMU stream.
+- 2026-06-29: subtask #8 done. Recording session + Mark Event + folder topic/trial.
+  - new lib: records/session_model.dart (MarkerEvent sync marker, SessionConfig
+    pre-recording config with trialFolderName zero-pad + sessionId hex timestamp,
+    SessionMeta post-recording metadata with full JSON ser/deser + null-safe
+    optional fields, BufferedSample IMU+wheel+timestamps+marker for CSV rows),
+    records/storage_repository.dart (StorageRepository abstract: listTopics/
+    createTopic/deleteTopic/nextTrialNumber/saveSession/readSessionMeta/
+    listSessions/deleteSession + PathProviderStorageRepository production impl
+    using path_provider+dart:io creating WheelAthleteData/<topic>/trial_<NN>/
+    hierarchy per §5 + InMemoryStorageRepository fake for tests + TopicEntry),
+    state/recording_providers.dart (RecordingNotifier Riverpod state machine:
+    startRecording starts IMU streaming both sides + subscribes to raw BLE IMU
+    to buffer samples with synced timestamps from DriftFit, markEvent records
+    MarkerEvent + sets _markNextBatch flag for next batch marker=true,
+    stopRecording stops IMU + builds SessionMeta with sync quality from
+    SyncEngineNotifier + saves to StorageRepository, reset returns to idle),
+    ui/record_page.dart (RecordPage three-state UI: idle topic dropdown +
+    trial info + Start Recording + new topic dialog, recording live stats +
+    MarkEventButton + Stop Recording, stopped Session saved + New Recording).
+  - modified: state/ble_providers.dart (+storageRepositoryProvider),
+    ui/live_page.dart (+Record icon button in AppBar navigates to RecordPage),
+    pubspec.yaml (+path_provider 2.1.6).
+  - bugs caught by TDD: widget test async hang (await storage.saveSession()
+    inside stopRecording hangs in widget tests because test framework zone
+    doesn't pump microtasks from async methods without real async work →
+    fixed with tester.runAsync), FutureBuilder infinite rebuild (_TopicDropdown
+    created new Future on every build → cached in initState), duplicate
+    saveSession call from debug prints, BuildContext across async gaps
+    (ScaffoldMessenger.of(context) after await → if (!context.mounted) return),
+    unused imports, prefer_const_constructors.
+  - Tests: 45 new (10 session_model + 13 storage_repository + 12 recording_providers
+    + 10 record_page) = 249 total PASS. flutter analyze clean.
+    Coverage: session_model 100%, storage_repository 100% testable,
+    recording_providers 94.6%, record_page 76.8%.
+  - Evidence: docs/testing/subtask-08.tdd.md
+  - Next: #9 (CSV export synced + folder hierarchy + share) needs #8 recording
+    + #7 sync.
