@@ -16,6 +16,7 @@ class SyncEventId {
   static const int cmdNack = 0x20;
   static const int startFired = 0x30;
   static const int stopFired = 0x40;
+  static const int utcSet = 0x50;
 }
 
 /// Parsed Sync characteristic notification (§4.4).
@@ -70,14 +71,34 @@ sealed class SyncEvent {
         }
         return CmdNackEvent(cmd: data.getUint8(1));
       case SyncEventId.startFired:
-        // [0x30][t_device_us u32@1] = 5B
-        if (bytes.length < 5) {
+        // v1.1.0 extended: [0x30][t_device_us u32@1][utc_start_ms u64@5] = 13B
+        // v1.0.0 legacy:   [0x30][t_device_us u32@1] = 5B (no UTC stamp)
+        if (bytes.length >= 13) {
+          return StartFiredEvent(
+            tDeviceUs: data.getUint32(1, Endian.little),
+            utcStartMs: data.getUint64(5, Endian.little),
+          );
+        } else if (bytes.length >= 5) {
+          // Legacy 5-byte format (UTC not set / old firmware)
+          return StartFiredEvent(
+            tDeviceUs: data.getUint32(1, Endian.little),
+            utcStartMs: 0,
+          );
+        } else {
           throw ArgumentError(
-            'START_FIRED needs 5 bytes, got ${bytes.length}',
+            'START_FIRED needs at least 5 bytes, got ${bytes.length}',
             'bytes',
           );
         }
-        return StartFiredEvent(tDeviceUs: data.getUint32(1, Endian.little));
+      case SyncEventId.utcSet:
+        // [0x50][utc_epoch_ms u64@1] = 9B
+        if (bytes.length < 9) {
+          throw ArgumentError(
+            'UTC_SET needs 9 bytes, got ${bytes.length}',
+            'bytes',
+          );
+        }
+        return UtcSetEvent(utcEpochMs: data.getUint64(1, Endian.little));
       case SyncEventId.stopFired:
         // [0x40][t_device_us u32@1][last_seq u32@5] = 9B
         if (bytes.length < 9) {
@@ -130,9 +151,11 @@ final class CmdNackEvent extends SyncEvent {
 
 /// §4.4 START_FIRED: firmware confirmed acquisition started at this device
 /// time. Used to cross-check that both wheels started together.
+/// v1.1.0: includes `utcStartMs` (UTC epoch ms, 0 if UTC not set).
 final class StartFiredEvent extends SyncEvent {
-  const StartFiredEvent({required this.tDeviceUs});
+  const StartFiredEvent({required this.tDeviceUs, this.utcStartMs = 0});
   final int tDeviceUs;
+  final int utcStartMs;
 }
 
 /// §4.4 STOP_FIRED: firmware confirmed acquisition stopped + last seq.
@@ -140,4 +163,11 @@ final class StopFiredEvent extends SyncEvent {
   const StopFiredEvent({required this.tDeviceUs, required this.lastSeq});
   final int tDeviceUs;
   final int lastSeq;
+}
+
+/// §4.4 UTC_SET (v1.1.0): firmware echoes back the UTC epoch ms set via
+/// SET_UTC command. App uses this to confirm the board received the UTC time.
+final class UtcSetEvent extends SyncEvent {
+  const UtcSetEvent({required this.utcEpochMs});
+  final int utcEpochMs;
 }

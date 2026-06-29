@@ -13,6 +13,7 @@
 #include "imu_reader.h"
 #include "display.h"
 #include "ble_service.h"
+#include "config_store.h"
 
 using namespace WheelAthlete;
 
@@ -69,7 +70,15 @@ void setup() {
         while (true) delay(1000);
     }
 
-    // Initialize BLE GATT server
+    // Load board config from NVS before BLE init (name/wheel/rate)
+    configStore().begin();
+
+    // Apply persisted sample rate
+    if (imu().rateHz() != configStore().rateHz()) {
+        imu().setRate(configStore().rateHz());
+    }
+
+    // Initialize BLE GATT server (uses config name + wheel)
     ble().begin(WHEEL);
 
     // Print CSV header for serial debug

@@ -63,6 +63,43 @@ void main() {
       final event = SyncEvent.parse(bytes);
       expect(event, isA<StartFiredEvent>());
       expect((event as StartFiredEvent).tDeviceUs, 5000000);
+      expect(event.utcStartMs, 0); // legacy 5-byte format → 0
+    });
+
+    test('parses extended START_FIRED (v1.1.0) with utc_start_ms at offset 5', () {
+      final bytes = _event(0x30, [
+        ..._u32LE(5000000),
+        ..._u64LE(1719691200456),
+      ]);
+      expect(bytes.length, 13);
+
+      final event = SyncEvent.parse(bytes);
+      expect(event, isA<StartFiredEvent>());
+      final s = event as StartFiredEvent;
+      expect(s.tDeviceUs, 5000000);
+      expect(s.utcStartMs, 1719691200456);
+    });
+
+    test('parses START_FIRED with utc_start_ms=0 when UTC not set', () {
+      final bytes = _event(0x30, [..._u32LE(5000000), ..._u64LE(0)]);
+      final s = SyncEvent.parse(bytes) as StartFiredEvent;
+      expect(s.tDeviceUs, 5000000);
+      expect(s.utcStartMs, 0);
+    });
+
+    test('parses UTC_SET (0x50) with uint64 utc_epoch_ms at offset 1', () {
+      final bytes = _event(0x50, [..._u64LE(1719691200000)]);
+      expect(bytes.length, 9);
+
+      final event = SyncEvent.parse(bytes);
+      expect(event, isA<UtcSetEvent>());
+      expect((event as UtcSetEvent).utcEpochMs, 1719691200000);
+    });
+
+    test('UTC_SET with zero epoch', () {
+      final bytes = _event(0x50, [..._u64LE(0)]);
+      final event = SyncEvent.parse(bytes) as UtcSetEvent;
+      expect(event.utcEpochMs, 0);
     });
 
     test('parses STOP_FIRED (0x40) with t_device_us@1 + last_seq@5', () {
@@ -110,6 +147,13 @@ void main() {
       );
     });
 
+    test('throws ArgumentError when UTC_SET payload is truncated', () {
+      expect(
+        () => SyncEvent.parse(_event(0x50, [0, 0, 0])),
+        throwsArgumentError,
+      );
+    });
+
     test('throws ArgumentError when STOP_FIRED payload is truncated', () {
       // 0x40 + only 5 bytes instead of 8
       expect(
@@ -138,11 +182,17 @@ void main() {
       expect(SyncEventId.cmdNack, 0x20);
       expect(SyncEventId.startFired, 0x30);
       expect(SyncEventId.stopFired, 0x40);
+      expect(SyncEventId.utcSet, 0x50);
     });
   });
 }
 
 List<int> _u32LE(int v) {
   final b = ByteData(4)..setUint32(0, v, Endian.little);
+  return b.buffer.asUint8List();
+}
+
+List<int> _u64LE(int v) {
+  final b = ByteData(8)..setUint64(0, v, Endian.little);
   return b.buffer.asUint8List();
 }

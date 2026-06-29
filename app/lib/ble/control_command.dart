@@ -12,6 +12,9 @@ class ControlCommandId {
   static const int syncPing = 0x04;
   static const int setRange = 0x05;
   static const int beep = 0x06;
+  static const int setName = 0x07;
+  static const int setWheel = 0x08;
+  static const int setUtc = 0x09;
   static const int resetSeq = 0xFF;
 }
 
@@ -89,4 +92,14 @@ class ControlCommand {
 
   /// `RESET_SEQ` (0xFF): reset the sample sequence counter to 0.
   static List<int> resetSeq() => Uint8List.fromList([ControlCommandId.resetSeq]);
+
+  /// `SET_UTC` (0x09): send UTC epoch ms to the board. The board echoes it
+  /// back via a `UTC_SET` Sync event and uses it to stamp `START_FIRED`
+  /// with a UTC start instant for camera alignment (v1.1.0).
+  static List<int> setUtc(int utcEpochMs) {
+    final b = ByteData(9)
+      ..setUint8(0, ControlCommandId.setUtc)
+      ..setUint64(1, utcEpochMs, Endian.little);
+    return b.buffer.asUint8List();
+  }
 }

@@ -69,6 +69,17 @@ void main() {
     test('RESET_SEQ → [0xFF] (1 byte, no payload)', () {
       expect(ControlCommand.resetSeq(), [0xFF]);
     });
+
+    test('SET_UTC with epoch ms → [0x09][u64 LE]', () {
+      final bytes = ControlCommand.setUtc(1719691200456);
+      expect(bytes.length, 9);
+      expect(bytes[0], 0x09);
+      expect(bytes.sublist(1), _u64LE(1719691200456));
+    });
+
+    test('SET_UTC with 0 → [0x09][0x0000000000000000]', () {
+      expect(ControlCommand.setUtc(0), [0x09, 0, 0, 0, 0, 0, 0, 0, 0]);
+    });
   });
 
   group('ControlCommand.cmd constants', () {
@@ -79,6 +90,9 @@ void main() {
       expect(ControlCommandId.syncPing, 0x04);
       expect(ControlCommandId.setRange, 0x05);
       expect(ControlCommandId.beep, 0x06);
+      expect(ControlCommandId.setName, 0x07);
+      expect(ControlCommandId.setWheel, 0x08);
+      expect(ControlCommandId.setUtc, 0x09);
       expect(ControlCommandId.resetSeq, 0xFF);
     });
   });
@@ -91,5 +105,10 @@ List<int> _u32LE(int v) {
 
 List<int> _u16LE(int v) {
   final b = ByteData(2)..setUint16(0, v, Endian.little);
+  return b.buffer.asUint8List();
+}
+
+List<int> _u64LE(int v) {
+  final b = ByteData(8)..setUint64(0, v, Endian.little);
   return b.buffer.asUint8List();
 }

@@ -245,9 +245,9 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 
 | # | Subtask | Branch | Issue | Skill | Status | Started | Completed | Commit | PR |
 |---|---------|--------|-------|-------|--------|---------|-----------|--------|----|
-| 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | pending | - | - | - | - |
-| 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | pending | - | - | - | - |
-| 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
+| 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | b141325 | - |
+| 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | completed | 2026-06-29 | 2026-06-29 | 889792e | - |
+| 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | completed | 2026-06-29 | 2026-06-29 | ff86781 | - |
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
 | 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
@@ -259,3 +259,45 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 - 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
 - Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
 - Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.
+- 2026-06-29: subtask #11 done (commit b141325). Battery Service 0x180F + 0x2A19:
+  - Added standard BLE Battery Service (0x180F) as second GATT service alongside
+    custom WheelAthlete service. Multi-service advertising verified (both UUIDs
+    in advertising payload).
+  - Battery Level char (0x2A19): Read + Notify, uint8 0-100%. Reads
+    M5.Power.getBatteryLevel() every ~5s via tick()→updateBatteryLevel(), notifies
+    only on change. clampBatteryLevel() pure helper in ble_types.h handles -1
+    (unknown→0) and >100 (clamp to 100).
+  - Pure logic: clampBatteryLevel(int32_t) in ble_types.h (host-testable).
+  - Tests: 6 new battery tests in test_ble_types.py (clamp normal/zero/full/
+    negative/over-100/single-byte) = 68 total PASS. pio run left/right SUCCESS.
+  - Protocol doc updated to v1.1.0 with §1.2 Battery Service documentation.
+- 2026-06-29: subtask #12 done (commit 889792e). Board config + NVS + Config char:
+  - New config_store.h (pure logic: packConfig 22B, isValidWheel, sanitizeName,
+    BoardConfig struct) + config_store.cpp (NVS via Preferences namespace "wacfg":
+    begin/load, save on disconnect, setName/setWheel/setRate cache in RAM).
+  - New Control commands: SET_NAME (0x07, 16-byte name), SET_WHEEL (0x08, 0x4C/0x52).
+    SET_RATE (0x03) now persists to config store. All persist to NVS on disconnect.
+  - New Config read characteristic (UUID a1b7): [name 16B][wheel_id 1B][rate_hz 2B LE]
+    [fw_major 1B][fw_minor 1B][fw_patch 1B] = 22B. Updated on SET_NAME/SET_WHEEL/SET_RATE.
+  - On boot: configStore().begin() loads from NVS before ble().begin(); BLE device
+    name + wheel_id from config. SET_WHEEL updates advertised name + Info wheel_id.
+  - App: ble_uuids.dart mirrors config UUID + configSize=22 + batteryService/batteryLevel.
+  - Bug caught: isValidRate redefinition conflict between imu_types.h and config_store.h
+    → removed duplicate, reuse from imu_types.h.
+  - Tests: 20 new config tests (test_config_store.py) = 88 total PASS.
+    pio run left/right SUCCESS. Protocol doc v1.1.0 §5.1 + §3.1 updated.
+- 2026-06-29: subtask #13 done (commit ff86781). SET_UTC + UTC_SET + START_FIRED UTC stamp:
+  - New Control command SET_UTC (0x09, uint64 LE epoch ms). Board stores UTC epoch in
+    RAM (utc_epoch_ms_, utc_set_ flag). Emits UTC_SET echo event (0x50, uint64) on receipt.
+  - Extended START_FIRED event (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+    = 13B. utc_start_ms = utc_epoch + (target_start_us - now_us)/1000 for scheduled start,
+    = utc_epoch for immediate start, = 0 if UTC not set.
+  - App mirrors: ControlCommand.setUtc() in control_command.dart; SyncEvent.parse handles
+    extended START_FIRED (13B) + legacy (5B) + new UTC_SET event; UtcSetEvent class;
+    StartFiredEvent.utcStartMs field; WheelSyncState gains utcEpochMs + utcStartMs fields;
+    sync_providers _handleEvent handles UtcSetEvent + extended StartFiredEvent.
+  - Bug caught: non_exhaustive_switch_statement in sync_providers.dart after adding
+    UtcSetEvent to sealed class → added case for UtcSetEvent.
+  - Tests: 19 new firmware tests (SET_UTC encoding, UTC_SET parsing, extended START_FIRED)
+    = 103 total pytest PASS. 298 flutter tests PASS. flutter analyze clean.
+    pio run left/right SUCCESS. Protocol doc v1.1.0 §3.1 + §4.4 updated.

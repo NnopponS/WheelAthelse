@@ -53,15 +53,25 @@ static NimBLECharacteristic* s_char_imu    = nullptr;
 static NimBLECharacteristic* s_char_control = nullptr;
 static NimBLECharacteristic* s_char_sync    = nullptr;
 static NimBLECharacteristic* s_char_info    = nullptr;
+static NimBLECharacteristic* s_char_config  = nullptr;
+
+// ── Battery Service (standard BLE 0x180F) ──
+static NimBLEService*          s_batt_service  = nullptr;
+static NimBLECharacteristic*   s_char_battery  = nullptr;
 
 // ── BleService methods ───────────────────────────────────────────────────────
 
 void BleService::begin(char wheel_id) {
-    wheel_id_ = wheel_id;
+    // Use config store values (loaded from NVS before begin)
+    wheel_id_ = configStore().wheelChar();
+    const char* device_name = configStore().name();
 
-    // Device name: "WheelAthlete-L" or "WheelAthlete-R"
-    char device_name[16];
-    snprintf(device_name, sizeof(device_name), "WheelAthlete-%c", wheel_id);
+    // If config store has default name, build from wheel_id
+    char default_name[24];
+    if (strlen(device_name) == 0) {
+        snprintf(default_name, sizeof(default_name), "WheelAthlete-%c", wheel_id_);
+        device_name = default_name;
+    }
 
     NimBLEDevice::init(device_name);
     NimBLEDevice::setMTU(247);   // request larger MTU for bigger batches
@@ -97,14 +107,33 @@ void BleService::begin(char wheel_id) {
     );
     s_char_info->setCallbacks(new InfoCallbacks());
 
-    // Set initial Info value
+    // Config (Read) — v1.1.0: board name/wheel/rate/fw version
+    s_char_config = s_service->createCharacteristic(
+        CHAR_CONFIG_UUID,
+        NIMBLE_PROPERTY::READ
+    );
+
+    // Set initial Info + Config values
     updateInfoCharacteristic();
+    updateConfigCharacteristic();
 
     s_service->start();
 
-    // Start advertising
+    // ── Standard Battery Service (0x180F) — second GATT service ──
+    s_batt_service = s_server->createService(BATTERY_SERVICE_UUID);
+    s_char_battery = s_batt_service->createCharacteristic(
+        BATTERY_LEVEL_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    );
+    // Set initial battery level
+    battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+    s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
+    s_batt_service->start();
+
+    // Start advertising — advertise both services
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(SERVICE_UUID);
+    adv->addServiceUUID(BATTERY_SERVICE_UUID);
     adv->setScanResponse(true);
     adv->start();
 
@@ -123,6 +152,42 @@ void BleService::updateInfoCharacteristic() {
     s_char_info->setValue(info_buf, INFO_SIZE);
 }
 
+void BleService::updateConfigCharacteristic() {
+    uint8_t config_buf[CONFIG_SIZE];
+    packConfig(configStore().name(),
+               configStore().wheelId(),
+               configStore().rateHz(),
+               WheelAthlete_FW_MAJOR, WheelAthlete_FW_MINOR, WheelAthlete_FW_PATCH,
+               config_buf);
+    if (s_char_config) {
+        s_char_config->setValue(config_buf, CONFIG_SIZE);
+    }
+}
+
+void BleService::updateAdvertisedName() {
+    // Update the BLE device name after SET_NAME or SET_WHEEL
+    NimBLEDevice::setDeviceName(configStore().name());
+}
+
+void BleService::updateBatteryLevel() {
+    // Throttle: only update every ~5 seconds
+    const uint32_t now_ms = millis();
+    if (now_ms - last_battery_ms_ < 5000 && last_battery_ms_ != 0) {
+        return;
+    }
+    last_battery_ms_ = now_ms;
+
+    const uint8_t new_level = clampBatteryLevel(M5.Power.getBatteryLevel());
+    if (new_level != battery_level_) {
+        battery_level_ = new_level;
+        if (s_char_battery) {
+            s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
+            s_char_battery->notify();
+            Serial.printf("[BLE] Battery level: %u%%\n", battery_level_);
+        }
+    }
+}
+
 // ── Static callback forwarders ───────────────────────────────────────────────
 
 void BleService::onConnect() {
@@ -137,6 +202,8 @@ void BleService::onDisconnect() {
         imu().stop();
     }
     ble().pending_start_ = false;
+    // Persist config to NVS on disconnect (limit wear)
+    configStore().save();
     NimBLEDevice::startAdvertising();
     Serial.println("[BLE] Disconnected — resuming advertising");
 }
@@ -200,6 +267,24 @@ void BleService::handleCommand(Cmd cmd, const uint8_t* payload, size_t len) {
             }
             break;
         }
+        case Cmd::SetName: {
+            handleSetName(payload, len);
+            break;
+        }
+        case Cmd::SetWheel: {
+            if (len >= 1) {
+                handleSetWheel(payload[0]);
+            }
+            break;
+        }
+        case Cmd::SetUtc: {
+            if (len >= 8) {
+                uint64_t utc_epoch;
+                std::memcpy(&utc_epoch, payload, 8);
+                handleSetUtc(utc_epoch);
+            }
+            break;
+        }
         case Cmd::ResetSeq:
             handleResetSeq();
             break;
@@ -241,7 +326,9 @@ void BleService::handleStop() {
 
 void BleService::handleSetRate(uint16_t rate_hz) {
     if (imu().setRate(rate_hz)) {
+        configStore().setRate(rate_hz);   // cache in RAM, persist on disconnect
         updateInfoCharacteristic();
+        updateConfigCharacteristic();
         Serial.printf("[BLE] SET_RATE: %u Hz\n", rate_hz);
     } else {
         sendCmdNack(static_cast<uint8_t>(Cmd::SetRate));
@@ -291,12 +378,66 @@ void BleService::handleResetSeq() {
     Serial.println("[BLE] RESET_SEQ");
 }
 
+void BleService::handleSetName(const uint8_t* name_data, size_t len) {
+    if (!name_data || len == 0) {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetName));
+        return;
+    }
+    // Build a null-terminated name from the payload (up to 16 bytes)
+    char name_buf[NAME_MAX_LEN + 1] = {};
+    size_t copy_len = len < NAME_MAX_LEN ? len : NAME_MAX_LEN;
+    std::memcpy(name_buf, name_data, copy_len);
+    name_buf[NAME_MAX_LEN] = '\0';
+
+    configStore().setName(name_buf);
+    updateConfigCharacteristic();
+    updateAdvertisedName();
+    Serial.printf("[BLE] SET_NAME: '%s'\n", configStore().name());
+}
+
+void BleService::handleSetWheel(uint8_t wheel_id) {
+    if (!isValidWheel(wheel_id)) {
+        sendCmdNack(static_cast<uint8_t>(Cmd::SetWheel));
+        return;
+    }
+    configStore().setWheel(wheel_id);
+    wheel_id_ = static_cast<char>(wheel_id);
+    updateInfoCharacteristic();
+    updateConfigCharacteristic();
+    updateAdvertisedName();
+    Serial.printf("[BLE] SET_WHEEL: %c\n", wheel_id_);
+}
+
+void BleService::handleSetUtc(uint64_t utc_epoch_ms) {
+    utc_epoch_ms_ = utc_epoch_ms;
+    utc_set_ = true;
+    // Emit UTC_SET echo event: [0x50][uint64 utc_epoch_ms]
+    uint8_t buf[9];
+    packUtcSet(utc_epoch_ms, buf);
+    s_char_sync->setValue(buf, 9);
+    s_char_sync->notify();
+    Serial.printf("[BLE] SET_UTC: %llu ms\n",
+                  static_cast<unsigned long long>(utc_epoch_ms));
+}
+
 // ── Event senders ────────────────────────────────────────────────────────────
 
 void BleService::sendStartFired() {
-    uint8_t buf[5];
-    packStartFired(micros(), buf);
-    s_char_sync->setValue(buf, 5);
+    // Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+    const uint32_t now_us = micros();
+    uint64_t utc_start_ms = 0;
+    if (utc_set_ && pending_start_) {
+        // utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000
+        const int64_t delta_us = static_cast<int64_t>(target_start_us_) -
+                                 static_cast<int64_t>(now_us);
+        utc_start_ms = utc_epoch_ms_ + static_cast<uint64_t>(delta_us / 1000);
+    } else if (utc_set_) {
+        // Immediate start: UTC = epoch + (now - fire_time)/1000 ≈ epoch
+        utc_start_ms = utc_epoch_ms_;
+    }
+    uint8_t buf[13];
+    packStartFired(now_us, utc_start_ms, buf);
+    s_char_sync->setValue(buf, 13);
     s_char_sync->notify();
 }
 
@@ -364,6 +505,9 @@ void BleService::tick() {
     if (imu().dropCount() > last_drop_count_) {
         sendDropCountEvent();
     }
+
+    // Update battery level periodically (~5s) + notify on change
+    updateBatteryLevel();
 }
 
 // ── BLE task: drain queue → batch → notify ──────────────────────────────────

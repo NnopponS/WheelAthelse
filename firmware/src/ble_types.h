@@ -25,11 +25,16 @@ constexpr const char* CHAR_CONTROL_UUID    = "0000a1b4-0000-1000-8000-00805f9b34
 constexpr const char* CHAR_SYNC_UUID       = "0000a1b5-0000-1000-8000-00805f9b34fb";
 constexpr const char* CHAR_INFO_UUID       = "0000a1b6-0000-1000-8000-00805f9b34fb";
 
+// ── Standard BLE Battery Service (§1.2 — added v1.1.0) ───────────────────────
+constexpr const char* BATTERY_SERVICE_UUID     = "0000180f-0000-1000-8000-00805f9b34fb";
+constexpr const char* BATTERY_LEVEL_CHAR_UUID  = "00002a19-0000-1000-8000-00805f9b34fb";
+
 // ── Packet sizes (from protocol) ─────────────────────────────────────────────
 
 constexpr size_t IMU_SAMPLE_SIZE    = 20;   // §2.1
 constexpr size_t SYNC_RESPONSE_SIZE = 12;   // §4.1
 constexpr size_t INFO_SIZE          = 16;   // §5
+constexpr size_t BATTERY_LEVEL_SIZE = 1;    // §1.2 — uint8 0-100%
 constexpr size_t SYNC_EVENT_HEADER  = 1;    // event_id byte
 
 // ── Control commands (§3.1) ──────────────────────────────────────────────────
@@ -41,6 +46,9 @@ enum class Cmd : uint8_t {
     SyncPing   = 0x04,
     SetRange   = 0x05,
     Beep       = 0x06,
+    SetName    = 0x07,   // v1.1.0 — 16-byte board name
+    SetWheel   = 0x08,   // v1.1.0 — 0x4C='L' / 0x52='R'
+    SetUtc     = 0x09,   // v1.1.0 — uint64 LE epoch ms
     ResetSeq   = 0xFF,
 };
 
@@ -52,6 +60,7 @@ enum class SyncEvent : uint8_t {
     CmdNack      = 0x20,
     StartFired   = 0x30,
     StopFired    = 0x40,
+    UtcSet       = 0x50,   // v1.1.0 — echo UTC epoch back
 };
 
 // ── Pure functions (testable on host) ────────────────────────────────────────
@@ -111,10 +120,18 @@ inline void packSyncEvent(SyncEvent event_id, const uint8_t* payload,
     }
 }
 
-// Pack START_FIRED event: [0x30][uint32 t_device_us]
-inline void packStartFired(uint32_t t_device_us, uint8_t* buf) {
+// Pack START_FIRED event (v1.1.0 extended): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+// utc_start_ms = 0 if UTC was never set.
+inline void packStartFired(uint32_t t_device_us, uint64_t utc_start_ms, uint8_t* buf) {
     buf[0] = static_cast<uint8_t>(SyncEvent::StartFired);
     std::memcpy(buf + 1, &t_device_us, 4);
+    std::memcpy(buf + 5, &utc_start_ms, 8);
+}
+
+// Pack UTC_SET event: [0x50][uint64 utc_epoch_ms]
+inline void packUtcSet(uint64_t utc_epoch_ms, uint8_t* buf) {
+    buf[0] = static_cast<uint8_t>(SyncEvent::UtcSet);
+    std::memcpy(buf + 1, &utc_epoch_ms, 8);
 }
 
 // Pack STOP_FIRED event: [0x40][uint32 t_device_us][uint32 last_seq]
@@ -203,6 +220,15 @@ inline int8_t checkBeepSchedule(uint32_t target_start_us,
 inline bool shouldStartNow(uint32_t target_start_us, uint32_t current_us) {
     if (target_start_us == 0) return true;
     return current_us >= target_start_us;
+}
+
+// Clamp a raw battery reading to the valid BLE Battery Level range [0, 100].
+// M5.Power.getBatteryLevel() may return -1 (unknown) or values > 100.
+// Returns 0 for negative/unknown, caps at 100.
+inline uint8_t clampBatteryLevel(int32_t raw) {
+    if (raw < 0) return 0;
+    if (raw > 100) return 100;
+    return static_cast<uint8_t>(raw);
 }
 
 // Parse a Control command from the write buffer.

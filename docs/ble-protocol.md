@@ -5,7 +5,7 @@
 เอกสารนี้เป็น source of truth สำหรับทั้งสองฝั่ง — firmware และ app ต้อง implement
 ตามนี้เป๊ะ ห้ามเปลี่ยนโดยไม่ update เอกสารนี้ก่อน
 
-- เวอร์ชัน: `1.0.0` (subtask #1)
+- เวอร์ชัน: `1.1.0` (subtask #11 — Battery Service)
 - อ้างอิง: `.project/architecture.md` หัวข้อ 4 (Time Sync) และหัวข้อ 5 (Storage)
 
 ---
@@ -27,9 +27,29 @@
 | Control | `0000a1b4-0000-1000-8000-00805f9b34fb` | Write + Write Without Response | App → Firmware | up to 32 B |
 | Sync | `0000a1b5-0000-1000-8000-00805f9b34fb` | Notify + Indicate | Firmware → App | 12 B |
 | Info | `0000a1b6-0000-1000-8000-00805f9b34fb` | Read | Firmware → App | 16 B |
+| Config | `0000a1b7-0000-1000-8000-00805f9b34fb` | Read | Firmware → App | 22 B |
 
 > App ควร request MTU 247 ตอน connect เพื่อให้ใส่ batch ได้มากขึ้น
 > Firmware ต้อง support MTU exchange (NimBLE รองรับ default)
+
+### 1.2 Battery Service (standard BLE, v1.1.0)
+
+นอกจาก WheelAthlete Service แล้ว firmware ยัง advertise **Battery Service**
+มาตรฐานของ Bluetooth (UUID `0x180F`) เพื่อให้ app อ่าน/subscribe battery %
+ได้โดยตรง
+
+| Characteristic | UUID | Properties | ทิศทาง | ขนาด |
+|---|---|---|---|---|
+| Battery Level | `00002a19-0000-1000-8000-00805f9b34fb` | Read + Notify | Firmware → App | 1 B |
+
+**Battery Level (1 byte, uint8):**
+- ค่า 0–100 = เปอร์เซ็นต์แบตเตอรี่
+- Firmware อ่านจาก `M5.Power.getBatteryLevel()` ทุก ~5 วินาที
+- Notify เฉพาะเมื่อค่าเปลี่ยน (ลด noise)
+- ค่าที่อ่านได้ -1 (unknown) → firmware clamp เป็น 0
+- ค่า > 100 → firmware clamp เป็น 100
+
+> App สามารถ subscribe ได้ทันทีหลัง connect เพื่อแสดง battery % แบบ realtime
 
 ---
 
@@ -87,6 +107,9 @@ App เขียนคำสั่งไป firmware ทุกคำสั่ง
 | `0x04` | `SYNC_PING`        | `uint32 t_app_ms` (เวลามือถือตอนส่ง) | firmware echo ผ่าน Sync characteristic (§4) |
 | `0x05` | `SET_RANGE`        | `uint8 accel_range`, `uint8 gyro_range` | firmware เปลี่ยน IMU range + update Info |
 | `0x06` | `BEEP`             | `uint8 count`, `uint16 period_ms` | firmware ส่งเสียง beep (sync marker ที่จอ/ลำโพง) |
+| `0x07` | `SET_NAME`         | `char name[16]` (null-padded ASCII) | firmware เปลี่ยนชื่อ board + update advertised name + Config char |
+| `0x08` | `SET_WHEEL`        | `uint8 wheel_id` (`0x4C`='L', `0x52`='R') | firmware เปลี่ยน wheel side + update Info + Config + advertised name |
+| `0x09` | `SET_UTC`         | `uint64 utc_epoch_ms` (LE, epoch ms) | firmware เก็บ UTC epoch ใน RAM + echo ผ่าน `UTC_SET` event (§4.4) |
 | `0xFF` | `RESET_SEQ`        | (ไม่มี) | firmware รีเซ็ต `seq` กลับเป็น 0 |
 
 > คำสั่งที่ไม่รู้จัก → firmware ส่ง Sync event `CMD_NACK` (§4.4)
@@ -154,10 +177,18 @@ Sync characteristic ใช้ส่ง event พิเศษด้วย (flag �
 | `0x00` | `SYNC_RESPONSE` | §4.1 | ตอบ SYNC_PING |
 | `0x10` | `DROP_COUNT`    | `uint32 count` | จำนวน sample ที่ถูกทิ้งตั้งแต่ event ล่าสุด |
 | `0x20` | `CMD_NACK`      | `uint8 cmd` | คำสั่งที่ไม่รู้จัก/ไม่ valid |
-| `0x30` | `START_FIRED`   | `uint32 t_device_us` | ยืนยันว่าเริ่ม acquisition จริง ณ เวลานี้ |
+| `0x30` | `START_FIRED`   | `uint32 t_device_us`, `uint64 utc_start_ms` | ยืนยันว่าเริ่ม acquisition จริง ณ เวลานี้ + UTC start instant (0 ถ้า UTC ไม่ได้ตั้ง) |
 | `0x40` | `STOP_FIRED`    | `uint32 t_device_us`, `uint32 last_seq` | ยืนยันว่าหยุด + seq สุดท้าย |
+| `0x50` | `UTC_SET`       | `uint64 utc_epoch_ms` | echo ค่า UTC epoch ที่รับจาก `SET_UTC` (ยืนยันว่า board รับแล้ว) |
 
 > App ใช้ `START_FIRED` / `STOP_FIRED` cross-check ว่า 2 ล้อเริ่ม/หยุดตรงกันจริง
+>
+> **v1.1.0 — UTC stamp (hybrid UTC):** `START_FIRED` มี `utc_start_ms` เพิ่มขึ้นมา
+> (uint64 LE, 13 bytes total). App ส่ง `SET_UTC` ก่อน scheduled start → board
+> เก็บ UTC epoch ใน RAM → ตอน start fire คำนวณ
+> `utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000` → ใส่ใน `START_FIRED`
+> App เขียน `utc_start_ms` ลง `session_*_meta.json` เพื่อ align กับนาฬิกากล้อง
+> ถ้า UTC ไม่ได้ตั้ง → `utc_start_ms = 0` (app ใช้ legacy 5-byte format ได้)
 
 ---
 
@@ -179,6 +210,25 @@ App อ่านครั้งเดียวตอน connect เพื่อ�
 
 > `accel_scale` / `gyro_scale` เก็บเป็น float เพื่อให้ app ไม่ต้องเขียนตาราง lookup
 > firmware คำนวณจาก range จริงที่ตั้งไว้ใน MPU6886
+
+---
+
+## 5.1 Config Characteristic (Read, 22 bytes, v1.1.0)
+
+App อ่านเพื่อรู้ board config ปัจจุบัน (name / wheel / rate / fw version)
+
+| Offset | Field | Type | ความหมาย |
+|---|---|---|---|
+| 0  | `name`       | char[16] | board name (null-padded ASCII, สูงสุด 16 ตัว) |
+| 16 | `wheel_id`   | uint8  | `0x4C` = 'L', `0x52` = 'R' |
+| 17 | `rate_hz`    | uint16 LE | sampling rate ปัจจุบัน (50/100/200) |
+| 19 | `fw_major`   | uint8  | firmware version major |
+| 20 | `fw_minor`   | uint8  | firmware version minor |
+| 21 | `fw_patch`   | uint8  | firmware version patch |
+
+> Config เปลี่ยนได้ runtime ผ่าน `SET_NAME` / `SET_WHEEL` / `SET_RATE`
+> ค่าทั้งหมด persist ลง NVS (namespace `wacfg`) — survive reboot
+> Firmware persist ตอน disconnect (ลด NVS wear)
 
 ---
 
