@@ -10,7 +10,7 @@
 | 6 | Flutter: parse packet + realtime display | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | 9b0e199 |
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | f604f32 |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 52a3662 |
-| 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns | pending | - | - | - |
+| 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | (see commit) |
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
 
 ## Notes / Blockers
@@ -186,3 +186,33 @@
   - Evidence: docs/testing/subtask-08.tdd.md
   - Next: #9 (CSV export synced + folder hierarchy + share) needs #8 recording
     + #7 sync.
+- 2026-06-29: subtask #9 done. CSV export (synced/resampled) + folder hierarchy + share.
+  - new lib: export/csv_exporter.dart (CsvExporter.toCsvString + writeToSink
+    streaming, schema per section 3: seq,wheel,timestamp_app_ms,
+    timestamp_device_us,timestamp_synced_ms,ax,ay,az,gx,gy,gz,marker; sorted
+    by timestamp_synced_ms L before R; double formatting without trailing
+    zeros), export/resampler.dart (Resampler.resample linear interpolation
+    both wheels to common grid per section 4.6; no extrapolation; all 6 axes;
+    marker flag preserved; synthetic seq grid index; binary search),
+    export/export_providers.dart (ExportNotifier Riverpod: exportSession/
+    exportTrial/exportTopic with optional resample + writeSessionCsv to
+    storage + shareSession/shareTrial/shareTopic via share_plus v13
+    SharePlus.instance.share API), ui/browse_page.dart (three-level nav:
+    topic list → trial list → session list with SessionListItem + share
+    buttons + empty states + back buttons).
+  - modified: records/storage_repository.dart (+readSamples, listTrials,
+    getSessionCsvPath, getTrialDirPath, getTopicDirPath, writeSessionCsv in
+    both PathProvider and InMemory impls), ui/live_page.dart (+Browse icon
+    button in AppBar), pubspec.yaml (+csv, +share_plus 13.2.0).
+  - bugs caught by TDD: share_plus API deprecation (Share.shareXFiles
+    deprecated in v13 → SharePlus.instance.share(ShareParams(...))),
+    in-memory storage file path (exportSession tried File() but
+    InMemoryStorageRepository returns memory:// paths → added writeSessionCsv
+    to interface), resampler no-extrapolation (initial test expected
+    extrapolation → fixed to expect skips), unused imports, prefer_const.
+  - Tests: 33 new (11 csv_exporter + 10 resampler + 5 export_providers
+    + 7 browse_page) = 282 total PASS. flutter analyze clean.
+    Coverage: csv_exporter 97.1%, resampler 98.5%, export_providers 60.8%,
+    browse_page 85.8%, storage_repository 92.5%.
+  - Evidence: docs/testing/subtask-09.tdd.md
+  - Next: #10 (docs data-collection protocol + field test).

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
+import 'package:wheelathlete/theme/theme.dart';
 
 /// One topic/subject folder in the storage hierarchy (§5 of architecture.md).
 class TopicEntry {
@@ -61,6 +63,42 @@ abstract class StorageRepository {
     String topic,
     int trialNumber,
     String sessionId,
+  );
+
+  /// Reads the samples for a session, or empty list if not found.
+  Future<List<BufferedSample>> readSamples(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  );
+
+  /// Lists all trial numbers for a topic, sorted ascending.
+  Future<List<int>> listTrials(String topic);
+
+  /// Returns the absolute file path for a session's CSV file.
+  /// Used by share_plus to share the file.
+  Future<String> getSessionCsvPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  );
+
+  /// Returns the absolute directory path for a trial folder.
+  /// Used by share_plus to share the entire trial.
+  Future<String> getTrialDirPath(String topic, int trialNumber);
+
+  /// Returns the absolute directory path for a topic folder.
+  /// Used by share_plus to share the entire topic.
+  Future<String> getTopicDirPath(String topic);
+
+  /// Writes CSV content to the session's CSV file. For in-memory storage,
+  /// this is a no-op (samples are already stored). For file-based storage,
+  /// this writes the CSV to disk.
+  Future<void> writeSessionCsv(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    String csvContent,
   );
 }
 
@@ -212,6 +250,99 @@ class PathProviderStorageRepository implements StorageRepository {
     if (metaFile.existsSync()) metaFile.deleteSync();
     if (csvFile.existsSync()) csvFile.deleteSync();
   }
+
+  @override
+  Future<List<BufferedSample>> readSamples(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    final csvFile = File('${trialDir.path}/session_$sessionId.csv');
+    if (!csvFile.existsSync()) return [];
+    // Parse CSV back into BufferedSample list.
+    final lines = csvFile.readAsLinesSync();
+    final samples = <BufferedSample>[];
+    for (final line in lines.skip(1)) {
+      if (line.trim().isEmpty) continue;
+      final f = line.split(',');
+      if (f.length < 12) continue;
+      samples.add(BufferedSample(
+        reading: ImuReading(
+          seq: int.parse(f[0]),
+          tDeviceUs: int.parse(f[3]),
+          ax: double.parse(f[5]),
+          ay: double.parse(f[6]),
+          az: double.parse(f[7]),
+          gx: double.parse(f[8]),
+          gy: double.parse(f[9]),
+          gz: double.parse(f[10]),
+        ),
+        wheel: f[1] == 'L' ? WheelSide.left : WheelSide.right,
+        timestampAppMs: int.parse(f[2]),
+        timestampSyncedMs: double.parse(f[4]),
+        marker: f[11] == '1',
+      ));
+    }
+    return samples;
+  }
+
+  @override
+  Future<List<int>> listTrials(String topic) async {
+    final root = await _rootDir();
+    final topicDir = Directory('${root.path}/$topic');
+    if (!topicDir.existsSync()) return [];
+    final trials = <int>[];
+    for (final entity in topicDir.listSync()) {
+      if (entity is Directory) {
+        final name = entity.path.split(Platform.pathSeparator).last;
+        if (name.startsWith('trial_')) {
+          final n = int.tryParse(name.substring(6));
+          if (n != null) trials.add(n);
+        }
+      }
+    }
+    trials.sort();
+    return trials;
+  }
+
+  @override
+  Future<String> getSessionCsvPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    return '${trialDir.path}/session_$sessionId.csv';
+  }
+
+  @override
+  Future<String> getTrialDirPath(String topic, int trialNumber) async {
+    final root = await _rootDir();
+    return _trialDir(root, topic, trialNumber).path;
+  }
+
+  @override
+  Future<String> getTopicDirPath(String topic) async {
+    final root = await _rootDir();
+    return '${root.path}/$topic';
+  }
+
+  @override
+  Future<void> writeSessionCsv(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    String csvContent,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    if (!trialDir.existsSync()) trialDir.createSync(recursive: true);
+    final csvFile = File('${trialDir.path}/session_$sessionId.csv');
+    await csvFile.writeAsString(csvContent);
+  }
 }
 // coverage:ignore-end
 
@@ -301,5 +432,63 @@ class InMemoryStorageRepository implements StorageRepository {
     final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
     _sessions[key]?.removeWhere((m) => m.sessionId == sessionId);
     _samples.remove('$key/$sessionId');
+  }
+
+  @override
+  Future<List<BufferedSample>> readSamples(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
+    return List<BufferedSample>.from(_samples['$key/$sessionId'] ?? []);
+  }
+
+  @override
+  Future<List<int>> listTrials(String topic) async {
+    final trials = <int>{};
+    for (final key in _sessions.keys) {
+      if (key.startsWith('$topic/')) {
+        final trialPart = key.substring(topic.length + 1); // 'trialNN'
+        if (trialPart.startsWith('trial')) {
+          final n = int.tryParse(trialPart.substring(5));
+          if (n != null) trials.add(n);
+        }
+      }
+    }
+    final sorted = trials.toList()..sort();
+    return sorted;
+  }
+
+  @override
+  Future<String> getSessionCsvPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    // In-memory fake returns a synthetic path; tests should use readSamples
+    // instead of file paths.
+    return 'memory://$topic/trial_${trialNumber.toString().padLeft(2, '0')}/session_$sessionId.csv';
+  }
+
+  @override
+  Future<String> getTrialDirPath(String topic, int trialNumber) async {
+    return 'memory://$topic/trial_${trialNumber.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Future<String> getTopicDirPath(String topic) async {
+    return 'memory://$topic';
+  }
+
+  @override
+  Future<void> writeSessionCsv(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    String csvContent,
+  ) async {
+    // In-memory storage doesn't write files. The CSV content is generated
+    // on-demand from the stored samples.
   }
 }

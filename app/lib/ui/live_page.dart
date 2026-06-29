@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/browse_page.dart';
 import 'package:wheelathlete/ui/record_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
@@ -43,6 +44,15 @@ class LivePage extends ConsumerWidget {
                 : null,
             icon: const Icon(Icons.fiber_manual_record_rounded),
             tooltip: 'Record',
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const BrowsePage(),
+              ),
+            ),
+            icon: const Icon(Icons.folder_open_rounded),
+            tooltip: 'Browse',
           ),
         ],
       ),

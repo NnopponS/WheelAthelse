@@ -41,6 +41,8 @@ dependencies:
   # State management — Riverpod 3.x (no codegen; uses Notifier/NotifierProvider).
   flutter_riverpod: ^3.3.2
   path_provider: ^2.1.6
+  csv: ^8.0.0
+  share_plus: ^13.2.0
 
 dev_dependencies:
   flutter_test:
