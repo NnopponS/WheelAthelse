@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/home_page.dart';
 import 'package:wheelathlete/ui/showcase_page.dart';
 
 void main() {
@@ -12,10 +13,9 @@ void main() {
   runApp(const ProviderScope(child: WheelAthleteApp()));
 }
 
-/// App root. For subtask #4 the home screen is the design-system showcase
-/// (living style guide). Real screens (scan/connect, live, recording, browse)
-/// are added in subtasks #5+ and will reuse the theme and components defined
-/// here.
+/// App root. Boots directly to [HomePage] — the real three-tab shell wired to
+/// live BLE + recording + browse flows. [ShowcasePage] is kept as a developer
+/// route accessible via '/showcase' for design-system review.
 class WheelAthleteApp extends StatefulWidget {
   const WheelAthleteApp({super.key});
 
@@ -43,9 +43,12 @@ class _WheelAthleteAppState extends State<WheelAthleteApp> {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: mode,
-          home: ShowcasePage(
-            controller: _theme,
-          ),
+          // Real app home: Connect / Live / Browse tabs wired to BLE state.
+          home: HomePage(themeController: _theme),
+          // Keep design-system showcase accessible for dev review.
+          routes: {
+            '/showcase': (context) => ShowcasePage(controller: _theme),
+          },
         );
       },
     );

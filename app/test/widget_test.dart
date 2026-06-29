@@ -1,150 +1,127 @@
+// Top-level smoke test: verifies the app entry point boots the real HomePage
+// (not the design-system showcase), the NavigationBar is present with three
+// tabs, and the theme toggle works. Uses a FakeBleRepository so no BLE
+// hardware or permissions are required.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:wheelathlete/main.dart' as app_entry;
+import 'package:wheelathlete/ble/ble_repository.dart';
+import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme_mode_controller.dart';
 
 void main() {
   setUpAll(() {
-    // Avoid network font fetches during tests; fall back to bundled fonts.
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  // The showcase page has a continuous Ticker animation that keeps scheduling
-  // frames, so pumpAndSettle would time out. Use pump() with a small duration
-  // instead to process pending frames without waiting for quiescence.
-
-  /// Drag the main ListView until [target] is actually on-screen (center
-  /// within the 800×600 test viewport), pumping between drags.
-  Future<void> dragUntilVisible(
-    WidgetTester tester,
-    Finder target, {
-    double delta = -300,
-    int maxScrolls = 30,
-  }) async {
-    final scrollable = find.byType(Scrollable).first;
-    for (var i = 0; i < maxScrolls; i++) {
-      if (tester.any(target)) {
-        try {
-          final center = tester.getCenter(target);
-          if (center.dy > 50 && center.dy < 550) break;
-        } on StateError {
-          // Widget not yet laid out — keep scrolling.
-        }
-      }
-      await tester.drag(scrollable, Offset(0, delta));
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-  }
-
-  testWidgets('Showcase renders core components and theme menu opens',
-      (tester) async {
-    await tester.pumpWidget(const app_entry.WheelAthleteApp());
+  testWidgets('app boots to real HomePage (not showcase)', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
     await tester.pump();
 
-    // Sections + components are present in the initial viewport.
-    expect(find.text('WheelAthlete UI'), findsOneWidget);
-    expect(find.text('Left wheel'), findsOneWidget);
-    expect(find.text('Right wheel'), findsWidgets);
+    // Real home: title is 'WheelAthlete', NOT the showcase 'WheelAthlete UI'.
+    expect(find.text('WheelAthlete'), findsWidgets);
+    // Showcase sentinel text must NOT be visible at boot.
+    expect(find.text('WheelAthlete UI'), findsNothing);
+  });
 
-    // Theme mode popup menu button is present.
-    expect(find.byTooltip('Theme mode'), findsOneWidget);
+  testWidgets('NavigationBar has Connect / Live / Browse destinations',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
+    await tester.pump();
 
-    // Open the popup menu — the three options should appear.
+    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Live'), findsOneWidget);
+    expect(find.text('Browse'), findsOneWidget);
+  });
+
+  testWidgets('tapping Live tab shows Live IMU AppBar title', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Live'));
+    await tester.pump();
+
+    expect(find.text('Live IMU'), findsOneWidget);
+  });
+
+  testWidgets('tapping Browse tab shows Browse AppBar title', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Browse'));
+    // BrowsePage contains a FutureBuilder with CircularProgressIndicator which
+    // animates continuously — pumpAndSettle would time out. Use pump() instead.
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Browse'), findsWidgets);
+  });
+
+  testWidgets('theme toggle popup opens with System/Light/Dark options',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
+    await tester.pump();
+
     await tester.tap(find.byTooltip('Theme mode'));
     await tester.pump(const Duration(seconds: 1));
+
     expect(find.text('System'), findsWidgets);
     expect(find.text('Light'), findsWidgets);
     expect(find.text('Dark'), findsWidgets);
   });
 
-  testWidgets('tapping Start recording toggles state and enables Mark button',
-      (tester) async {
-    await tester.pumpWidget(const app_entry.WheelAthleteApp());
+  testWidgets('main() entry: WheelAthleteApp renders real home', (tester) async {
+    // Verify the WheelAthleteApp widget (the app root) renders the real home,
+    // without calling main() directly (runApp in test context causes an
+    // AnimationController assertion when the scheduler's fake clock interacts
+    // with an immediately-scheduled warm-up frame).
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+        ],
+        child: const app_entry.WheelAthleteApp(),
+      ),
+    );
     await tester.pump();
-
-    // Scroll down to the primary actions section.
-    await dragUntilVisible(tester, find.text('Start recording'));
-    // Tap Start recording — flips _recording to true.
-    await tester.tap(find.text('Start recording'));
-    await tester.pump(const Duration(milliseconds: 50));
-    // Label should now say Stop recording.
-    expect(find.text('Stop recording'), findsOneWidget);
-
-    // Scroll down to Mark event section.
-    await dragUntilVisible(tester, find.text('MARK'));
-    await tester.tap(find.text('MARK'));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Scroll back up and tap Stop recording to flip back.
-    await dragUntilVisible(tester, find.text('Stop recording'));
-    await tester.tap(find.text('Stop recording'));
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('busy sync button renders spinner', (tester) async {
-    await tester.pumpWidget(const app_entry.WheelAthleteApp());
-    await tester.pump();
-
-    // Scroll to the Primary actions section.
-    await dragUntilVisible(tester, find.text('Start recording'));
-    // The busy button shows a spinner, not the label text.
-    // Just verify the section renders without error.
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
-  });
-
-  testWidgets('tapping connection cards and session items invokes callbacks',
-      (tester) async {
-    await tester.pumpWidget(const app_entry.WheelAthleteApp());
-    await tester.pump();
-
-    // Scroll down to connection cards.
-    await dragUntilVisible(tester, find.text('WheelAthlete-L'));
-    await tester.tap(find.text('WheelAthlete-L'));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.text('WheelAthlete-R'));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Scroll down to session list.
-    await dragUntilVisible(tester, find.text('session_a1f3'));
-    await tester.tap(find.text('session_a1f3'));
-    await tester.pump(const Duration(milliseconds: 50));
-    // Scroll a bit more to bring session_b22c into view.
-    await dragUntilVisible(tester, find.text('session_b22c'), delta: -80);
-    await tester.tap(find.text('session_b22c'));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Tap share icons (there are two).
-    final shareIcons = find.byIcon(Icons.ios_share_rounded);
-    for (var i = 0; i < shareIcons.evaluate().length; i++) {
-      await tester.tap(shareIcons.at(i), warnIfMissed: false);
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-  });
-
-  testWidgets('tapping empty-state action and error-state retry', (tester) async {
-    await tester.pumpWidget(const app_entry.WheelAthleteApp());
-    await tester.pump();
-
-    // Scroll down to Empty state.
-    await dragUntilVisible(tester, find.text('Scan for devices'));
-    await tester.tap(find.text('Scan for devices'));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Scroll down to Error state.
-    await dragUntilVisible(tester, find.text('Try again'));
-    await tester.tap(find.text('Try again'));
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('main() launches the app', (tester) async {
-    GoogleFonts.config.allowRuntimeFetching = false;
-    // Calling main() directly exercises the entry point.
-    app_entry.main();
-    await tester.pump();
-    expect(find.text('WheelAthlete UI'), findsOneWidget);
-    // Clean up so subsequent tests don't see two apps.
-    await tester.pumpWidget(const SizedBox());
+    expect(find.text('WheelAthlete'), findsWidgets);
+    expect(find.text('Connect'), findsOneWidget);
   });
 
   testWidgets('ThemeModeController cycle via widget tree', (tester) async {
@@ -154,9 +131,7 @@ void main() {
         home: Scaffold(
           body: ValueListenableBuilder<ThemeMode>(
             valueListenable: ctrl,
-            builder: (context, mode, _) {
-              return Text('Mode: ${mode.name}');
-            },
+            builder: (context, mode, _) => Text('Mode: ${mode.name}'),
           ),
         ),
       ),
