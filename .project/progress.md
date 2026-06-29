@@ -234,3 +234,28 @@
     reports on bad CSV. Unicode box-drawing chars fixed for Windows cp1252.
   - Phase 1 COMPLETE. All 10 subtasks done.
   - Next: Phase 2 (train model with Python + PyTorch).
+
+---
+
+# Phase 2 — Field-Ready App & Firmware Enhancements
+
+Started: 2026-06-29. See `.project/plan.md` (Phase 2) + `.project/prompts/phase2/`.
+Issues: #1 (firmware) · #2 (app connectivity) · #3 (app data).
+Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `feat/phase2-app-data-issue-3`.
+
+| # | Subtask | Branch | Issue | Skill | Status | Started | Completed | Commit | PR |
+|---|---------|--------|-------|-------|--------|---------|-----------|--------|----|
+| 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | pending | - | - | - | - |
+| 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | pending | - | - | - | - |
+| 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
+| 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
+| 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
+| 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
+| 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
+| 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
+| 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | pending | - | - | - | - |
+
+## Phase 2 Notes / Blockers
+- 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
+- Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
+- Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.

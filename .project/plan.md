@@ -1,63 +1,110 @@
-# WheelAthlete — Phase 1: Data Collection & Calibration
+# WheelAthlete — Phase 2: Field-Ready App & Firmware Enhancements
+
+> Phase 1 (data collection) is complete — see `.project/plan-phase1.md` and
+> `.project/progress.md` (subtasks #1–#10). This plan covers the 6 enhancements
+> the user requested after field testing, grouped into 3 GitHub issues by layer.
 
 ## Objective
-สร้างระบบเก็บข้อมูลดิบ (raw data) สำหรับงานวิจัยวิเคราะห์การเคลื่อนไหวนักกีฬาวีลแชร์
-ด้วย IMU sensor ที่ติดล้อ แทนการใช้ 3D Motion Capture หลายกล้อง ประกอบด้วย
-(1) Firmware บน M5StickCPlus2 จำนวน 2 ตัว (ล้อซ้าย-ขวา) อ่าน IMU ในตัว (MPU6886)
-accel+gyro 3 แกน ที่ sampling rate ปรับได้ ส่งออกผ่าน BLE และ
-(2) Flutter mobile app (iOS+Android) เชื่อม BLE พร้อมกัน 2 ตัว แสดงสถานะ realtime
-บันทึก raw data พร้อม timestamp แม่นยำ มีปุ่ม Mark Event เพื่อ sync กับกล้อง
-(gold standard ถ่ายแยก align ทีหลัง) และ export เป็น CSV เพื่อนำไป train model เฟสถัดไป
+Harden the WheelAthlete data-collection system for real field use: show live
+battery % and RSSI after connect, make the board configurable in-app (name /
+wheel side / sample rate), allow editing folder/topic/session metadata, make
+share/export actually save or share CSV files, add realtime per-axis IMU line
+charts, and rework the Record flow to sync time with the board, run a 5-second
+countdown with 3-2-1 beep on the M5, and stamp each session with a UTC start
+instant for camera alignment (hybrid UTC — inter-wheel sync still uses the
+phone clock; UTC is for camera alignment only).
 
-## Architecture
-ดู `.project/architecture.md`
+## Issues (grouped by layer)
+- **Issue #1** — `feat(fw): Phase 2 firmware` → branch `feat/phase2-firmware-issue-1`
+  - Battery Service, board config (NVS), UTC epoch command
+- **Issue #2** — `feat(app): Phase 2 connectivity` → branch `feat/phase2-app-conn-issue-2`
+  - Battery/RSSI display, board settings screen, record countdown + UTC stamp
+- **Issue #3** — `feat(app): Phase 2 data` → branch `feat/phase2-app-data-issue-3`
+  - Folder/topic/session editing, working share/export, realtime IMU charts
+
+## Architecture changes (delta on Phase 1)
+- **BLE**: add standard Battery Service `0x180F` + `0x2A19` (notify) alongside
+  the existing custom service. Add a `Config` read characteristic (name /
+  wheel_id / rate_hz / fw). Add Control commands `SET_NAME`, `SET_WHEEL`,
+  `SET_UTC`. Bump protocol `docs/ble-protocol.md` to **v1.1.0**.
+- **Time sync (hybrid UTC)**: keep the phone clock as the inter-wheel common
+  timeline (`timestamp_synced_ms` unchanged). ADD: phone sends UTC epoch to the
+  board on connect + on record start (`SET_UTC`); board stamps the scheduled
+  `START_FIRED` event with the UTC instant; app writes `utc_start_ms` into
+  `session_*_meta.json` so sessions can be aligned with the camera clock
+  post-hoc. No NTP/RTC on the board — UTC is supplied by the phone.
+- **Record flow**: tap "Start Recording" → SYNC_PING burst (offset estimate) →
+  compute `T_start = now_phone + 5s` → send `SET_UTC` + scheduled `START` to
+  both wheels → in-app countdown 5-4-3-2-1 → board beeps 3-2-1 → all start
+  together. Cancellable.
+- **Storage**: `StorageRepository` gains `renameTopic`, `updateTopicDescription`,
+  `updateSessionMeta` (notes / video filename).
+- **Charts**: `fl_chart` `LineChart` rolling window (~5s) per wheel, decimated
+  to ~50 pts for performance.
 
 ## Tech stack
-- Firmware: PlatformIO + Arduino C++ (ESP32), M5Unified, NimBLE-Arduino
-- App: Flutter / Dart, flutter_blue_plus, riverpod, fl_chart, csv, share_plus, path_provider
-- App UI: design system ของตัวเอง (skill: impeccable + ui-ux-pro-max)
+- Firmware: PlatformIO + Arduino C++ (ESP32), M5Unified, NimBLE-Arduino, `Preferences` (NVS)
+- App: Flutter / Dart, flutter_blue_plus, flutter_riverpod, fl_chart, share_plus, path_provider, file_picker (new)
 - Repo: Monorepo (firmware/ + app/)
-- Export: CSV (synced timeline) จัดเก็บเป็นโฟลเดอร์ topic/trial
 
-## Subtasks
-- [ ] #1: Scaffolding + monorepo + git/GitHub + BLE protocol spec (incl. sync + folder model) — skill: `git-workflow` — status: pending
-- [ ] #2: Firmware — อ่าน IMU MPU6886 ที่ rate ปรับได้ + แสดงบนจอ + serial debug — skill: `cpp-coding-standards` — status: pending
-- [ ] #3: Firmware — BLE GATT + time-sync support (notify/control/sync/info, synchronized start) — skill: `cpp-coding-standards` — status: pending
-- [ ] #4: Flutter — design system / theme / reusable components (UI สวย) — skill: `impeccable` + `ui-ux-pro-max` — status: pending
-- [ ] #5: Flutter — scan + เชื่อม 2 devices (L/R) + state management — skill: `dart-flutter-patterns` — status: pending
-- [ ] #6: Flutter — parse packet + realtime display (ใช้ design system) — skill: `dart-flutter-patterns` — status: pending
-- [ ] #7: Flutter — Clock sync engine (offset/drift, synchronized start, common timeline) — skill: `dart-flutter-patterns` — status: pending
-- [ ] #8: Flutter — recording session + Mark Event + จัดเก็บโฟลเดอร์ topic/trial — skill: `dart-flutter-patterns` — status: pending
-- [ ] #9: Flutter — CSV export (synced/resampled) + folder hierarchy + meta.json + share — skill: `dart-flutter-patterns` — status: pending
-- [ ] #10: เอกสาร data-collection protocol + field test (verify sync + กล้อง) — skill: `tdd-workflow` — status: pending
+## Subtasks (each = 1 session = 1 commit)
+
+### Issue #1 — Firmware (branch `feat/phase2-firmware-issue-1`)
+- [ ] **#11** Battery Service `0x180F` + `0x2A19` notify (battery % from `M5.Power.getBatteryLevel()`)
+      — skill: `cpp-coding-standards` + `cpp-testing` + `tdd-workflow`
+- [ ] **#12** Board config: `SET_NAME` / `SET_WHEEL` / persist `SET_RATE` to NVS + `Config` read char
+      — skill: `cpp-coding-standards` + `cpp-testing` + `tdd-workflow` + `gateguard`
+- [ ] **#13** `SET_UTC` command + `UTC_SET` Sync event + `START_FIRED` UTC stamp + protocol doc v1.1.0
+      — skill: `cpp-coding-standards` + `cpp-testing` + `tdd-workflow` + `intent-driven-development`
+
+### Issue #2 — App connectivity (branch `feat/phase2-app-conn-issue-2`)
+- [ ] **#14** Battery % + RSSI live display (subscribe Battery Service + periodic `readRssi` + ConnectionCard)
+      — skill: `dart-flutter-patterns` + `flutter-dart-code-review` + `tdd-workflow` + `verification-loop`
+- [ ] **#15** Board Settings screen (read Config char, write SET_NAME/SET_WHEEL/SET_RATE)
+      — skill: `dart-flutter-patterns` + `tdd-workflow` + `gateguard` + `verification-loop`
+- [ ] **#16** Record countdown + scheduled start + UTC session stamp (uses `ScheduledStart`, `MinRttTracker`)
+      — skill: `dart-flutter-patterns` + `tdd-workflow` + `latency-critical-systems` + `intent-driven-development` + `verification-loop`
+
+### Issue #3 — App data (branch `feat/phase2-app-data-issue-3`)
+- [ ] **#17** Edit folder/topic/session metadata (rename topic, edit description + session notes/video)
+      — skill: `dart-flutter-patterns` + `tdd-workflow` + `verification-loop`
+- [ ] **#18** Wire share/export (share_plus sheet + save-to-device via file_picker)
+      — skill: `dart-flutter-patterns` + `tdd-workflow` + `verification-loop`
+- [ ] **#19** Realtime IMU line charts (fl_chart, per axis, rolling window, decimated)
+      — skill: `dart-flutter-patterns` + `tdd-workflow` + `latency-critical-systems` + `verification-loop`
 
 ## Dependency graph
 ```
-#1 (scaffold + BLE/sync/folder protocol spec)
- ├──► #2 (firmware IMU) ──► #3 (firmware BLE + sync) ──┐
- ├──► #4 (design system) ──┐                          │
- └──────────────────────┐  │                          │
-                        ▼  ▼                          │
-                  #5 (flutter connect 2 devices) ◄─────┘
-                        │
-                  #6 (parse + realtime display)
-                        │
-                  #7 (clock sync engine) ◄── ต้องการ #3 (sync support)
-                        │
-                  #8 (recording + mark + folder)
-                        │
-                  #9 (CSV export synced + folders)
-                        │
-                  #10 (field protocol + verify sync)
+Issue #1 (firmware)
+  #11 (battery svc) ──┐
+  #12 (config+NVS) ───┤
+  #13 (UTC cmd) ──────┘
+        │
+        ▼  (new chars/commands available; can be stubbed via FakeBleRepository earlier)
+Issue #2 (app connectivity)
+  #14 (battery/RSSI) ◄── #11
+  #15 (board settings) ◄── #12
+  #16 (record countdown+UTC) ◄── #13 + sync_engine (#7)
+
+Issue #3 (app data)  — independent of #1/#2
+  #17 (folder editing)
+  #18 (share/export)
+  #19 (realtime charts) ◄── imuStreamProvider (#6)
 ```
-- #2 (firmware) และ #4 (design system) ทำขนานกันได้หลัง #1 เสร็จ
-- #5 ใช้ component จาก #4; #6 ต้องรอ #3 (firmware ส่งจริง) + #5 (เชื่อมได้)
-- #7 (sync engine) เป็นหัวใจของความแม่นยำ — ต้องการ firmware sync support (#3)
+- Issue #3 is independent and can proceed in parallel with #1/#2.
+- #14/#15/#16 can start against `FakeBleRepository` stubs before firmware #1 lands.
+
+## Stack-specific skills to use
+| Layer | Build skill | Test skill | Verify skill |
+|---|---|---|---|
+| Firmware C++ | `cpp-coding-standards` | `cpp-testing` + `tdd-workflow` | `cpp-build` (pio run) |
+| Flutter app | `dart-flutter-patterns` | `tdd-workflow` + `flutter-dart-code-review` | `verification-loop` (flutter analyze + test) |
+| Cross-cutting | `gateguard` (investigate before edit), `intent-driven-development` (acceptance criteria), `latency-critical-systems` (sync/charts) | — | — |
 
 ## Progress
-ดู `.project/progress.md`
+See `.project/progress.md` (Phase 2 subtasks #11–#19 appended below Phase 1).
 
-## How to continue (ข้าม session)
-1. เปิด session ใหม่ พิมพ์ `/navigator` หรือ `ใช้ build skill: ทำ subtask #N จาก .project/plan.md`
-2. build skill จะอ่าน plan.md + architecture.md + progress.md ก่อนเริ่ม
-3. ทำทีละ subtask, เขียน test ก่อน, commit, แล้วอัปเดต progress.md
+## How to continue (cross-session)
+1. New session → run the **build** skill, or paste a subtask prompt from `.project/prompts/phase2/`.
+2. build skill reads this `plan.md` + `architecture.md` + `progress.md` first.
+3. One subtask per session: write tests first (TDD), implement, verify, commit, update `progress.md`.
