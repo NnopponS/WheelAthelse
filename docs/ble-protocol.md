@@ -109,6 +109,7 @@ App เขียนคำสั่งไป firmware ทุกคำสั่ง
 | `0x06` | `BEEP`             | `uint8 count`, `uint16 period_ms` | firmware ส่งเสียง beep (sync marker ที่จอ/ลำโพง) |
 | `0x07` | `SET_NAME`         | `char name[16]` (null-padded ASCII) | firmware เปลี่ยนชื่อ board + update advertised name + Config char |
 | `0x08` | `SET_WHEEL`        | `uint8 wheel_id` (`0x4C`='L', `0x52`='R') | firmware เปลี่ยน wheel side + update Info + Config + advertised name |
+| `0x09` | `SET_UTC`         | `uint64 utc_epoch_ms` (LE, epoch ms) | firmware เก็บ UTC epoch ใน RAM + echo ผ่าน `UTC_SET` event (§4.4) |
 | `0xFF` | `RESET_SEQ`        | (ไม่มี) | firmware รีเซ็ต `seq` กลับเป็น 0 |
 
 > คำสั่งที่ไม่รู้จัก → firmware ส่ง Sync event `CMD_NACK` (§4.4)
@@ -176,10 +177,18 @@ Sync characteristic ใช้ส่ง event พิเศษด้วย (flag �
 | `0x00` | `SYNC_RESPONSE` | §4.1 | ตอบ SYNC_PING |
 | `0x10` | `DROP_COUNT`    | `uint32 count` | จำนวน sample ที่ถูกทิ้งตั้งแต่ event ล่าสุด |
 | `0x20` | `CMD_NACK`      | `uint8 cmd` | คำสั่งที่ไม่รู้จัก/ไม่ valid |
-| `0x30` | `START_FIRED`   | `uint32 t_device_us` | ยืนยันว่าเริ่ม acquisition จริง ณ เวลานี้ |
+| `0x30` | `START_FIRED`   | `uint32 t_device_us`, `uint64 utc_start_ms` | ยืนยันว่าเริ่ม acquisition จริง ณ เวลานี้ + UTC start instant (0 ถ้า UTC ไม่ได้ตั้ง) |
 | `0x40` | `STOP_FIRED`    | `uint32 t_device_us`, `uint32 last_seq` | ยืนยันว่าหยุด + seq สุดท้าย |
+| `0x50` | `UTC_SET`       | `uint64 utc_epoch_ms` | echo ค่า UTC epoch ที่รับจาก `SET_UTC` (ยืนยันว่า board รับแล้ว) |
 
 > App ใช้ `START_FIRED` / `STOP_FIRED` cross-check ว่า 2 ล้อเริ่ม/หยุดตรงกันจริง
+>
+> **v1.1.0 — UTC stamp (hybrid UTC):** `START_FIRED` มี `utc_start_ms` เพิ่มขึ้นมา
+> (uint64 LE, 13 bytes total). App ส่ง `SET_UTC` ก่อน scheduled start → board
+> เก็บ UTC epoch ใน RAM → ตอน start fire คำนวณ
+> `utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000` → ใส่ใน `START_FIRED`
+> App เขียน `utc_start_ms` ลง `session_*_meta.json` เพื่อ align กับนาฬิกากล้อง
+> ถ้า UTC ไม่ได้ตั้ง → `utc_start_ms = 0` (app ใช้ legacy 5-byte format ได้)
 
 ---
 

@@ -19,6 +19,8 @@ class WheelSyncState {
     this.lastStartFiredUs,
     this.lastStopFiredUs,
     this.lastSeq,
+    this.utcEpochMs,
+    this.utcStartMs,
     this.error,
   });
 
@@ -46,6 +48,12 @@ class WheelSyncState {
   /// Last seq from STOP_FIRED event.
   final int? lastSeq;
 
+  /// UTC epoch ms set via SET_UTC (confirmed by UTC_SET echo), or null.
+  final int? utcEpochMs;
+
+  /// UTC start instant from extended START_FIRED (v1.1.0), for camera alignment.
+  final int? utcStartMs;
+
   /// Error message from a NACK, parse failure, or stream error.
   final String? error;
 
@@ -58,6 +66,8 @@ class WheelSyncState {
     int? lastStartFiredUs,
     int? lastStopFiredUs,
     int? lastSeq,
+    Object? utcEpochMs = _unset,
+    Object? utcStartMs = _unset,
     Object? error = _unset,
   }) =>
       WheelSyncState(
@@ -71,6 +81,12 @@ class WheelSyncState {
         lastStartFiredUs: lastStartFiredUs ?? this.lastStartFiredUs,
         lastStopFiredUs: lastStopFiredUs ?? this.lastStopFiredUs,
         lastSeq: lastSeq ?? this.lastSeq,
+        utcEpochMs: identical(utcEpochMs, _unset)
+            ? this.utcEpochMs
+            : utcEpochMs as int?,
+        utcStartMs: identical(utcStartMs, _unset)
+            ? this.utcStartMs
+            : utcStartMs as int?,
         error: identical(error, _unset) ? this.error : error as String?,
       );
 
@@ -267,15 +283,28 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
             error: 'CMD_NACK: firmware rejected cmd 0x${cmd.toRadixString(16)}',
           ),
         );
-      case StartFiredEvent(:final tDeviceUs):
+      case StartFiredEvent(:final tDeviceUs, :final utcStartMs):
         state = state.copyWithSide(
           side,
           cur.copyWith(lastStartFiredUs: tDeviceUs),
         );
+        // Store UTC start instant for session meta (camera alignment)
+        if (utcStartMs > 0) {
+          state = state.copyWithSide(
+            side,
+            state.bySide[side]!.copyWith(utcStartMs: utcStartMs),
+          );
+        }
       case StopFiredEvent(:final tDeviceUs, :final lastSeq):
         state = state.copyWithSide(
           side,
           cur.copyWith(lastStopFiredUs: tDeviceUs, lastSeq: lastSeq),
+        );
+      case UtcSetEvent(:final utcEpochMs):
+        // Confirm UTC was received by the board
+        state = state.copyWithSide(
+          side,
+          cur.copyWith(utcEpochMs: utcEpochMs),
         );
     }
   }

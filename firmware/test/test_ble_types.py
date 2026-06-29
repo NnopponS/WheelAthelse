@@ -26,6 +26,7 @@ CMD_SET_RANGE = 0x05
 CMD_BEEP = 0x06
 CMD_SET_NAME = 0x07
 CMD_SET_WHEEL = 0x08
+CMD_SET_UTC = 0x09
 CMD_RESET_SEQ = 0xFF
 
 # Battery Service (standard BLE)
@@ -39,6 +40,7 @@ EVENT_DROP_COUNT = 0x10
 EVENT_CMD_NACK = 0x20
 EVENT_START_FIRED = 0x30
 EVENT_STOP_FIRED = 0x40
+EVENT_UTC_SET = 0x50
 
 # Beep schedule
 BEEP_SCHEDULE = [
@@ -75,6 +77,18 @@ def pack_sync_response(t_app_ms, t_device_us, seq_ping):
 
 def pack_start_fired(t_device_us):
     return struct.pack('<BI', EVENT_START_FIRED, t_device_us)
+
+def pack_start_fired_utc(t_device_us, utc_start_ms):
+    """Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms] = 13B"""
+    return struct.pack('<BIQ', EVENT_START_FIRED, t_device_us, utc_start_ms)
+
+def pack_utc_set(utc_epoch_ms):
+    """UTC_SET event (v1.1.0): [0x50][uint64 utc_epoch_ms] = 9B"""
+    return struct.pack('<BQ', EVENT_UTC_SET, utc_epoch_ms)
+
+def encode_set_utc(utc_epoch_ms):
+    """SET_UTC command: [0x09][uint64 LE utc_epoch_ms] = 9B"""
+    return struct.pack('<BQ', CMD_SET_UTC, utc_epoch_ms)
 
 def pack_stop_fired(t_device_us, last_seq):
     return struct.pack('<BII', EVENT_STOP_FIRED, t_device_us, last_seq)
@@ -334,6 +348,93 @@ class TestScheduledStart(unittest.TestCase):
 
     def test_wait_when_not_yet(self):
         self.assertFalse(should_start_now(5_000_000, 4_999_999))
+
+
+class TestSetUtcCommand(unittest.TestCase):
+    """AC: SET_UTC command (0x09) encodes uint64 LE epoch ms"""
+
+    def test_size(self):
+        buf = encode_set_utc(1719691200000)
+        self.assertEqual(len(buf), 9)
+
+    def test_cmd_byte(self):
+        buf = encode_set_utc(1719691200000)
+        self.assertEqual(buf[0], CMD_SET_UTC)
+
+    def test_epoch_value(self):
+        epoch = 1719691200123
+        buf = encode_set_utc(epoch)
+        val = struct.unpack('<Q', buf[1:9])[0]
+        self.assertEqual(val, epoch)
+
+    def test_zero_epoch(self):
+        buf = encode_set_utc(0)
+        self.assertEqual(buf[0], CMD_SET_UTC)
+        val = struct.unpack('<Q', buf[1:9])[0]
+        self.assertEqual(val, 0)
+
+    def test_max_uint64(self):
+        buf = encode_set_utc(0xFFFFFFFFFFFFFFFF)
+        val = struct.unpack('<Q', buf[1:9])[0]
+        self.assertEqual(val, 0xFFFFFFFFFFFFFFFF)
+
+
+class TestUtcSetEvent(unittest.TestCase):
+    """AC: UTC_SET event (0x50) echoes uint64 epoch ms back"""
+
+    def test_size(self):
+        buf = pack_utc_set(1719691200000)
+        self.assertEqual(len(buf), 9)
+
+    def test_event_id(self):
+        buf = pack_utc_set(1719691200000)
+        self.assertEqual(buf[0], EVENT_UTC_SET)
+
+    def test_epoch_echo(self):
+        epoch = 1719691200456
+        buf = pack_utc_set(epoch)
+        val = struct.unpack('<Q', buf[1:9])[0]
+        self.assertEqual(val, epoch)
+
+    def test_zero_epoch(self):
+        buf = pack_utc_set(0)
+        val = struct.unpack('<Q', buf[1:9])[0]
+        self.assertEqual(val, 0)
+
+
+class TestStartFiredUtc(unittest.TestCase):
+    """AC: Extended START_FIRED (v1.1.0) = [0x30][uint32 t_device_us][uint64 utc_start_ms]"""
+
+    def test_size(self):
+        buf = pack_start_fired_utc(5000000, 1719691200000)
+        self.assertEqual(len(buf), 13)
+
+    def test_event_id(self):
+        buf = pack_start_fired_utc(5000000, 1719691200000)
+        self.assertEqual(buf[0], EVENT_START_FIRED)
+
+    def test_t_device_us(self):
+        buf = pack_start_fired_utc(5000000, 1719691200000)
+        t_dev = struct.unpack('<I', buf[1:5])[0]
+        self.assertEqual(t_dev, 5000000)
+
+    def test_utc_start_ms(self):
+        buf = pack_start_fired_utc(5000000, 1719691200456)
+        utc = struct.unpack('<Q', buf[5:13])[0]
+        self.assertEqual(utc, 1719691200456)
+
+    def test_utc_zero_when_not_set(self):
+        """When UTC not set, utc_start_ms = 0"""
+        buf = pack_start_fired_utc(5000000, 0)
+        utc = struct.unpack('<Q', buf[5:13])[0]
+        self.assertEqual(utc, 0)
+
+    def test_max_values(self):
+        buf = pack_start_fired_utc(0xFFFFFFFF, 0xFFFFFFFFFFFFFFFF)
+        t_dev = struct.unpack('<I', buf[1:5])[0]
+        utc = struct.unpack('<Q', buf[5:13])[0]
+        self.assertEqual(t_dev, 0xFFFFFFFF)
+        self.assertEqual(utc, 0xFFFFFFFFFFFFFFFF)
 
 
 class TestBatteryLevel(unittest.TestCase):

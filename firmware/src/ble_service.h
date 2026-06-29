@@ -79,6 +79,7 @@ public:
     void handleBeep(uint8_t count, uint16_t period_ms);
     void handleSetName(const uint8_t* name_data, size_t len);
     void handleSetWheel(uint8_t wheel_id);
+    void handleSetUtc(uint64_t utc_epoch_ms);
     void handleResetSeq();
 
     // ── Internal helpers ──
@@ -108,6 +109,10 @@ public:
     // ── Battery Service state ──
     uint8_t    battery_level_    = 0;        // last reported battery % (0-100)
     uint32_t   last_battery_ms_  = 0;        // millis() of last battery update
+
+    // ── UTC epoch state (v1.1.0) ──
+    uint64_t   utc_epoch_ms_     = 0;        // UTC epoch set via SET_UTC (0 = not set)
+    bool       utc_set_          = false;
 
     // ── Batch buffer ──
     static constexpr size_t MAX_BATCH_BUF = 1 + 12 * IMU_SAMPLE_SIZE;  // max 12 samples

@@ -277,6 +277,14 @@ void BleService::handleCommand(Cmd cmd, const uint8_t* payload, size_t len) {
             }
             break;
         }
+        case Cmd::SetUtc: {
+            if (len >= 8) {
+                uint64_t utc_epoch;
+                std::memcpy(&utc_epoch, payload, 8);
+                handleSetUtc(utc_epoch);
+            }
+            break;
+        }
         case Cmd::ResetSeq:
             handleResetSeq();
             break;
@@ -400,12 +408,36 @@ void BleService::handleSetWheel(uint8_t wheel_id) {
     Serial.printf("[BLE] SET_WHEEL: %c\n", wheel_id_);
 }
 
+void BleService::handleSetUtc(uint64_t utc_epoch_ms) {
+    utc_epoch_ms_ = utc_epoch_ms;
+    utc_set_ = true;
+    // Emit UTC_SET echo event: [0x50][uint64 utc_epoch_ms]
+    uint8_t buf[9];
+    packUtcSet(utc_epoch_ms, buf);
+    s_char_sync->setValue(buf, 9);
+    s_char_sync->notify();
+    Serial.printf("[BLE] SET_UTC: %llu ms\n",
+                  static_cast<unsigned long long>(utc_epoch_ms));
+}
+
 // ── Event senders ────────────────────────────────────────────────────────────
 
 void BleService::sendStartFired() {
-    uint8_t buf[5];
-    packStartFired(micros(), buf);
-    s_char_sync->setValue(buf, 5);
+    // Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+    const uint32_t now_us = micros();
+    uint64_t utc_start_ms = 0;
+    if (utc_set_ && pending_start_) {
+        // utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000
+        const int64_t delta_us = static_cast<int64_t>(target_start_us_) -
+                                 static_cast<int64_t>(now_us);
+        utc_start_ms = utc_epoch_ms_ + static_cast<uint64_t>(delta_us / 1000);
+    } else if (utc_set_) {
+        // Immediate start: UTC = epoch + (now - fire_time)/1000 ≈ epoch
+        utc_start_ms = utc_epoch_ms_;
+    }
+    uint8_t buf[13];
+    packStartFired(now_us, utc_start_ms, buf);
+    s_char_sync->setValue(buf, 13);
     s_char_sync->notify();
 }
 

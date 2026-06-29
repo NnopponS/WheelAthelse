@@ -48,6 +48,7 @@ enum class Cmd : uint8_t {
     Beep       = 0x06,
     SetName    = 0x07,   // v1.1.0 — 16-byte board name
     SetWheel   = 0x08,   // v1.1.0 — 0x4C='L' / 0x52='R'
+    SetUtc     = 0x09,   // v1.1.0 — uint64 LE epoch ms
     ResetSeq   = 0xFF,
 };
 
@@ -59,6 +60,7 @@ enum class SyncEvent : uint8_t {
     CmdNack      = 0x20,
     StartFired   = 0x30,
     StopFired    = 0x40,
+    UtcSet       = 0x50,   // v1.1.0 — echo UTC epoch back
 };
 
 // ── Pure functions (testable on host) ────────────────────────────────────────
@@ -118,10 +120,18 @@ inline void packSyncEvent(SyncEvent event_id, const uint8_t* payload,
     }
 }
 
-// Pack START_FIRED event: [0x30][uint32 t_device_us]
-inline void packStartFired(uint32_t t_device_us, uint8_t* buf) {
+// Pack START_FIRED event (v1.1.0 extended): [0x30][uint32 t_device_us][uint64 utc_start_ms]
+// utc_start_ms = 0 if UTC was never set.
+inline void packStartFired(uint32_t t_device_us, uint64_t utc_start_ms, uint8_t* buf) {
     buf[0] = static_cast<uint8_t>(SyncEvent::StartFired);
     std::memcpy(buf + 1, &t_device_us, 4);
+    std::memcpy(buf + 5, &utc_start_ms, 8);
+}
+
+// Pack UTC_SET event: [0x50][uint64 utc_epoch_ms]
+inline void packUtcSet(uint64_t utc_epoch_ms, uint8_t* buf) {
+    buf[0] = static_cast<uint8_t>(SyncEvent::UtcSet);
+    std::memcpy(buf + 1, &utc_epoch_ms, 8);
 }
 
 // Pack STOP_FIRED event: [0x40][uint32 t_device_us][uint32 last_seq]
