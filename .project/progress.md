@@ -9,7 +9,7 @@
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | 3d132fc |
 | 6 | Flutter: parse packet + realtime display | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | 9b0e199 |
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | f604f32 |
-| 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | (see commit) |
+| 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 52a3662 |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns | pending | - | - | - |
 | 10 | Docs: data-collection protocol + field test (verify sync) | tdd-workflow | pending | - | - | - |
 
