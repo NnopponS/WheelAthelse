@@ -250,7 +250,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | pending | - | - | - | - |
 | 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | 60bb885 | - |
 | 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 1c8bccd | - |
-| 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
+| 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | 238fc33 | - |
 | 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | pending | - | - | - | - |
