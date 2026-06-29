@@ -223,13 +223,24 @@ class _MetricGrid extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Realtime scrolling line charts (subtask #19): accel above gyro.
+        // Realtime scrolling line charts: accel above gyro, each with a
+        // section label and per-axis legend (x/y/z).
+        _ChartLabel(
+          title: 'Accelerometer (g)',
+          axisColors: axisColors,
+        ),
+        const SizedBox(height: AppSpacing.xxs),
         ImuChart(
           readings: imuState.recent,
           isAccel: true,
           axisColors: axisColors,
         ),
         const SizedBox(height: AppSpacing.xs),
+        _ChartLabel(
+          title: 'Gyroscope (°/s)',
+          axisColors: axisColors,
+        ),
+        const SizedBox(height: AppSpacing.xxs),
         ImuChart(
           readings: imuState.recent,
           isAccel: false,
@@ -241,12 +252,12 @@ class _MetricGrid extends StatelessWidget {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
-            LiveMetricTile(label: 'ax', value: r.ax, unit: 'g', side: side),
-            LiveMetricTile(label: 'ay', value: r.ay, unit: 'g', side: side),
-            LiveMetricTile(label: 'az', value: r.az, unit: 'g', side: side),
-            LiveMetricTile(label: 'gx', value: r.gx, unit: '°/s', side: side),
-            LiveMetricTile(label: 'gy', value: r.gy, unit: '°/s', side: side),
-            LiveMetricTile(label: 'gz', value: r.gz, unit: '°/s', side: side),
+            LiveMetricTile(label: 'Accel X', value: r.ax, unit: 'g', side: side),
+            LiveMetricTile(label: 'Accel Y', value: r.ay, unit: 'g', side: side),
+            LiveMetricTile(label: 'Accel Z', value: r.az, unit: 'g', side: side),
+            LiveMetricTile(label: 'Gyro X', value: r.gx, unit: '°/s', side: side),
+            LiveMetricTile(label: 'Gyro Y', value: r.gy, unit: '°/s', side: side),
+            LiveMetricTile(label: 'Gyro Z', value: r.gz, unit: '°/s', side: side),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -280,6 +291,52 @@ class _StatsLine extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
           ),
+      ],
+    );
+  }
+}
+
+/// Section label above each IMU chart: shows the sensor name (Accelerometer
+/// / Gyroscope) and a small x/y/z color legend so the user can tell which
+/// line is which axis.
+class _ChartLabel extends StatelessWidget {
+  const _ChartLabel({required this.title, required this.axisColors});
+  final String title;
+  final List<Color> axisColors;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    const axes = ['x', 'y', 'z'];
+    return Row(
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        for (var i = 0; i < 3; i++) ...[
+          Container(
+            width: 10,
+            height: 3,
+            decoration: BoxDecoration(
+              color: axisColors[i],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 2),
+          Text(
+            axes[i],
+            style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
+          if (i < 2) const SizedBox(width: AppSpacing.sm),
+        ],
       ],
     );
   }

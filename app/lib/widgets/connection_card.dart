@@ -26,6 +26,7 @@ class ConnectionCard extends StatelessWidget {
     this.rssi,
     this.onTap,
     this.onSettings,
+    this.onDisconnect,
   });
 
   final WheelSide side;
@@ -44,6 +45,9 @@ class ConnectionCard extends StatelessWidget {
 
   /// Opens the Board Settings screen for this wheel. Only shown when connected.
   final VoidCallback? onSettings;
+
+  /// Disconnects this wheel. Only shown when connected.
+  final VoidCallback? onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +107,21 @@ class ConnectionCard extends StatelessWidget {
                             ),
                             onPressed: onSettings,
                             icon: const Icon(Icons.settings_rounded),
+                          ),
+                        ],
+                        if (connected && onDisconnect != null) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          IconButton(
+                            tooltip: 'Disconnect',
+                            iconSize: 20,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            onPressed: onDisconnect,
+                            icon: const Icon(Icons.link_off_rounded),
                           ),
                         ],
                       ],

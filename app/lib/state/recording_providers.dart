@@ -7,6 +7,7 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/sync_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/connection_card.dart';
 
 /// Recording state machine status.
 enum RecordingStatus { idle, recording, stopped }
@@ -115,14 +116,23 @@ class RecordingNotifier extends Notifier<RecordingState> {
       startTime: startTime,
     );
 
-    // Start IMU streaming on both sides.
+    // Start IMU streaming on connected sides only.
     final imuNotifier = ref.read(imuStreamProvider.notifier);
-    await imuNotifier.start(WheelSide.left);
-    await imuNotifier.start(WheelSide.right);
+    final connState = ref.read(connectionManagerProvider);
+    for (final side in WheelSide.values) {
+      final conn = connState.bySide[side]!;
+      if (conn.status == ConnectionStatus.connected && conn.deviceId != null) {
+        await imuNotifier.start(side);
+      }
+    }
 
     // Subscribe to the raw IMU data streams to buffer samples.
-    await _subscribeImu(WheelSide.left);
-    await _subscribeImu(WheelSide.right);
+    for (final side in WheelSide.values) {
+      final conn = connState.bySide[side]!;
+      if (conn.status == ConnectionStatus.connected && conn.deviceId != null) {
+        await _subscribeImu(side);
+      }
+    }
   }
 
   Future<void> _subscribeImu(WheelSide side) async {
@@ -208,10 +218,11 @@ class RecordingNotifier extends Notifier<RecordingState> {
     final durationMs = endTime.millisecondsSinceEpoch -
         startTime.millisecondsSinceEpoch;
 
-    // Stop IMU streaming.
+    // Stop IMU streaming on all sides that have active subscriptions.
     final imuNotifier = ref.read(imuStreamProvider.notifier);
-    await imuNotifier.stop(WheelSide.left);
-    await imuNotifier.stop(WheelSide.right);
+    for (final side in _subs.keys) {
+      await imuNotifier.stop(side);
+    }
     for (final s in _subs.values) {
       await s.cancel();
     }

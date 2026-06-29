@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
+import 'package:wheelathlete/export/csv_exporter.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
@@ -258,10 +259,11 @@ class PathProviderStorageRepository implements StorageRepository {
     // Write meta JSON.
     final metaFile = File('${trialDir.path}/session_${meta.sessionId}_meta.json');
     metaFile.writeAsStringSync(jsonEncode(meta.toJson()));
-    // CSV is written by the exporter (subtask #9). Here we just write a
-    // placeholder so the file exists.
+    // Write the actual CSV with all samples so readSamples/export works.
     final csvFile = File('${trialDir.path}/session_${meta.sessionId}.csv');
-    if (!csvFile.existsSync()) csvFile.writeAsStringSync('');
+    final buf = StringBuffer();
+    CsvExporter.writeToSink(buf, samples);
+    csvFile.writeAsStringSync(buf.toString());
   }
 
   @override

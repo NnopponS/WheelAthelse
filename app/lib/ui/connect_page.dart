@@ -60,6 +60,7 @@ class ConnectPage extends ConsumerWidget {
                 builder: (_) => BoardSettingsPage(side: side),
               ),
             ),
+            onDisconnect: (side) => manager.disconnect(side),
           ),
           const SizedBox(height: AppSpacing.md),
           if (state.error != null) _ErrorBanner(message: state.error!),
@@ -78,9 +79,14 @@ class ConnectPage extends ConsumerWidget {
 }
 
 class _ConnectionPair extends StatelessWidget {
-  const _ConnectionPair({required this.state, required this.onSettings});
+  const _ConnectionPair({
+    required this.state,
+    required this.onSettings,
+    required this.onDisconnect,
+  });
   final ConnectionManagerState state;
   final void Function(WheelSide side) onSettings;
+  final void Function(WheelSide side) onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +103,9 @@ class _ConnectionPair extends StatelessWidget {
           onSettings: left.status == ConnectionStatus.connected
               ? () => onSettings(WheelSide.left)
               : null,
+          onDisconnect: left.status == ConnectionStatus.connected
+              ? () => onDisconnect(WheelSide.left)
+              : null,
         ),
         const SizedBox(height: AppSpacing.sm),
         ConnectionCard(
@@ -107,6 +116,9 @@ class _ConnectionPair extends StatelessWidget {
           rssi: right.rssi,
           onSettings: right.status == ConnectionStatus.connected
               ? () => onSettings(WheelSide.right)
+              : null,
+          onDisconnect: right.status == ConnectionStatus.connected
+              ? () => onDisconnect(WheelSide.right)
               : null,
         ),
       ],

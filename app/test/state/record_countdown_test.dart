@@ -208,7 +208,7 @@ void main() {
       expect(rightWrite![0], ControlCommandId.stop);
     });
 
-    test('start with one wheel disconnected sets error', () async {
+    test('start with one wheel connected succeeds (single-wheel mode)', () async {
       storage = InMemoryStorageRepository();
       ble = FakeBleRepository(
         devices: [
@@ -228,6 +228,44 @@ void main() {
       addTearDown(container.dispose);
       // Only connect the left wheel.
       await container.read(connectionManagerProvider.notifier).connect('L1');
+      await storage.createTopic('sprint_test');
+
+      final notifier = container.read(recordCountdownProvider.notifier);
+      const config = SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      );
+      await notifier.start(config);
+
+      // Single-wheel mode: should proceed to counting (not error).
+      final state = container.read(recordCountdownProvider);
+      expect(state.status, RecordCountdownStatus.counting);
+
+      // Fire START_FIRED from the left wheel only → recording should begin.
+      ble.syncController('L1')?.add(_startFiredEvent(1000000));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(
+        container.read(recordingProvider).status,
+        RecordingStatus.recording,
+      );
+    });
+
+    test('start with no wheels connected sets error', () async {
+      storage = InMemoryStorageRepository();
+      ble = FakeBleRepository(
+        devices: const [],
+        infoFor: const {},
+      );
+      container = ProviderContainer(
+        overrides: [
+          bleRepositoryProvider.overrideWith((ref) => ble),
+          storageRepositoryProvider.overrideWith((ref) => storage),
+          rssiPollIntervalProvider.overrideWith((ref) => null),
+          countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
+        ],
+      );
+      addTearDown(container.dispose);
       await storage.createTopic('sprint_test');
 
       final notifier = container.read(recordCountdownProvider.notifier);

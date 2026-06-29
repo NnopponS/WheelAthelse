@@ -10,6 +10,7 @@ import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/state/sync_engine.dart';
 import 'package:wheelathlete/state/sync_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/widgets/connection_card.dart';
 
 /// Status of the record countdown state machine (subtask #16).
 ///
@@ -112,12 +113,13 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
 
   BleRepository get _ble => ref.read(bleRepositoryProvider);
 
-  /// Begins the countdown flow for [config]. Both wheels must be connected.
+  /// Begins the countdown flow for [config]. At least one wheel must be
+  /// connected — works with a single wheel or both.
   ///
-  /// Sends a SYNC_PING burst, SET_UTC, and a scheduled START to both wheels,
-  /// then drives the in-app countdown. On START_FIRED from both wheels,
-  /// delegates to [RecordingNotifier.startRecording] with the UTC start
-  /// stamp baked into the config.
+  /// Sends a SYNC_PING burst, SET_UTC, and a scheduled START to every
+  /// connected wheel, then drives the in-app countdown. On START_FIRED
+  /// from all connected wheels, delegates to [RecordingNotifier.startRecording]
+  /// with the UTC start stamp baked into the config.
   Future<void> start(SessionConfig config) async {
     if (state.status != RecordCountdownStatus.idle &&
         state.status != RecordCountdownStatus.stopped &&
@@ -133,22 +135,29 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     state = const RecordCountdownState(status: RecordCountdownStatus.syncing);
 
     final connState = ref.read(connectionManagerProvider);
-    final leftDevice = connState.bySide[WheelSide.left]!.deviceId;
-    final rightDevice = connState.bySide[WheelSide.right]!.deviceId;
-    if (leftDevice == null || rightDevice == null) {
+    // Build the list of connected wheels (at least one required).
+    final connectedSides = <WheelSide>[];
+    for (final side in WheelSide.values) {
+      if (connState.bySide[side]!.deviceId != null &&
+          connState.bySide[side]!.status == ConnectionStatus.connected) {
+        connectedSides.add(side);
+      }
+    }
+    if (connectedSides.isEmpty) {
       state = const RecordCountdownState(
         status: RecordCountdownStatus.error,
-        error: 'Both wheels must be connected to start a countdown',
+        error: 'At least one wheel must be connected to start a countdown',
       );
       return;
     }
 
-    // 1. SYNC_PING burst to refresh offset estimates.
+    // 1. SYNC_PING burst to refresh offset estimates (connected wheels only).
     final sync = ref.read(syncEngineProvider.notifier);
     for (var i = 0; i < kSyncBurstCount; i++) {
       if (_cancelled) return;
-      await sync.sendPing(WheelSide.left);
-      await sync.sendPing(WheelSide.right);
+      for (final side in connectedSides) {
+        await sync.sendPing(side);
+      }
       if (i < kSyncBurstCount - 1) {
         await Future<void>.delayed(kSyncBurstInterval);
       }
@@ -167,21 +176,24 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     );
     _utcStartMs = utcStartMs;
 
-    // 3. Send SET_UTC to both wheels.
-    await _ble.writeControl(leftDevice, ControlCommand.setUtc(utcEpochNowMs));
-    if (_cancelled || !ref.mounted) return;
-    await _ble.writeControl(rightDevice, ControlCommand.setUtc(utcEpochNowMs));
-    if (_cancelled || !ref.mounted) return;
+    // 3. Send SET_UTC to every connected wheel.
+    for (final side in connectedSides) {
+      final deviceId = connState.bySide[side]!.deviceId!;
+      await _ble.writeControl(deviceId, ControlCommand.setUtc(utcEpochNowMs));
+      if (_cancelled || !ref.mounted) return;
+    }
 
-    // 4. Send scheduled START to both wheels (firmware beeps 3-2-1).
-    await _sendScheduledStart(WheelSide.left, tStartPhoneMs);
-    if (_cancelled || !ref.mounted) return;
-    await _sendScheduledStart(WheelSide.right, tStartPhoneMs);
-    if (_cancelled || !ref.mounted) return;
+    // 4. Send scheduled START to every connected wheel (firmware beeps 3-2-1).
+    for (final side in connectedSides) {
+      await _sendScheduledStart(side, tStartPhoneMs);
+      if (_cancelled || !ref.mounted) return;
+    }
 
-    // 5. Subscribe to START_FIRED events from both wheels.
-    await _subscribeStartFired(WheelSide.left, leftDevice);
-    await _subscribeStartFired(WheelSide.right, rightDevice);
+    // 5. Subscribe to START_FIRED events from every connected wheel.
+    for (final side in connectedSides) {
+      final deviceId = connState.bySide[side]!.deviceId!;
+      await _subscribeStartFired(side, deviceId);
+    }
 
     // 6. Begin the in-app countdown display.
     state = RecordCountdownState(
@@ -263,7 +275,11 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
   void _onStartFired(WheelSide side) {
     if (!ref.mounted || _cancelled) return;
     _startFired[side] = true;
-    if (_startFired[WheelSide.left]! && _startFired[WheelSide.right]!) {
+    // Start recording when all *connected* wheels have fired.
+    final allFired = _startFired.entries
+        .where((e) => _startFiredSubs.containsKey(e.key))
+        .every((e) => e.value);
+    if (allFired) {
       _beginRecording();
     }
   }

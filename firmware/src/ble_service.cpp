@@ -125,8 +125,17 @@ void BleService::begin(char wheel_id) {
         BATTERY_LEVEL_CHAR_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    // Set initial battery level
-    battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+    // Set initial battery level (voltage-based, same logic as updateBatteryLevel)
+    const int16_t init_batt_mv = M5.Power.getBatteryVoltage();
+    if (init_batt_mv > 0) {
+        int level = (init_batt_mv - 3200) * 100 / (4150 - 3200);
+        if (level < 0) level = 0;
+        if (level > 100) level = 100;
+        if (M5.Power.isCharging() && level >= 100) level = 99;
+        battery_level_ = static_cast<uint8_t>(level);
+    } else {
+        battery_level_ = clampBatteryLevel(M5.Power.getBatteryLevel());
+    }
     s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
     s_batt_service->start();
 
@@ -177,13 +186,36 @@ void BleService::updateBatteryLevel() {
     }
     last_battery_ms_ = now_ms;
 
-    const uint8_t new_level = clampBatteryLevel(M5.Power.getBatteryLevel());
+    // Use raw battery voltage for a more granular reading than
+    // getBatteryLevel() which saturates at 100% when charging via USB.
+    // M5StickCPlus2 (AXP192) battery voltage range: ~3000–4200 mV.
+    const int16_t batt_mv = M5.Power.getBatteryVoltage();
+    const bool charging = (M5.Power.isCharging() != 0);
+
+    uint8_t new_level;
+    if (batt_mv <= 0) {
+        // Voltage not available — fall back to getBatteryLevel().
+        new_level = clampBatteryLevel(M5.Power.getBatteryLevel());
+    } else {
+        // Voltage-based mapping: 3200 mV = 0%, 4150 mV = 100%.
+        // This is wider than M5Unified's default (3300–4100) so the
+        // reading doesn't peg at 100% the moment USB is plugged in.
+        int level = (batt_mv - 3200) * 100 / (4150 - 3200);
+        if (level < 0) level = 0;
+        if (level > 100) level = 100;
+        // When charging, cap at 99% so the user can tell it's not
+        // actually full (the voltage is inflated by the charger).
+        if (charging && level >= 100) level = 99;
+        new_level = static_cast<uint8_t>(level);
+    }
+
     if (new_level != battery_level_) {
         battery_level_ = new_level;
         if (s_char_battery) {
             s_char_battery->setValue(&battery_level_, BATTERY_LEVEL_SIZE);
             s_char_battery->notify();
-            Serial.printf("[BLE] Battery level: %u%%\n", battery_level_);
+            Serial.printf("[BLE] Battery level: %u%% (V=%dmV, charging=%d)\n",
+                          battery_level_, batt_mv, charging ? 1 : 0);
         }
     }
 }
