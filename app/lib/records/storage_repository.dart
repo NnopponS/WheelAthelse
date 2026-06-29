@@ -34,6 +34,15 @@ abstract class StorageRepository {
   /// Creates a new topic folder + `topic_meta.json`. Throws if it exists.
   Future<void> createTopic(String name, {String? description});
 
+  /// Renames a topic folder from [oldName] to [newName] (moves the directory).
+  /// Throws if [oldName] doesn't exist or [newName] already exists. No-op if
+  /// the names are identical.
+  Future<void> renameTopic(String oldName, String newName);
+
+  /// Updates the description stored in `topic_meta.json` for [name]. Pass
+  /// `null` to clear it. Throws if the topic doesn't exist.
+  Future<void> updateTopicDescription(String name, String? description);
+
   /// Deletes a topic folder and all its trials/sessions.
   Future<void> deleteTopic(String name);
 
@@ -64,6 +73,17 @@ abstract class StorageRepository {
     int trialNumber,
     String sessionId,
   );
+
+  /// Updates the editable fields of a session's metadata (notes + video
+  /// filename). Other fields are preserved. Throws if the session doesn't
+  /// exist.
+  Future<void> updateSessionMeta(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    String? notes,
+    String? videoFile,
+  });
 
   /// Reads the samples for a session, or empty list if not found.
   Future<List<BufferedSample>> readSamples(
@@ -171,6 +191,42 @@ class PathProviderStorageRepository implements StorageRepository {
   }
 
   @override
+  Future<void> renameTopic(String oldName, String newName) async {
+    if (oldName == newName) return;
+    final root = await _rootDir();
+    final oldDir = _topicDir(root, oldName);
+    if (!oldDir.existsSync()) {
+      throw StateError('Topic "$oldName" does not exist');
+    }
+    final newDir = _topicDir(root, newName);
+    if (newDir.existsSync()) {
+      throw StateError('Topic "$newName" already exists');
+    }
+    oldDir.renameSync(newDir.path);
+  }
+
+  @override
+  Future<void> updateTopicDescription(String name, String? description) async {
+    final root = await _rootDir();
+    final dir = _topicDir(root, name);
+    if (!dir.existsSync()) {
+      throw StateError('Topic "$name" does not exist');
+    }
+    final metaFile = File('${dir.path}/topic_meta.json');
+    Map<String, dynamic> json;
+    if (metaFile.existsSync()) {
+      json = jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+    } else {
+      json = <String, dynamic>{};
+    }
+    json['description'] = description;
+    if (json['created_at'] == null) {
+      json['created_at'] = DateTime.now().toUtc().toIso8601String();
+    }
+    metaFile.writeAsStringSync(jsonEncode(json));
+  }
+
+  @override
   Future<int> nextTrialNumber(String topic) async {
     final root = await _rootDir();
     final topicDir = _topicDir(root, topic);
@@ -249,6 +305,29 @@ class PathProviderStorageRepository implements StorageRepository {
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     if (metaFile.existsSync()) metaFile.deleteSync();
     if (csvFile.existsSync()) csvFile.deleteSync();
+  }
+
+  @override
+  Future<void> updateSessionMeta(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    String? notes,
+    String? videoFile,
+  }) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    final metaFile = File('${trialDir.path}/session_${sessionId}_meta.json');
+    if (!metaFile.existsSync()) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final json =
+        jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+    json['notes'] = notes;
+    json['video_file_name'] = videoFile;
+    metaFile.writeAsStringSync(jsonEncode(json));
   }
 
   @override
@@ -376,6 +455,94 @@ class InMemoryStorageRepository implements StorageRepository {
     _topics.remove(name);
     _sessions.removeWhere((key, _) => key.startsWith('$name/'));
     _samples.removeWhere((key, _) => key.startsWith('$name/'));
+  }
+
+  @override
+  Future<void> renameTopic(String oldName, String newName) async {
+    if (oldName == newName) return;
+    final entry = _topics.remove(oldName);
+    if (entry == null) {
+      throw StateError('Topic "$oldName" does not exist');
+    }
+    if (_topics.containsKey(newName)) {
+      // Put it back so the operation is rolled back.
+      _topics[oldName] = entry;
+      throw StateError('Topic "$newName" already exists');
+    }
+    _topics[newName] = TopicEntry(
+      name: newName,
+      description: entry.description,
+      createdAt: entry.createdAt,
+    );
+    // Move sessions + samples keyed by "oldName/...".
+    final sessionKeys = _sessions.keys
+        .where((k) => k.startsWith('$oldName/'))
+        .toList();
+    for (final k in sessionKeys) {
+      final v = _sessions.remove(k)!;
+      _sessions[k.replaceFirst('$oldName/', '$newName/')] = v;
+    }
+    final sampleKeys = _samples.keys
+        .where((k) => k.startsWith('$oldName/'))
+        .toList();
+    for (final k in sampleKeys) {
+      final v = _samples.remove(k)!;
+      _samples[k.replaceFirst('$oldName/', '$newName/')] = v;
+    }
+  }
+
+  @override
+  Future<void> updateTopicDescription(String name, String? description) async {
+    final entry = _topics[name];
+    if (entry == null) {
+      throw StateError('Topic "$name" does not exist');
+    }
+    _topics[name] = TopicEntry(
+      name: name,
+      description: description,
+      createdAt: entry.createdAt,
+    );
+  }
+
+  @override
+  Future<void> updateSessionMeta(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    String? notes,
+    String? videoFile,
+  }) async {
+    final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
+    final metas = _sessions[key];
+    if (metas == null) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final i = metas.indexWhere((m) => m.sessionId == sessionId);
+    if (i < 0) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final old = metas[i];
+    metas[i] = SessionMeta(
+      sessionId: old.sessionId,
+      topic: old.topic,
+      trialNumber: old.trialNumber,
+      athleteName: old.athleteName,
+      sampleRateHz: old.sampleRateHz,
+      startTime: old.startTime,
+      durationMs: old.durationMs,
+      sampleCount: old.sampleCount,
+      markerCount: old.markerCount,
+      offsetUsLeft: old.offsetUsLeft,
+      offsetUsRight: old.offsetUsRight,
+      driftResidualRmsMsLeft: old.driftResidualRmsMsLeft,
+      driftResidualRmsMsRight: old.driftResidualRmsMsRight,
+      notes: notes,
+      videoFileName: videoFile,
+    );
   }
 
   @override

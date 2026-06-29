@@ -6,6 +6,41 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
+/// Shows a dialog with a single text field pre-filled with [initialValue].
+/// Returns the trimmed text the user entered, or null if cancelled.
+Future<String?> showTextEditDialog(
+  BuildContext context, {
+  required String title,
+  required String label,
+  String? initialValue,
+  String? hint,
+  int maxLines = 1,
+}) {
+  final controller = TextEditingController(text: initialValue ?? '');
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: controller,
+        decoration: InputDecoration(labelText: label, hintText: hint),
+        autofocus: true,
+        maxLines: maxLines,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+}
+
 /// Browse screen: topic → trial → session hierarchy.
 ///
 /// Three-level navigation:
@@ -45,16 +80,77 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
   }
 }
 
-class _TopicListView extends ConsumerWidget {
+class _TopicListView extends ConsumerStatefulWidget {
   const _TopicListView({required this.onTopicTap});
   final ValueChanged<String> onTopicTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TopicListView> createState() => _TopicListViewState();
+}
+
+class _TopicListViewState extends ConsumerState<_TopicListView> {
+  Future<List<TopicEntry>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    _future = ref.read(storageRepositoryProvider).listTopics();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _renameTopic(TopicEntry t) async {
+    final newName = await showTextEditDialog(
+      context,
+      title: 'Rename topic',
+      label: 'Topic name',
+      initialValue: t.name,
+    );
+    if (newName == null || newName.isEmpty || !mounted) return;
+    try {
+      await ref.read(storageRepositoryProvider).renameTopic(t.name, newName);
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Rename failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _editDescription(TopicEntry t) async {
+    final desc = await showTextEditDialog(
+      context,
+      title: 'Edit description',
+      label: 'Description',
+      initialValue: t.description,
+      maxLines: 3,
+    );
+    if (!mounted) return;
+    try {
+      await ref
+          .read(storageRepositoryProvider)
+          .updateTopicDescription(t.name, desc);
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update failed: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Browse')),
       body: FutureBuilder<List<TopicEntry>>(
-        future: ref.read(storageRepositoryProvider).listTopics(),
+        future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -88,8 +184,44 @@ class _TopicListView extends ConsumerWidget {
                   leading: const Icon(Icons.folder_rounded),
                   title: Text(t.name),
                   subtitle: t.description != null ? Text(t.description!) : null,
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => onTopicTap(t.name),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        tooltip: 'Edit topic',
+                        icon: const Icon(Icons.more_vert_rounded),
+                        onSelected: (value) {
+                          if (value == 'rename') {
+                            _renameTopic(t);
+                          } else if (value == 'description') {
+                            _editDescription(t);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'rename',
+                            child: ListTile(
+                              leading: Icon(Icons.drive_file_rename_outline_rounded),
+                              title: Text('Rename'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'description',
+                            child: ListTile(
+                              leading: Icon(Icons.edit_note_rounded),
+                              title: Text('Edit description'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
+                  onTap: () => widget.onTopicTap(t.name),
                 ),
               );
             },
@@ -155,7 +287,7 @@ class _TrialListView extends ConsumerWidget {
   }
 }
 
-class _SessionListView extends ConsumerWidget {
+class _SessionListView extends ConsumerStatefulWidget {
   const _SessionListView({
     required this.topic,
     required this.trialNumber,
@@ -166,18 +298,72 @@ class _SessionListView extends ConsumerWidget {
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SessionListView> createState() => _SessionListViewState();
+}
+
+class _SessionListViewState extends ConsumerState<_SessionListView> {
+  Future<List<SessionMeta>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    _future = ref
+        .read(storageRepositoryProvider)
+        .listSessions(widget.topic, widget.trialNumber);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _editSessionMeta(SessionMeta meta) async {
+    final notes = await showTextEditDialog(
+      context,
+      title: 'Edit notes',
+      label: 'Notes',
+      initialValue: meta.notes,
+      maxLines: 4,
+    );
+    if (!mounted) return;
+    final video = await showTextEditDialog(
+      context,
+      title: 'Video filename',
+      label: 'Video file name',
+      initialValue: meta.videoFileName,
+      hint: 'e.g. run_cam_01.mp4',
+    );
+    if (!mounted) return;
+    try {
+      await ref.read(storageRepositoryProvider).updateSessionMeta(
+            widget.topic,
+            widget.trialNumber,
+            meta.sessionId,
+            notes: notes,
+            videoFile: video,
+          );
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update failed: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('trial_${trialNumber.toString().padLeft(2, '0')}'),
+        title: Text('trial_${widget.trialNumber.toString().padLeft(2, '0')}'),
         leading: IconButton(
-          onPressed: onBack,
+          onPressed: widget.onBack,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
       ),
       body: FutureBuilder<List<SessionMeta>>(
-        future:
-            ref.read(storageRepositoryProvider).listSessions(topic, trialNumber),
+        future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -185,7 +371,7 @@ class _SessionListView extends ConsumerWidget {
           final sessions = snapshot.data ?? [];
           if (sessions.isEmpty) {
             return Center(
-              child: Text('No sessions in trial $trialNumber',
+              child: Text('No sessions in trial ${widget.trialNumber}',
                   style: Theme.of(context).textTheme.bodyMedium),
             );
           }
@@ -200,14 +386,15 @@ class _SessionListView extends ConsumerWidget {
               return SessionListItem(
                 title: meta.sessionId,
                 subtitle:
-                    '$topic · ${dt.toIso8601String().split('T').first}',
+                    '${widget.topic} · ${dt.toIso8601String().split('T').first}',
                 duration: Duration(milliseconds: meta.durationMs),
                 sampleCount: meta.sampleCount,
                 markerCount: meta.markerCount,
                 syncQuality: meta.driftResidualRmsMsLeft != null
                     ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                     : null,
-                onShare: () => _share(context, ref, meta),
+                onShare: () => _share(context, meta),
+                onEdit: () => _editSessionMeta(meta),
               );
             },
           );
@@ -216,13 +403,9 @@ class _SessionListView extends ConsumerWidget {
     );
   }
 
-  Future<void> _share(
-    BuildContext context,
-    WidgetRef ref,
-    SessionMeta meta,
-  ) async {
-    // Share is handled by the export provider; here we just show a snackbar
-    // since share_plus requires a real platform.
+  Future<void> _share(BuildContext context, SessionMeta meta) async {
+    // Share is handled by the export provider (subtask #18); here we just show
+    // a snackbar placeholder until the export wiring lands.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Sharing ${meta.sessionId}...')),
     );

@@ -122,6 +122,108 @@ void main() {
       expect(await storage.listSessions('test', 1), isEmpty);
     });
   });
+
+  group('StorageRepository — rename topic', () {
+    test('renameTopic moves the folder to the new name', () async {
+      await storage.createTopic('old_name', description: 'desc');
+      await storage.saveSession(
+          'old_name', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.renameTopic('old_name', 'new_name');
+
+      final topics = await storage.listTopics();
+      expect(topics.map((t) => t.name).toList(), ['new_name']);
+      expect(topics.first.description, 'desc');
+      // Sessions move with the topic.
+      final sessions = await storage.listSessions('new_name', 1);
+      expect(sessions.length, 1);
+      expect(sessions.first.sessionId, 's1');
+      // Old name no longer exists.
+      expect(await storage.listSessions('old_name', 1), isEmpty);
+    });
+
+    test('renameTopic throws if old name does not exist', () async {
+      expect(
+        () => storage.renameTopic('missing', 'whatever'),
+        throwsStateError,
+      );
+    });
+
+    test('renameTopic throws if new name already exists', () async {
+      await storage.createTopic('a');
+      await storage.createTopic('b');
+      expect(() => storage.renameTopic('a', 'b'), throwsStateError);
+    });
+
+    test('renameTopic with same name is a no-op', () async {
+      await storage.createTopic('same');
+      await storage.renameTopic('same', 'same');
+      final topics = await storage.listTopics();
+      expect(topics.map((t) => t.name).toList(), ['same']);
+    });
+  });
+
+  group('StorageRepository — update topic description', () {
+    test('updateTopicDescription sets the description on an existing topic',
+        () async {
+      await storage.createTopic('test', description: 'old');
+      await storage.updateTopicDescription('test', 'new desc');
+      final topics = await storage.listTopics();
+      expect(topics.first.description, 'new desc');
+    });
+
+    test('updateTopicDescription can clear the description', () async {
+      await storage.createTopic('test', description: 'old');
+      await storage.updateTopicDescription('test', null);
+      final topics = await storage.listTopics();
+      expect(topics.first.description, isNull);
+    });
+
+    test('updateTopicDescription throws if topic does not exist', () async {
+      expect(
+        () => storage.updateTopicDescription('missing', 'x'),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('StorageRepository — update session meta', () {
+    test('updateSessionMeta updates notes + videoFile', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionMeta(
+        'test',
+        1,
+        's1',
+        notes: 'new notes',
+        videoFile: 'clip.mp4',
+      );
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.notes, 'new notes');
+      expect(meta.videoFileName, 'clip.mp4');
+    });
+
+    test('updateSessionMeta preserves other fields', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionMeta('test', 1, 's1', notes: 'only notes');
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.notes, 'only notes');
+      expect(meta.sampleRateHz, 100);
+      expect(meta.durationMs, 1000);
+    });
+
+    test('updateSessionMeta throws if session does not exist', () async {
+      await storage.createTopic('test');
+      expect(
+        () => storage.updateSessionMeta('test', 1, 'nope', notes: 'x'),
+        throwsStateError,
+      );
+    });
+  });
 }
 
 SessionMeta _makeMeta({
