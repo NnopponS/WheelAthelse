@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/live_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Scan + connect screen: lists discovered WheelAthlete devices and shows
@@ -15,17 +16,32 @@ class ConnectPage extends ConsumerWidget {
   const ConnectPage({super.key});
 
   static final Key scanButtonKey = UniqueKey();
+  static final Key liveButtonKey = UniqueKey();
   static Key connectKey(String deviceId) => ValueKey('connect-$deviceId');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(connectionManagerProvider);
     final manager = ref.read(connectionManagerProvider.notifier);
+    final anyConnected =
+        state.bySide.values.any((c) => c.status == ConnectionStatus.connected);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connect Wheels'),
         actions: [
+          IconButton(
+            tooltip: 'Live IMU',
+            key: liveButtonKey,
+            onPressed: anyConnected
+                ? () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LivePage(),
+                      ),
+                    )
+                : null,
+            icon: const Icon(Icons.show_chart_rounded),
+          ),
           IconButton(
             tooltip: 'Refresh',
             onPressed: state.isScanning ? null : () => manager.startScan(),

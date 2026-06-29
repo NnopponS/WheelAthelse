@@ -7,7 +7,7 @@
 | 3 | Firmware: BLE GATT + time-sync support | cpp-coding-standards + tdd-workflow + cpp-testing + gateguard + intent-driven-development + latency-critical-systems | completed | 2026-06-28 | 2026-06-28 | dace23b |
 | 4 | Flutter: design system / theme / components (UI สวย) | impeccable + ui-ux-pro-max | completed | 2026-06-28 | 2026-06-28 | 9583327 |
 | 5 | Flutter: scan + connect 2 devices + state | dart-flutter-patterns + tdd-workflow + gateguard + intent-driven-development + flutter-dart-code-review + verification-loop | completed | 2026-06-29 | 2026-06-29 | 3d132fc |
-| 6 | Flutter: parse packet + realtime display | dart-flutter-patterns | pending | - | - | - |
+| 6 | Flutter: parse packet + realtime display | dart-flutter-patterns + tdd-workflow + gateguard + latency-critical-systems + verification-loop | completed | 2026-06-29 | 2026-06-29 | (see commit) |
 | 7 | Flutter: clock sync engine (offset/drift/common timeline) | dart-flutter-patterns | pending | - | - | - |
 | 8 | Flutter: recording + Mark Event + folder topic/trial | dart-flutter-patterns | pending | - | - | - |
 | 9 | Flutter: CSV export (synced) + folder hierarchy + share | dart-flutter-patterns | pending | - | - | - |
@@ -82,3 +82,34 @@
     hardware — field test is subtask #10).
   - Evidence: docs/testing/subtask-05.tdd.md
   - Next: #6 (parse IMU packet + realtime display) needs #5 connect + #3 firmware.
+- 2026-06-29: subtask #6 done. Parse IMU binary packet + realtime display.
+  - new lib: ble/imu_packet.dart (ImuSample.parse 20B little-endian per §2.1,
+    toReading converts raw→g/dps via DeviceInfo scales §2.3, ImuPacketParser.
+    parseBatch [count][samples] §2.2 with length validation, ImuSeqTracker
+    detects forward gaps + uint32 wrap + cumulative dropCount,
+    parseBatchWithGaps combines both), state/imu_providers.dart
+    (ImuStreamNotifier Riverpod Notifier: subscribes to BleRepository.imuData,
+    parses batches, updates WheelImuState per side with latest ImuReading +
+    sampleCount + dropCount, ref.mounted guards, start/stop methods, error
+    handling stops streaming, stop retains latest for UI), ui/live_page.dart
+    (two _WheelPanel cards with per-side identity colors from design system,
+    6 LiveMetricTile per panel ax/ay/az/gx/gy/gz, sample+drop count stats,
+    single Start/Stop FAB toggles both connected wheels, SingleChildScrollView
+    so both panels always render, static _LiveDot no animation to avoid
+    pumpAndSettle timeout).
+  - modified: ble/ble_repository.dart (+imuData abstract + FlutterBluePlus impl
+    using servicesList+lastValueStream broadcast controller since fbp 2.x
+    deprecated servicesStream + FakeBleRepository.imuData with sync broadcast
+    controllers + imuController test helper), ui/connect_page.dart (+Live IMU
+    AppBar action pushes LivePage when any wheel connected).
+  - bugs caught by TDD: BytesBuilder.add returns void (cascade broke),
+    test gyro scale 1/16384 vs protocol 1/16.4, servicesStream deprecated
+    in fbp 2.x, FloatingActionButton not FilledButton, _LiveDot infinite
+    animation pumpAndSettle timeout, ListView off-screen children not built.
+  - Tests: 46 new (26 imu_packet + 12 imu_providers + 8 live_page) = 145
+    total PASS. flutter analyze clean. Coverage: imu_packet 100%, imu_providers
+    98.4%, live_page 100%, ble_repository 100% testable (adapter excluded).
+  - Build: flutter build apk failed due to malformed NDK download (env issue,
+    not code — delete ndk\28.2.13676358 and re-download).
+  - Evidence: docs/testing/subtask-06.tdd.md
+  - Next: #7 (clock sync engine) needs #6 stream + #3 firmware sync support.

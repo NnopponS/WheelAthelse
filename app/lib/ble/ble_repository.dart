@@ -77,6 +77,14 @@ abstract class BleRepository {
   /// Read the current RSSI for a connected device (used to refresh the
   /// ConnectionCard signal strength). Throws if not connected.
   Future<int> readRssi(String deviceId);
+
+  /// Live IMU Data characteristic notify stream for [deviceId] (§2).
+  ///
+  /// Each event is the raw bytes of one notify payload
+  /// (`[uint8 count][sample_0]...[sample_{count-1}]`). The caller is
+  /// responsible for parsing via [ImuPacketParser]. Throws if [deviceId] is
+  /// not connected.
+  Stream<List<int>> imuData(String deviceId);
 }
 
 // ── flutter_blue_plus implementation ──────────────────────────────────────
@@ -99,6 +107,7 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
   final fbp.Guid _serviceGuid = fbp.Guid(BleUuids.service);
   final fbp.Guid _infoGuid = fbp.Guid(BleUuids.info);
+  final fbp.Guid _imuGuid = fbp.Guid(BleUuids.imuData);
 
   StreamSubscription<List<fbp.ScanResult>>? _scanSub;
   final StreamController<List<ScannedDevice>> _scanController =
@@ -190,6 +199,42 @@ class FlutterBluePlusBleRepository implements BleRepository {
     return device.readRssi();
   }
 
+  @override
+  Stream<List<int>> imuData(String deviceId) {
+    // flutter_blue_plus 2.x removed servicesStream (deprecated → yields []).
+    // Services discovered in connect() are cached on the device object, so we
+    // resolve the IMU Data characteristic from servicesList and forward its
+    // lastValueStream (notify). We use a broadcast controller so the caller
+    // can listen multiple times; the underlying notify stream is already
+    // broadcast.
+    final controller = StreamController<List<int>>.broadcast();
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    () async {
+      try {
+        final services = device.servicesList;
+        final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+        final imuChar = service.characteristics
+            .firstWhere((c) => c.characteristicUuid == _imuGuid);
+        if (!imuChar.isNotifying) {
+          await imuChar.setNotifyValue(true);
+        }
+        final sub = imuChar.lastValueStream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        controller.onCancel = () {
+          sub.cancel();
+          // Leave notify enabled — firmware keeps streaming until STOP cmd.
+        };
+      } on Object catch (e, st) {
+        controller.addError(e, st);
+        await controller.close();
+      }
+    }();
+    return controller.stream;
+  }
+
   // flutter_blue_plus 2.x BluetoothConnectionState only has disconnected /
   // connected (the old connecting/disconnecting values were removed). We map
   // the two remaining values to our coarser enum.
@@ -227,6 +272,7 @@ class FakeBleRepository implements BleRepository {
 
   final _scanController = StreamController<List<ScannedDevice>>.broadcast();
   final _states = <String, StreamController<BleConnectionState>>{};
+  final _imuControllers = <String, StreamController<List<int>>>{};
   bool _scanning = false;
 
   @override
@@ -286,6 +332,21 @@ class FakeBleRepository implements BleRepository {
     final dev = devices.firstWhere((d) => d.id == deviceId);
     return dev.rssi;
   }
+
+  @override
+  Stream<List<int>> imuData(String deviceId) => _imuController(deviceId).stream;
+
+  /// Exposes the IMU notify stream controller for a device so tests can
+  /// inject raw batch bytes. The controller is `sync: true` so events are
+  /// delivered immediately to listeners (no microtask race with test expects).
+  StreamController<List<int>>? imuController(String deviceId) =>
+      _imuControllers[deviceId];
+
+  StreamController<List<int>> _imuController(String deviceId) =>
+      _imuControllers.putIfAbsent(
+        deviceId,
+        () => StreamController<List<int>>.broadcast(sync: true),
+      );
 
   StreamController<BleConnectionState> _stateController(String deviceId) =>
       _states.putIfAbsent(

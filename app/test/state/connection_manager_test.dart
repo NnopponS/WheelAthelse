@@ -238,6 +238,10 @@ class _ThrowingBleRepository implements BleRepository {
 
   @override
   Future<int> readRssi(String deviceId) async => 0;
+
+  @override
+  Stream<List<int>> imuData(String deviceId) =>
+      const Stream<List<int>>.empty();
 }
 
 /// A fake whose scanResults stream emits an error — exercises onError handler.
@@ -269,4 +273,8 @@ class _ErrorScanBleRepository implements BleRepository {
 
   @override
   Future<int> readRssi(String deviceId) async => 0;
+
+  @override
+  Stream<List<int>> imuData(String deviceId) =>
+      const Stream<List<int>>.empty();
 }
