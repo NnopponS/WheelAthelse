@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:wheelathlete/ble/ble_uuids.dart';
+import 'package:wheelathlete/ble/board_config.dart';
 import 'package:wheelathlete/ble/device_info.dart';
 
 /// Coarse BLE link state for one device, mirrored from
@@ -98,6 +99,16 @@ abstract class BleRepository {
   /// The caller encodes the command via `ControlCommand.*`. Throws if
   /// [deviceId] is not connected or the write fails.
   Future<void> writeControl(String deviceId, List<int> bytes);
+
+  /// Live Battery Level stream for [deviceId] (Battery Service 0x180F /
+  /// 0x2A19). Emits the battery percentage (0–100) on each notification.
+  /// Throws if [deviceId] is not connected.
+  Stream<int> batteryLevel(String deviceId);
+
+  /// Reads the Config characteristic (a1b7, 22 bytes) and returns a parsed
+  /// [BoardConfig] with the current board name, wheel side, sample rate,
+  /// and firmware version. Throws if [deviceId] is not connected.
+  Future<BoardConfig> readConfig(String deviceId);
 }
 
 // ── flutter_blue_plus implementation ──────────────────────────────────────
@@ -123,6 +134,9 @@ class FlutterBluePlusBleRepository implements BleRepository {
   final fbp.Guid _imuGuid = fbp.Guid(BleUuids.imuData);
   final fbp.Guid _syncGuid = fbp.Guid(BleUuids.sync);
   final fbp.Guid _controlGuid = fbp.Guid(BleUuids.control);
+  final fbp.Guid _batteryServiceGuid = fbp.Guid(BleUuids.batteryService);
+  final fbp.Guid _batteryLevelGuid = fbp.Guid(BleUuids.batteryLevel);
+  final fbp.Guid _configGuid = fbp.Guid(BleUuids.config);
 
   StreamSubscription<List<fbp.ScanResult>>? _scanSub;
   final StreamController<List<ScannedDevice>> _scanController =
@@ -298,6 +312,40 @@ class FlutterBluePlusBleRepository implements BleRepository {
     await controlChar.write(bytes.toList(), withoutResponse: false);
   }
 
+  @override
+  Stream<int> batteryLevel(String deviceId) {
+    // Resolve the Battery Service (0x180F) + Battery Level char (0x2A19)
+    // from the cached servicesList, enable notify, and forward lastValueStream.
+    final controller = StreamController<int>.broadcast();
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    () async {
+      try {
+        final services = device.servicesList;
+        final batService = services.firstWhere(
+          (s) => s.serviceUuid == _batteryServiceGuid,
+        );
+        final batChar = batService.characteristics
+            .firstWhere((c) => c.characteristicUuid == _batteryLevelGuid);
+        if (!batChar.isNotifying) {
+          await batChar.setNotifyValue(true);
+        }
+        final sub = batChar.lastValueStream.listen(
+          (bytes) {
+            if (bytes.isEmpty) return;
+            controller.add(bytes[0]);
+          },
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        controller.onCancel = () => sub.cancel();
+      } on Object catch (e, st) {
+        controller.addError(e, st);
+        await controller.close();
+      }
+    }();
+    return controller.stream;
+  }
+
   // flutter_blue_plus 2.x BluetoothConnectionState only has disconnected /
   // connected (the old connecting/disconnecting values were removed). We map
   // the two remaining values to our coarser enum.
@@ -306,6 +354,17 @@ class FlutterBluePlusBleRepository implements BleRepository {
         fbp.BluetoothConnectionState.disconnected => BleConnectionState.disconnected,
         fbp.BluetoothConnectionState.connected => BleConnectionState.connected,
       };
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    final device = fbp.BluetoothDevice.fromId(deviceId);
+    final services = device.servicesList;
+    final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+    final configChar = service.characteristics
+        .firstWhere((c) => c.characteristicUuid == _configGuid);
+    final bytes = await configChar.read();
+    return BoardConfig.parse(bytes);
+  }
 }
 // coverage:ignore-end
 
@@ -328,15 +387,21 @@ class FakeBleRepository implements BleRepository {
   FakeBleRepository({
     required this.devices,
     this.infoFor = const {},
+    this.configFor = const {},
   });
 
   final List<FakeDevice> devices;
   final Map<String, DeviceInfo> infoFor;
 
+  /// Seeded Config char payloads (22 bytes) per device id. If a device is
+  /// not in this map, `readConfig` throws.
+  final Map<String, List<int>> configFor;
+
   final _scanController = StreamController<List<ScannedDevice>>.broadcast();
   final _states = <String, StreamController<BleConnectionState>>{};
   final _imuControllers = <String, StreamController<List<int>>>{};
   final _syncControllers = <String, StreamController<List<int>>>{};
+  final _batteryControllers = <String, StreamController<int>>{};
   bool _scanning = false;
 
   @override
@@ -415,6 +480,24 @@ class FakeBleRepository implements BleRepository {
   StreamController<List<int>>? syncController(String deviceId) =>
       _syncControllers[deviceId];
 
+  @override
+  Stream<int> batteryLevel(String deviceId) =>
+      _batteryController(deviceId).stream;
+
+  /// Exposes the Battery Level notify stream controller for a device so tests
+  /// can inject battery percentage values. `sync: true` for immediate delivery.
+  StreamController<int>? batteryController(String deviceId) =>
+      _batteryControllers[deviceId];
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    final bytes = configFor[deviceId];
+    if (bytes == null) {
+      throw StateError('No Config payload seeded for device $deviceId');
+    }
+    return BoardConfig.parse(bytes);
+  }
+
   /// Records the last Control command written for [deviceId] (or null if
   /// none). Tests inspect this to verify the app sent the right bytes.
   List<int>? lastControlWrite(String deviceId) => _lastControlWrites[deviceId];
@@ -436,6 +519,12 @@ class FakeBleRepository implements BleRepository {
       _syncControllers.putIfAbsent(
         deviceId,
         () => StreamController<List<int>>.broadcast(sync: true),
+      );
+
+  StreamController<int> _batteryController(String deviceId) =>
+      _batteryControllers.putIfAbsent(
+        deviceId,
+        () => StreamController<int>.broadcast(sync: true),
       );
 
   StreamController<BleConnectionState> _stateController(String deviceId) =>

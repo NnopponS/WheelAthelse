@@ -31,6 +31,7 @@ class SessionConfig {
     required this.sampleRateHz,
     this.athleteName,
     this.notes,
+    this.utcStartMs,
     DateTime? startTime,
   }) : _startTime = startTime;
 
@@ -48,6 +49,12 @@ class SessionConfig {
 
   /// Optional notes for this session.
   final String? notes;
+
+  /// UTC epoch milliseconds of the scheduled start instant (for camera
+  /// alignment). Computed by the countdown flow as
+  /// `utc_epoch_now + (T_start - now_phone)`. Null when the session was
+  /// started without a countdown (legacy/immediate start).
+  final int? utcStartMs;
 
   final DateTime? _startTime;
 
@@ -84,6 +91,7 @@ class SessionMeta {
     this.driftResidualRmsMsRight,
     this.notes,
     this.videoFileName,
+    this.utcStartMs,
   });
 
   final String sessionId;
@@ -102,6 +110,10 @@ class SessionMeta {
   final String? notes;
   final String? videoFileName;
 
+  /// UTC epoch milliseconds of the scheduled start instant (for camera
+  /// alignment). Null when the session was started without a countdown.
+  final int? utcStartMs;
+
   Map<String, dynamic> toJson() => {
         'session_id': sessionId,
         'topic': topic,
@@ -118,6 +130,7 @@ class SessionMeta {
         'drift_residual_rms_ms_right': driftResidualRmsMsRight,
         'notes': notes,
         'video_file_name': videoFileName,
+        'utc_start_ms': utcStartMs,
       };
 
   factory SessionMeta.fromJson(Map<String, dynamic> json) => SessionMeta(
@@ -138,6 +151,7 @@ class SessionMeta {
             (json['drift_residual_rms_ms_right'] as num?)?.toDouble(),
         notes: json['notes'] as String?,
         videoFileName: json['video_file_name'] as String?,
+        utcStartMs: json['utc_start_ms'] as int?,
       );
 }
 

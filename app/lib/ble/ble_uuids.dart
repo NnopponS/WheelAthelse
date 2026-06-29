@@ -19,12 +19,18 @@ class BleUuids {
       '0000a1b5-0000-1000-8000-00805f9b34fb';
   static const String info =
       '0000a1b6-0000-1000-8000-00805f9b34fb';
+  // ── Config read characteristic (Phase 2 §1.2) ───────────────────────────
+  /// Config characteristic UUID (a1b7) — Read, 22 bytes.
+  /// Layout: [name 16B][wheel_id 1B][rate_hz 2B LE][fw_major 1B][fw_minor 1B][fw_patch 1B]
   static const String config =
       '0000a1b7-0000-1000-8000-00805f9b34fb';
 
-  // ── Standard Battery Service (v1.1.0) ──────────────────────────────────
+  // ── Standard Battery Service (Phase 2 §1) ───────────────────────────────
+  /// Standard BLE Battery Service UUID (0x180F).
   static const String batteryService =
       '0000180f-0000-1000-8000-00805f9b34fb';
+
+  /// Battery Level characteristic UUID (0x2A19) — Notify, uint8 0-100.
   static const String batteryLevel =
       '00002a19-0000-1000-8000-00805f9b34fb';
 

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
+import 'package:wheelathlete/ble/board_config.dart';
 import 'package:wheelathlete/ble/device_info.dart';
 import 'package:wheelathlete/ble/wheel_id.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -40,7 +41,10 @@ void main() {
         ),
       },
     );
-    container = ProviderContainer(overrides: [bleRepositoryProvider.overrideWith((ref) => ble)]);
+    container = ProviderContainer(overrides: [
+      bleRepositoryProvider.overrideWith((ref) => ble),
+      rssiPollIntervalProvider.overrideWith((ref) => null),
+    ]);
     addTearDown(container.dispose);
   });
 
@@ -120,7 +124,10 @@ void main() {
       devices: [const FakeDevice(id: 'X1', name: 'WheelAthlete-?', rssi: -40)],
     );
     final c = ProviderContainer(
-      overrides: [bleRepositoryProvider.overrideWith((ref) => bleNoInfo)],
+      overrides: [
+        bleRepositoryProvider.overrideWith((ref) => bleNoInfo),
+        rssiPollIntervalProvider.overrideWith((ref) => null),
+      ],
     );
     addTearDown(c.dispose);
     final manager = c.read(connectionManagerProvider.notifier);
@@ -249,6 +256,14 @@ class _ThrowingBleRepository implements BleRepository {
 
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {}
+
+  @override
+  Stream<int> batteryLevel(String deviceId) => const Stream<int>.empty();
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    throw UnimplementedError();
+  }
 }
 
 /// A fake whose scanResults stream emits an error — exercises onError handler.
@@ -291,4 +306,12 @@ class _ErrorScanBleRepository implements BleRepository {
 
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {}
+
+  @override
+  Stream<int> batteryLevel(String deviceId) => const Stream<int>.empty();
+
+  @override
+  Future<BoardConfig> readConfig(String deviceId) async {
+    throw UnimplementedError();
+  }
 }

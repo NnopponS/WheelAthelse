@@ -49,7 +49,10 @@ void main() {
       infoFor: const {'L1': _leftInfo},
     );
     container = ProviderContainer(
-      overrides: [bleRepositoryProvider.overrideWith((ref) => ble)],
+      overrides: [
+        bleRepositoryProvider.overrideWith((ref) => ble),
+        rssiPollIntervalProvider.overrideWith((ref) => null),
+      ],
     );
     addTearDown(container.dispose);
   });

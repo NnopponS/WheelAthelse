@@ -248,9 +248,9 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 11 | Battery Service 0x180F + 0x2A19 notify | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-06-29 | 2026-06-29 | b141325 | - |
 | 12 | Board config (name/wheel/rate) + NVS + Config char | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + gateguard | completed | 2026-06-29 | 2026-06-29 | 889792e | - |
 | 13 | SET_UTC + UTC_SET event + START_FIRED UTC stamp | feat/phase2-firmware-issue-1 | #1 | cpp-coding-standards + cpp-testing + tdd-workflow + intent-driven-development | completed | 2026-06-29 | 2026-06-29 | ff86781 | - |
-| 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | pending | - | - | - | - |
-| 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | pending | - | - | - | - |
-| 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | pending | - | - | - | - |
+| 14 | Battery % + RSSI live display after connect | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + flutter-dart-code-review + tdd-workflow + verification-loop | completed | 2026-06-29 | 2026-06-29 | 60bb885 | - |
+| 15 | Board Settings screen (name/wheel/rate) | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + gateguard + verification-loop | completed | 2026-06-29 | 2026-06-29 | 1c8bccd | - |
+| 16 | Record countdown + scheduled start + UTC session stamp | feat/phase2-app-conn-issue-2 | #2 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + intent-driven-development + verification-loop | completed | 2026-06-29 | 2026-06-29 | 238fc33 | - |
 | 17 | Edit folder/topic/session metadata | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 18 | Wire share/export (share_plus + save-to-device) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - | - |
 | 19 | Realtime IMU line charts (fl_chart, per axis) | feat/phase2-app-data-issue-3 | #3 | dart-flutter-patterns + tdd-workflow + latency-critical-systems + verification-loop | pending | - | - | - | - |
@@ -301,3 +301,12 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
   - Tests: 19 new firmware tests (SET_UTC encoding, UTC_SET parsing, extended START_FIRED)
     = 103 total pytest PASS. 298 flutter tests PASS. flutter analyze clean.
     pio run left/right SUCCESS. Protocol doc v1.1.0 §3.1 + §4.4 updated.
+- 2026-06-29: subtask #14 done. Battery % + RSSI live display after connect.
+  - Added standard BLE Battery Service UUIDs (0x180F / 0x2A19) to ble_uuids.dart.
+  - Added `batteryLevel(deviceId)` stream to BleRepository abstract + FlutterBluePlusBleRepository (subscribes to 0x2A19 notify) + FakeBleRepository (sync broadcast controller + batteryController test helper).
+  - Added `batteryPercent` field to WheelConnection with sentinel-based copyWith (can clear to null).
+  - ConnectionManagerNotifier.connect(): reads RSSI immediately via readRssi, subscribes to battery stream (updates batteryPercent on each notify), starts periodic RSSI polling via recursive Future.delayed loop (interval from rssiPollIntervalProvider, default 2s, null in tests to avoid pending timers).
+  - disconnect() + _watchConnection disconnected path: cancels battery sub + RSSI polling via _stopTelemetry.
+  - ConnectPage _ConnectionPair: passes batteryPercent to ConnectionCard (already had the field, just wasn't wired).
+  - rssiPollIntervalProvider added so tests can disable polling (widget tests fail with pending Timer otherwise).
+  - Tests: 14 new (battery UUIDs, FakeBleRepository.batteryLevel, WheelConnection.batteryPercent copyWith, connect sets rssi, battery stream updates, both wheels independent, disconnect clears). 305 total PASS. flutter analyze clean.

@@ -103,6 +103,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       sampleRateHz: config.sampleRateHz,
       athleteName: config.athleteName,
       notes: config.notes,
+      utcStartMs: config.utcStartMs,
       startTime: startTime,
     );
 
@@ -241,6 +242,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       driftResidualRmsMsLeft: leftResidual,
       driftResidualRmsMsRight: rightResidual,
       notes: config.notes,
+      utcStartMs: config.utcStartMs,
     );
 
     // Save to storage.
