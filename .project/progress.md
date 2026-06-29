@@ -259,7 +259,6 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 - 2026-06-29: Phase 2 planned. User decisions: (a) Hybrid UTC — keep phone clock for inter-wheel sync, add UTC start stamp in meta.json for camera alignment; (b) Standard BLE Battery Service 0x180F + 0x2A19; (c) 3 issues grouped by layer (firmware / app-connectivity / app-data), 3 branches, 9 subtasks (#11-#19).
 - Dependency: #14/#15/#16 can start against FakeBleRepository stubs before firmware #11/#12/#13 land. Issue #3 (#17-#19) is independent and can run in parallel.
 - Protocol doc `docs/ble-protocol.md` bumps to v1.1.0 across #12/#13.
-<<<<<<< HEAD
 - 2026-06-29: subtask #11 done (commit b141325). Battery Service 0x180F + 0x2A19:
   - Added standard BLE Battery Service (0x180F) as second GATT service alongside
     custom WheelAthlete service. Multi-service advertising verified (both UUIDs
