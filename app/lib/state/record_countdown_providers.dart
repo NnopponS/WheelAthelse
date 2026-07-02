@@ -96,6 +96,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
   final _startFired = <WheelSide, bool>{};
   SessionConfig? _pendingConfig;
   int? _utcStartMs;
+  int? _utcOffsetMs;
   bool _cancelled = false;
 
   @override
@@ -177,7 +178,13 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       nowPhoneMs: nowPhoneMs,
       tStartPhoneMs: tStartPhoneMs,
     );
+    // The drift-fit timeline uses _tAppRefMs as its origin. utcStartMs is the
+    // UTC instant of the scheduled start, so the offset that converts any
+    // relative synced ms to absolute UTC is utcStartMs - tStartRelMs.
+    final tAppRefMs = sync.tAppRefMs ?? nowPhoneMs;
+    final tStartRelMs = tStartPhoneMs - tAppRefMs;
     _utcStartMs = utcStartMs;
+    _utcOffsetMs = utcStartMs - tStartRelMs;
 
     // 3. Send SET_UTC to every connected wheel.
     for (final side in connectedSides) {
@@ -298,6 +305,9 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     _startFiredSubs.clear();
     if (!ref.mounted || _cancelled || _pendingConfig == null) return;
     state = state.copyWith(status: RecordCountdownStatus.recording);
+    final startTime = _utcStartMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(_utcStartMs!, isUtc: true)
+        : DateTime.now();
     final config = SessionConfig(
       topic: _pendingConfig!.topic,
       trialNumber: _pendingConfig!.trialNumber,
@@ -305,7 +315,8 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       athleteName: _pendingConfig!.athleteName,
       notes: _pendingConfig!.notes,
       utcStartMs: _utcStartMs,
-      startTime: DateTime.now(),
+      utcOffsetMs: _utcOffsetMs,
+      startTime: startTime,
     );
     try {
       await ref.read(recordingProvider.notifier).startRecording(config);
@@ -340,6 +351,8 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       // Best-effort — the wheels may not have started yet.
     }
     if (!ref.mounted) return;
+    _utcStartMs = null;
+    _utcOffsetMs = null;
     state = const RecordCountdownState(status: RecordCountdownStatus.idle);
   }
 
@@ -354,6 +367,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     _cancelled = false;
     _pendingConfig = null;
     _utcStartMs = null;
+    _utcOffsetMs = null;
     state = const RecordCountdownState();
   }
 }

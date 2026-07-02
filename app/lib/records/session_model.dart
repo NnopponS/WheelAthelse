@@ -32,6 +32,8 @@ class SessionConfig {
     this.athleteName,
     this.notes,
     this.utcStartMs,
+    this.utcOffsetMs,
+    this.protocolTemplateId,
     DateTime? startTime,
   }) : _startTime = startTime;
 
@@ -56,7 +58,21 @@ class SessionConfig {
   /// started without a countdown (legacy/immediate start).
   final int? utcStartMs;
 
+  /// Offset in milliseconds to convert relative synced timestamps to absolute
+  /// UTC epoch milliseconds: `timestamp_synced_ms_utc = relativeSyncedMs + offset`.
+  /// Computed as `utcStartMs - tStartRelMs` in the countdown flow. Null for
+  /// legacy/immediate starts where timestamps remain relative.
+  final int? utcOffsetMs;
+
+  /// Optional id of the protocol template this session was recorded under
+  /// (Phase 3, §6). When set, the Experiment tracker dashboard groups this
+  /// session under that template. Null for "Custom" (manual topic) sessions.
+  final String? protocolTemplateId;
+
   final DateTime? _startTime;
+
+  /// Start time of the session, or null if not set.
+  DateTime? get startTime => _startTime;
 
   /// Zero-padded trial folder name (trial_01, trial_02, ..., trial_10).
   String get trialFolderName =>

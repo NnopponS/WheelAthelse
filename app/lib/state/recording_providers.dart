@@ -92,7 +92,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       throw StateError('Already recording');
     }
 
-    final startTime = DateTime.now();
+    final startTime = config.startTime ?? DateTime.now();
     final configWithStart = SessionConfig(
       topic: config.topic,
       trialNumber: config.trialNumber,
@@ -100,6 +100,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       athleteName: config.athleteName,
       notes: config.notes,
       utcStartMs: config.utcStartMs,
+      utcOffsetMs: config.utcOffsetMs,
       startTime: startTime,
     );
 
@@ -147,12 +148,16 @@ class RecordingNotifier extends Notifier<RecordingState> {
 
           final syncState = ref.read(syncEngineProvider);
           final driftFit = syncState.bySide[side]!.driftFit;
+          final utcOffsetMs = state.config?.utcOffsetMs;
 
           for (final sample in result.samples) {
             final reading = sample.toReading(info);
-            final syncedMs = driftFit != null
+            final relativeSyncedMs = driftFit != null
                 ? driftFit.toSyncedMs(sample.tDeviceUs)
                 : sample.tDeviceUs / 1000.0;
+            final syncedMs = utcOffsetMs != null
+                ? relativeSyncedMs + utcOffsetMs
+                : relativeSyncedMs;
             _buffer.add(BufferedSample(
               reading: reading,
               wheel: side,

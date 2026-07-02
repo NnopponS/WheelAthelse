@@ -358,6 +358,36 @@ void main() {
       expect(metas.first.utcStartMs, expectedUtc);
     });
 
+    test('countdown passes utcOffsetMs and UTC startTime to recording config',
+        () async {
+      await pumpProviders();
+      final countdown = container.read(recordCountdownProvider.notifier);
+      const config = SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      );
+      await countdown.start(config);
+      final countdownState = container.read(recordCountdownProvider);
+      expect(countdownState.utcStartMs, isNotNull);
+      expect(countdownState.tStartPhoneMs, isNotNull);
+
+      // Fire START_FIRED to begin recording.
+      ble.syncController('L1')?.add(_startFiredEvent(1000000));
+      ble.syncController('R1')?.add(_startFiredEvent(1000500));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final recState = container.read(recordingProvider);
+      expect(recState.status, RecordingStatus.recording);
+      expect(recState.config!.utcStartMs, countdownState.utcStartMs);
+      expect(recState.config!.utcOffsetMs, isNotNull);
+      expect(recState.config!.startTime, isNotNull);
+      expect(
+        recState.config!.startTime!.toUtc().millisecondsSinceEpoch,
+        countdownState.utcStartMs,
+      );
+    });
+
     test('reset returns to idle from any state', () async {
       await pumpProviders();
       final notifier = container.read(recordCountdownProvider.notifier);
