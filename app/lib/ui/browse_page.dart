@@ -5,6 +5,7 @@ import 'package:wheelathlete/export/export_providers.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/browse_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/tag_editor_dialog.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
@@ -76,6 +77,131 @@ Future<bool> showDeleteConfirmDialog(
   return result ?? false;
 }
 
+/// Empty state shown when a search/filter yields no results but the
+/// underlying list was not empty.
+class _NoResultsState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off_rounded,
+              size: 48, color: Theme.of(context).disabledColor),
+          const SizedBox(height: AppSpacing.md),
+          Text('No results',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          Text('Try a different search or clear the filter.',
+              style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
+/// A fixed search bar shown below the AppBar on Browse list views.
+///
+/// Wires a [TextField] to [browseSearchProvider] with a search icon prefix
+/// and a clear button when the query is non-empty. Filtering is in-memory on
+/// the already-loaded list (no storage change).
+class _SearchBar extends ConsumerStatefulWidget {
+  const _SearchBar({this.hintText = 'Search'});
+
+  final String hintText;
+
+  @override
+  ConsumerState<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends ConsumerState<_SearchBar> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: ref.read(browseSearchProvider),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+        AppSpacing.sm,
+      ),
+      child: TextField(
+        controller: _controller,
+        onChanged: (value) =>
+            ref.read(browseSearchProvider.notifier).set(value),
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _controller.text.isNotEmpty
+              ? IconButton(
+                  onPressed: () {
+                    _controller.clear();
+                    ref.read(browseSearchProvider.notifier).clear();
+                  },
+                  icon: const Icon(Icons.clear_rounded),
+                )
+              : null,
+          border: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(AppRadius.lg)),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal scrollable row of [FilterChip]s showing all unique tags across
+/// the current session list. Tapping a chip toggles [browseTagFilterProvider]
+/// between the tag and `null` (tap again to clear).
+class _TagFilterChips extends ConsumerWidget {
+  const _TagFilterChips({required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(browseTagFilterProvider);
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        itemCount: tags.length,
+        separatorBuilder: (_,_) => const SizedBox(width: AppSpacing.xs),
+        itemBuilder: (context, i) {
+          final tag = tags[i];
+          return FilterChip(
+            label: Text(tag),
+            selected: selected == tag,
+            onSelected: (value) {
+              ref.read(browseTagFilterProvider.notifier).toggle(tag);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// Browse screen: topic → trial → session hierarchy.
 ///
 /// Three-level navigation:
@@ -93,24 +219,41 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
   String? _selectedTopic;
   int? _selectedTrial;
 
+  void _resetSearch() {
+    ref.read(browseSearchProvider.notifier).clear();
+    ref.read(browseTagFilterProvider.notifier).clear();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_selectedTrial != null && _selectedTopic != null) {
       return _SessionListView(
         topic: _selectedTopic!,
         trialNumber: _selectedTrial!,
-        onBack: () => setState(() => _selectedTrial = null),
+        onBack: () {
+          _resetSearch();
+          setState(() => _selectedTrial = null);
+        },
       );
     }
     if (_selectedTopic != null) {
       return _TrialListView(
         topic: _selectedTopic!,
-        onBack: () => setState(() => _selectedTopic = null),
-        onTrialTap: (trial) => setState(() => _selectedTrial = trial),
+        onBack: () {
+          _resetSearch();
+          setState(() => _selectedTopic = null);
+        },
+        onTrialTap: (trial) {
+          _resetSearch();
+          setState(() => _selectedTrial = trial);
+        },
       );
     }
     return _TopicListView(
-      onTopicTap: (topic) => setState(() => _selectedTopic = topic),
+      onTopicTap: (topic) {
+        _resetSearch();
+        setState(() => _selectedTopic = topic);
+      },
     );
   }
 }
@@ -211,6 +354,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
 
   @override
   Widget build(BuildContext context) {
+    final searchQuery = ref.watch(browseSearchProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Browse')),
       body: FutureBuilder<List<TopicEntry>>(
@@ -219,8 +363,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final topics = snapshot.data ?? [];
-          if (topics.isEmpty) {
+          final allTopics = snapshot.data ?? [];
+          if (allTopics.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -237,71 +381,98 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
               ),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: topics.length,
-            separatorBuilder: (_,_) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, i) {
-              final t = topics[i];
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.folder_rounded),
-                  title: Text(t.name),
-                  subtitle: t.description != null ? Text(t.description!) : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PopupMenuButton<String>(
-                        tooltip: 'Edit topic',
-                        icon: const Icon(Icons.more_vert_rounded),
-                        onSelected: (value) {
-                          if (value == 'rename') {
-                            _renameTopic(t);
-                          } else if (value == 'description') {
-                            _editDescription(t);
-                          } else if (value == 'delete') {
-                            _deleteTopic(t);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'rename',
-                            child: ListTile(
-                              leading: Icon(Icons.drive_file_rename_outline_rounded),
-                              title: Text('Rename'),
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
+          // In-memory filter by name (case-insensitive substring).
+          final q = searchQuery.toLowerCase();
+          final topics = q.isEmpty
+              ? allTopics
+              : allTopics
+                  .where((t) => t.name.toLowerCase().contains(q))
+                  .toList();
+          if (topics.isEmpty) {
+            return Column(
+              children: [
+                const _SearchBar(hintText: 'Search topics'),
+                Expanded(child: _NoResultsState()),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              const _SearchBar(hintText: 'Search topics'),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                  itemCount: topics.length,
+                  separatorBuilder: (_,_) =>
+                      const SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, i) {
+                    final t = topics[i];
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.folder_rounded),
+                        title: Text(t.name),
+                        subtitle: t.description != null
+                            ? Text(t.description!)
+                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PopupMenuButton<String>(
+                              tooltip: 'Edit topic',
+                              icon: const Icon(Icons.more_vert_rounded),
+                              onSelected: (value) {
+                                if (value == 'rename') {
+                                  _renameTopic(t);
+                                } else if (value == 'description') {
+                                  _editDescription(t);
+                                } else if (value == 'delete') {
+                                  _deleteTopic(t);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'rename',
+                                  child: ListTile(
+                                    leading:
+                                        Icon(Icons.drive_file_rename_outline_rounded),
+                                    title: Text('Rename'),
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'description',
+                                  child: ListTile(
+                                    leading: Icon(Icons.edit_note_rounded),
+                                    title: Text('Edit description'),
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: ListTile(
+                                    leading: Icon(Icons.delete_outline_rounded,
+                                        color: Colors.red),
+                                    title: Text('Delete',
+                                        style: TextStyle(color: Colors.red)),
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'description',
-                            child: ListTile(
-                              leading: Icon(Icons.edit_note_rounded),
-                              title: Text('Edit description'),
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: ListTile(
-                              leading: Icon(Icons.delete_outline_rounded,
-                                  color: Colors.red),
-                              title: Text('Delete',
-                                  style: TextStyle(color: Colors.red)),
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                            ),
-                          ),
-                        ],
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                        onTap: () => widget.onTopicTap(t.name),
                       ),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
-                  ),
-                  onTap: () => widget.onTopicTap(t.name),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ],
           );
         },
       ),
@@ -636,6 +807,8 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
   @override
   Widget build(BuildContext context) {
     final exportState = ref.watch(exportProvider);
+    final searchQuery = ref.watch(browseSearchProvider);
+    final tagFilter = ref.watch(browseTagFilterProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text('trial_${widget.trialNumber.toString().padLeft(2, '0')}'),
@@ -666,43 +839,82 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final sessions = snapshot.data ?? [];
-          if (sessions.isEmpty) {
+          final allSessions = snapshot.data ?? [];
+          if (allSessions.isEmpty) {
             return Center(
               child: Text('No sessions in trial ${widget.trialNumber}',
                   style: Theme.of(context).textTheme.bodyMedium),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: sessions.length,
-            separatorBuilder: (_,_) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, i) {
-              final meta = sessions[i];
-              final dt = DateTime.fromMillisecondsSinceEpoch(
-                  meta.startTime.millisecondsSinceEpoch);
-              return SessionListItem(
-                title: meta.sessionId,
-                subtitle:
-                    '${widget.topic} · ${dt.toIso8601String().split('T').first}',
-                duration: Duration(milliseconds: meta.durationMs),
-                sampleCount: meta.sampleCount,
-                markerCount: meta.markerCount,
-                syncQuality: meta.driftResidualRmsMsLeft != null
-                    ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
-                    : null,
-                tags: meta.tags,
-                onShare: exportState.isExporting
-                    ? null
-                    : () => _shareSession(meta),
-                onSave: exportState.isExporting
-                    ? null
-                    : () => _saveSessionToDevice(meta),
-                onEdit: () => _editSessionMeta(meta),
-                onEditTags: () => _editTags(meta),
-                onDelete: () => _deleteSession(meta),
-              );
-            },
+          // Collect unique tags across the current (unfiltered) session list.
+          final allTags = <String>{};
+          for (final s in allSessions) {
+            allTags.addAll(s.tags);
+          }
+          final sortedTags = allTags.toList()..sort();
+
+          // In-memory filter: search (ID, notes, date ISO, tags) AND tag filter.
+          final q = searchQuery.toLowerCase();
+          final sessions = allSessions.where((meta) {
+            final matchesSearch = q.isEmpty ||
+                meta.sessionId.toLowerCase().contains(q) ||
+                (meta.notes?.toLowerCase().contains(q) ?? false) ||
+                meta.startTime.toIso8601String().toLowerCase().contains(q) ||
+                meta.tags.any((t) => t.toLowerCase().contains(q));
+            final matchesTag =
+                tagFilter == null || meta.tags.contains(tagFilter);
+            return matchesSearch && matchesTag;
+          }).toList();
+
+          if (sessions.isEmpty) {
+            return Column(
+              children: [
+                const _SearchBar(hintText: 'Search sessions'),
+                if (sortedTags.isNotEmpty) _TagFilterChips(tags: sortedTags),
+                Expanded(child: _NoResultsState()),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              const _SearchBar(hintText: 'Search sessions'),
+              if (sortedTags.isNotEmpty) _TagFilterChips(tags: sortedTags),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                  itemCount: sessions.length,
+                  separatorBuilder: (_,_) =>
+                      const SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, i) {
+                    final meta = sessions[i];
+                    final dt = DateTime.fromMillisecondsSinceEpoch(
+                        meta.startTime.millisecondsSinceEpoch);
+                    return SessionListItem(
+                      title: meta.sessionId,
+                      subtitle:
+                          '${widget.topic} · ${dt.toIso8601String().split('T').first}',
+                      duration: Duration(milliseconds: meta.durationMs),
+                      sampleCount: meta.sampleCount,
+                      markerCount: meta.markerCount,
+                      syncQuality: meta.driftResidualRmsMsLeft != null
+                          ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
+                          : null,
+                      tags: meta.tags,
+                      onShare: exportState.isExporting
+                          ? null
+                          : () => _shareSession(meta),
+                      onSave: exportState.isExporting
+                          ? null
+                          : () => _saveSessionToDevice(meta),
+                      onEdit: () => _editSessionMeta(meta),
+                      onEditTags: () => _editTags(meta),
+                      onDelete: () => _deleteSession(meta),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
