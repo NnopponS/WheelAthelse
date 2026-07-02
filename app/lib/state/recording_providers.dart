@@ -19,8 +19,6 @@ class RecordingState {
     this.config,
     this.startTime,
     this.sampleCount = 0,
-    this.markerCount = 0,
-    this.markers = const [],
     this.savedSessionId,
     this.error,
   });
@@ -29,8 +27,6 @@ class RecordingState {
   final SessionConfig? config;
   final DateTime? startTime;
   final int sampleCount;
-  final int markerCount;
-  final List<MarkerEvent> markers;
   final String? savedSessionId;
   final String? error;
 
@@ -39,8 +35,6 @@ class RecordingState {
     SessionConfig? config,
     DateTime? startTime,
     int? sampleCount,
-    int? markerCount,
-    List<MarkerEvent>? markers,
     Object? savedSessionId = _unset,
     Object? error = _unset,
   }) =>
@@ -49,8 +43,6 @@ class RecordingState {
         config: config ?? this.config,
         startTime: startTime ?? this.startTime,
         sampleCount: sampleCount ?? this.sampleCount,
-        markerCount: markerCount ?? this.markerCount,
-        markers: markers ?? this.markers,
         savedSessionId: identical(savedSessionId, _unset)
             ? this.savedSessionId
             : savedSessionId as String?,
@@ -61,19 +53,22 @@ class RecordingState {
 }
 
 /// Orchestrates a recording session: start/stop IMU streaming on both wheels,
-/// buffer samples with synced timestamps, record Mark Events, and save the
-/// session (meta + samples) to the storage repository on stop.
+/// buffer samples with synced timestamps, and save the session (meta +
+/// samples) to the storage repository on stop.
 ///
 /// State machine:
 /// - idle → startRecording → recording (streams IMU, buffers samples)
-/// - recording → markEvent → recording (records marker, flags next batch)
 /// - recording → stopRecording → stopped (saves to storage, stops streams)
 /// - stopped → reset → idle (clears state for next session)
+///
+/// The Mark Event function was removed in Phase 3 (D16) — IMU data is now
+/// synced with camera video in post-processing. The CSV `marker` column is
+/// kept for backward compatibility but is always `0`/`false` for new
+/// recordings ([BufferedSample.marker] defaults to `false`).
 class RecordingNotifier extends Notifier<RecordingState> {
   final _buffer = <BufferedSample>[];
   final _subs = <WheelSide, StreamSubscription<List<int>>>{};
   final _trackers = <WheelSide, ImuSeqTracker>{};
-  bool _markNextBatch = false;
 
   @override
   RecordingState build() {
@@ -109,7 +104,6 @@ class RecordingNotifier extends Notifier<RecordingState> {
     );
 
     _buffer.clear();
-    _markNextBatch = false;
     state = RecordingState(
       status: RecordingStatus.recording,
       config: configWithStart,
@@ -150,8 +144,6 @@ class RecordingNotifier extends Notifier<RecordingState> {
           final tracker = _trackers[side]!;
           final result = ImuPacketParser.parseBatchWithGaps(bytes, tracker);
           final nowMs = DateTime.now().millisecondsSinceEpoch;
-          final marker = _markNextBatch;
-          _markNextBatch = false;
 
           final syncState = ref.read(syncEngineProvider);
           final driftFit = syncState.bySide[side]!.driftFit;
@@ -166,7 +158,6 @@ class RecordingNotifier extends Notifier<RecordingState> {
               wheel: side,
               timestampAppMs: nowMs,
               timestampSyncedMs: syncedMs,
-              marker: marker,
             ));
           }
 
@@ -181,28 +172,6 @@ class RecordingNotifier extends Notifier<RecordingState> {
         if (!ref.mounted) return;
         state = state.copyWith(error: 'IMU stream error: $e');
       },
-    );
-  }
-
-  /// Drops a sync marker at the current time. The next batch of IMU samples
-  /// will have `marker=true` in their [BufferedSample]. Throws if not
-  /// recording.
-  Future<void> markEvent({String label = ''}) async {
-    if (state.status != RecordingStatus.recording) {
-      throw StateError('Not recording');
-    }
-    final now = DateTime.now();
-    final offsetMs = now.millisecondsSinceEpoch -
-        (state.startTime?.millisecondsSinceEpoch ?? now.millisecondsSinceEpoch);
-    final marker = MarkerEvent(
-      timestampAppMs: now.millisecondsSinceEpoch,
-      offsetFromStartMs: offsetMs,
-      label: label,
-    );
-    _markNextBatch = true;
-    state = state.copyWith(
-      markerCount: state.markerCount + 1,
-      markers: [...state.markers, marker],
     );
   }
 
@@ -247,7 +216,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       startTime: startTime,
       durationMs: durationMs,
       sampleCount: _buffer.length,
-      markerCount: state.markerCount,
+      markerCount: 0,
       offsetUsLeft: leftOffset,
       offsetUsRight: rightOffset,
       driftResidualRmsMsLeft: leftResidual,
@@ -270,7 +239,6 @@ class RecordingNotifier extends Notifier<RecordingState> {
   /// remains in storage.
   void reset() {
     _buffer.clear();
-    _markNextBatch = false;
     state = const RecordingState();
   }
 }

@@ -99,7 +99,6 @@ void main() {
       expect(state.status, RecordingStatus.idle);
       expect(state.config, isNull);
       expect(state.sampleCount, 0);
-      expect(state.markerCount, 0);
     });
 
     test('startRecording sets status to recording + stores config', () async {
@@ -179,30 +178,16 @@ void main() {
       expect(state.sampleCount, greaterThan(0));
     });
 
-    test('markEvent increments markerCount + records marker', () async {
-      await pumpProviders();
-      await storage.createTopic('sprint_test');
-      final notifier = container.read(recordingProvider.notifier);
-      await notifier.startRecording(const SessionConfig(
-        topic: 'sprint_test',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      ));
-
-      await notifier.markEvent(label: 'push-off');
-
-      final state = container.read(recordingProvider);
-      expect(state.markerCount, 1);
-      expect(state.markers.length, 1);
-      expect(state.markers.first.label, 'push-off');
-    });
-
-    test('markEvent throws if not recording', () async {
+    test('markEvent is no longer exposed by RecordingNotifier', () async {
       await pumpProviders();
       final notifier = container.read(recordingProvider.notifier);
+      // The Mark Event function was removed from the recording UI (Phase 3,
+      // D16). The notifier must no longer expose a markEvent method —
+      // invoking it via dynamic dispatch throws a NoSuchMethodError.
+      final dynamic dyn = notifier;
       expect(
-        () => notifier.markEvent(),
-        throwsStateError,
+        () => dyn.markEvent(),
+        throwsNoSuchMethodError,
       );
     });
 
@@ -278,31 +263,7 @@ void main() {
       expect(state.status, RecordingStatus.idle);
       expect(state.config, isNull);
       expect(state.sampleCount, 0);
-      expect(state.markerCount, 0);
       expect(state.savedSessionId, isNull);
-    });
-
-    test('markEvent sets marker flag on next batch of samples', () async {
-      await pumpProviders();
-      await storage.createTopic('sprint_test');
-      final notifier = container.read(recordingProvider.notifier);
-      await notifier.startRecording(const SessionConfig(
-        topic: 'sprint_test',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      ));
-
-      // Mark event, then emit a batch — those samples should have marker=true.
-      await notifier.markEvent();
-      ble.imuController('L1')!.add(_batch([
-        _sample(seq: 0, tDeviceUs: 1000),
-      ]));
-      await Future<void>.delayed(Duration.zero);
-
-      // The buffered samples should have marker=true on the batch that
-      // arrived right after the mark. We can't directly inspect the buffer,
-      // but we can verify the marker was recorded.
-      expect(container.read(recordingProvider).markerCount, 1);
     });
   });
 }

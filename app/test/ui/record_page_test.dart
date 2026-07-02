@@ -194,7 +194,7 @@ void main() {
     // The following tests exercise the recording-state UI by driving the
     // RecordingNotifier directly (bypassing the countdown) so the UI under
     // test is stable without real timers.
-    testWidgets('shows stop button + mark event button while recording',
+    testWidgets('shows stop button while recording (no MARK button)',
         (tester) async {
       await pumpPage(tester);
       await tester.runAsync(() async {
@@ -208,25 +208,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Stop Recording'), findsOneWidget);
-      expect(find.text('MARK'), findsOneWidget);
-    });
-
-    testWidgets('tapping mark event increments marker count', (tester) async {
-      await pumpPage(tester);
-      await tester.runAsync(() async {
-        const config = SessionConfig(
-          topic: 'sprint_test',
-          trialNumber: 1,
-          sampleRateHz: 100,
-        );
-        await container.read(recordingProvider.notifier).startRecording(config);
-      });
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('MARK'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('1 marker'), findsOneWidget);
+      // Mark Event was removed from the recording UI (Phase 3, D16).
+      expect(find.text('MARK'), findsNothing);
+      expect(find.byIcon(Icons.flag_rounded), findsNothing);
     });
 
     testWidgets('tapping stop button stops recording + shows saved message',
