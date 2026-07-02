@@ -152,6 +152,53 @@ void main() {
       expect(rightWrite![0], ControlCommandId.start);
     });
 
+    test('scheduled start aligns to next whole second', () async {
+      // Use a 1-second countdown so the final start instant is still a whole
+      // second (production uses 5 seconds, which is also a whole second).
+      storage = InMemoryStorageRepository();
+      ble = FakeBleRepository(
+        devices: [
+          const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+          const FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
+        ],
+        infoFor: const {'L1': _leftInfo, 'R1': _rightInfo},
+      );
+      container = ProviderContainer(
+        overrides: [
+          bleRepositoryProvider.overrideWith((ref) => ble),
+          storageRepositoryProvider.overrideWith((ref) => storage),
+          rssiPollIntervalProvider.overrideWith((ref) => null),
+          countdownDurationProvider.overrideWith((ref) => const Duration(seconds: 1)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(connectionManagerProvider.notifier).connect('L1');
+      await container.read(connectionManagerProvider.notifier).connect('R1');
+      await storage.createTopic('sprint_test');
+
+      final notifier = container.read(recordCountdownProvider.notifier);
+      const config = SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      );
+      final countdownMs = container.read(countdownDurationProvider).inMilliseconds;
+      final beforeMs = DateTime.now().millisecondsSinceEpoch;
+      await notifier.start(config);
+      final afterMs = DateTime.now().millisecondsSinceEpoch;
+
+      final state = container.read(recordCountdownProvider);
+      final tStart = state.tStartPhoneMs!;
+      expect(tStart % 1000, 0, reason: 'T_start must land on a whole second');
+      final delayMs = tStart - beforeMs;
+      expect(
+        delayMs,
+        inInclusiveRange(countdownMs, countdownMs + 1000),
+        reason: 'delay is [countdown, countdown + 1s)',
+      );
+      expect(afterMs, lessThan(tStart), reason: 'T_start is in the future');
+    });
+
     test('START_FIRED from both wheels transitions to recording', () async {
       await pumpProviders();
       final notifier = container.read(recordCountdownProvider.notifier);

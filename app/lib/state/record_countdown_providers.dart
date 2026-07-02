@@ -168,7 +168,10 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     final nowPhoneMs = DateTime.now().millisecondsSinceEpoch;
     final utcEpochNowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
     final countdownMs = ref.read(countdownDurationProvider).inMilliseconds;
-    final tStartPhoneMs = nowPhoneMs + countdownMs;
+    // Align to the next whole second before the countdown begins so the
+    // scheduled start always lands on a .000 boundary (camera sync).
+    final nextWholeSecondMs = ((nowPhoneMs + 999) ~/ 1000) * 1000;
+    final tStartPhoneMs = nextWholeSecondMs + countdownMs;
     final utcStartMs = computeUtcStartMs(
       utcEpochNowMs: utcEpochNowMs,
       nowPhoneMs: nowPhoneMs,
