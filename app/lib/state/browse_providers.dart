@@ -50,3 +50,25 @@ final browseTagFilterProvider =
     NotifierProvider<BrowseTagFilterNotifier, String?>(
   BrowseTagFilterNotifier.new,
 );
+
+/// Shared topic to open in the Browse tab (Phase 3, §8 Experiment tracker).
+///
+/// The Experiment tracker dashboard sets this before switching to the Browse
+/// tab (index 2); [BrowsePage] reads it on init to pre-select that topic, then
+/// clears it. Using a shared provider keeps the cross-tab navigation decoupled —
+/// the dashboard does not need a direct reference to the Browse page's state.
+class SelectedTopicNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  /// Sets the topic to open in Browse.
+  void set(String? topic) => state = topic;
+
+  /// Clears the pending topic (call after Browse has consumed it).
+  void clear() => state = null;
+}
+
+final selectedTopicProvider =
+    NotifierProvider<SelectedTopicNotifier, String?>(
+  SelectedTopicNotifier.new,
+);

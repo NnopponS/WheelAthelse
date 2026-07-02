@@ -219,6 +219,21 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
   String? _selectedTopic;
   int? _selectedTrial;
 
+  @override
+  void initState() {
+    super.initState();
+    // Consume a pending topic set by the Experiment tracker dashboard (Phase 3,
+    // §8) on the first frame (e.g. when the app starts with a pending topic).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final pending = ref.read(selectedTopicProvider);
+      if (pending != null) {
+        ref.read(selectedTopicProvider.notifier).clear();
+        setState(() => _selectedTopic = pending);
+      }
+    });
+  }
+
   void _resetSearch() {
     ref.read(browseSearchProvider.notifier).clear();
     ref.read(browseTagFilterProvider.notifier).clear();
@@ -226,6 +241,21 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for cross-tab navigation from the Experiment tracker. Because
+    // BrowsePage stays alive inside IndexedStack, this listener fires even when
+    // the Browse tab is not currently visible — pre-selecting the topic so it's
+    // ready when the user switches over.
+    ref.listen<String?>(selectedTopicProvider, (previous, next) {
+      if (next != null && next != _selectedTopic) {
+        ref.read(selectedTopicProvider.notifier).clear();
+        _resetSearch();
+        setState(() {
+          _selectedTopic = next;
+          _selectedTrial = null;
+        });
+      }
+    });
+
     if (_selectedTrial != null && _selectedTopic != null) {
       return _SessionListView(
         topic: _selectedTopic!,
