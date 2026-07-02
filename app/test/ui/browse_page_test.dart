@@ -245,8 +245,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Rename topic'), findsOneWidget);
-      // Enter a new name and save.
-      await tester.enterText(find.byType(TextField), 'renamed_topic');
+      // Enter a new name and save — target the dialog's TextField (not the
+      // search bar) by finding it as a descendant of the AlertDialog.
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'renamed_topic',
+      );
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -267,7 +274,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Edit description'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'a sprint session');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'a sprint session',
+      );
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -288,6 +301,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
       await tester.pumpAndSettle();
       expect(find.text('Edit notes / video'), findsOneWidget);
+      expect(find.text('Edit tags'), findsOneWidget);
     });
 
     testWidgets('edit session meta updates notes + videoFile', (tester) async {
@@ -304,13 +318,25 @@ void main() {
 
       // First dialog: notes.
       expect(find.text('Edit notes'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'updated notes');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'updated notes',
+      );
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
       // Second dialog: video filename.
       expect(find.text('Video filename'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'cam_01.mp4');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'cam_01.mp4',
+      );
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -318,6 +344,36 @@ void main() {
       expect(meta, isNotNull);
       expect(meta!.notes, 'updated notes');
       expect(meta.videoFileName, 'cam_01.mp4');
+    });
+
+    testWidgets('edit tags opens TagEditorDialog and saves tags', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit tags'));
+      await tester.pumpAndSettle();
+
+      // Tag editor dialog is open — find the TextField inside the dialog
+      // (not the search bar that lives on the session list underneath).
+      final dialogTextField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      expect(dialogTextField, findsOneWidget);
+      await tester.enterText(dialogTextField, 'good-take');
+      await tester.tap(find.widgetWithText(TextButton, 'Add'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final meta = await storage.readSessionMeta('sprint_test', 1, 'abc123');
+      expect(meta, isNotNull);
+      expect(meta!.tags, contains('good-take'));
     });
   });
 
@@ -550,6 +606,300 @@ void main() {
       expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
       final sessions = await storage.listSessions('sprint_test', 1);
       expect(sessions.length, 1);
+    });
+  });
+
+  group('BrowsePage — search/filter', () {
+    /// Builds a [SessionMeta] with explicit tags + notes for search/filter tests.
+    SessionMeta searchMeta({
+      required String id,
+      String notes = 'test session',
+      List<String> tags = const [],
+    }) =>
+        SessionMeta(
+          sessionId: id,
+          topic: 'sprint_test',
+          trialNumber: 1,
+          athleteName: 'athlete_A',
+          sampleRateHz: 100,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
+          durationMs: 5000,
+          sampleCount: 2,
+          markerCount: 1,
+          notes: notes,
+          tags: tags,
+        );
+
+    /// Storage with two topics + three tagged sessions in one trial.
+    Future<InMemoryStorageRepository> searchStorage() async {
+      final s = InMemoryStorageRepository();
+      await s.createTopic('sprint_test');
+      await s.createTopic('balance_test');
+      await s.saveSession(
+        'sprint_test',
+        searchMeta(id: 'aaa111', notes: 'good run', tags: ['good', 'morning']),
+        _samples(),
+      );
+      await s.saveSession(
+        'sprint_test',
+        searchMeta(id: 'bbb222', notes: 'bad take', tags: ['bad-take']),
+        _samples(),
+      );
+      await s.saveSession(
+        'sprint_test',
+        searchMeta(id: 'ccc333', notes: 'athlete A morning', tags: ['morning']),
+        _samples(),
+      );
+      return s;
+    }
+
+    Future<void> pumpSearchPage(
+      WidgetTester tester,
+      ProviderContainer c,
+    ) async {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: c,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            home: const BrowsePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('topic search bar filters topics by name (case-insensitive)',
+        (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      // Both topics visible initially.
+      expect(find.text('sprint_test'), findsOneWidget);
+      expect(find.text('balance_test'), findsOneWidget);
+
+      // Type "SPRINT" (uppercase) — only sprint_test should match.
+      await tester.enterText(find.byType(TextField), 'SPRINT');
+      await tester.pumpAndSettle();
+      expect(find.text('sprint_test'), findsOneWidget);
+      expect(find.text('balance_test'), findsNothing);
+    });
+
+    testWidgets('empty search shows all topics', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      // Enter then clear the search field.
+      await tester.enterText(find.byType(TextField), 'sprint');
+      await tester.pumpAndSettle();
+      expect(find.text('balance_test'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+      expect(find.text('sprint_test'), findsOneWidget);
+      expect(find.text('balance_test'), findsOneWidget);
+    });
+
+    testWidgets('topic search shows no-results state', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.enterText(find.byType(TextField), 'zzz_nomatch');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No results'), findsOneWidget);
+    });
+
+    testWidgets('session search bar filters by session ID', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      // Navigate to session list.
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Three sessions visible initially.
+      expect(find.text('aaa111'), findsOneWidget);
+      expect(find.text('bbb222'), findsOneWidget);
+      expect(find.text('ccc333'), findsOneWidget);
+
+      // Search by session ID.
+      await tester.enterText(find.byType(TextField), 'bbb');
+      await tester.pumpAndSettle();
+      expect(find.text('bbb222'), findsOneWidget);
+      expect(find.text('aaa111'), findsNothing);
+      expect(find.text('ccc333'), findsNothing);
+    });
+
+    testWidgets('session search filters by notes', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Search by a word in the notes.
+      await tester.enterText(find.byType(TextField), 'good run');
+      await tester.pumpAndSettle();
+      expect(find.text('aaa111'), findsOneWidget);
+      expect(find.text('bbb222'), findsNothing);
+      expect(find.text('ccc333'), findsNothing);
+    });
+
+    testWidgets('session search filters by tags', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Search by a tag value — "bad-take" is a tag on bbb222.
+      await tester.enterText(find.byType(TextField), 'bad-take');
+      await tester.pumpAndSettle();
+      expect(find.text('bbb222'), findsOneWidget);
+      expect(find.text('aaa111'), findsNothing);
+      expect(find.text('ccc333'), findsNothing);
+    });
+
+    testWidgets('tag filter chips appear with unique tags', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Unique tags across the 3 sessions: good, morning, bad-take.
+      expect(find.byType(FilterChip), findsNWidgets(3));
+      expect(find.widgetWithText(FilterChip, 'good'), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, 'morning'), findsOneWidget);
+      expect(find.widgetWithText(FilterChip, 'bad-take'), findsOneWidget);
+    });
+
+    testWidgets('tapping a tag chip filters sessions', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Tap the "morning" chip — aaa111 + ccc333 have it.
+      await tester.tap(find.widgetWithText(FilterChip, 'morning'));
+      await tester.pumpAndSettle();
+      expect(find.text('aaa111'), findsOneWidget);
+      expect(find.text('ccc333'), findsOneWidget);
+      expect(find.text('bbb222'), findsNothing);
+    });
+
+    testWidgets('tapping a tag chip again clears the filter', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Select then deselect the "morning" chip.
+      await tester.tap(find.widgetWithText(FilterChip, 'morning'));
+      await tester.pumpAndSettle();
+      expect(find.text('bbb222'), findsNothing);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'morning'));
+      await tester.pumpAndSettle();
+      expect(find.text('aaa111'), findsOneWidget);
+      expect(find.text('bbb222'), findsOneWidget);
+      expect(find.text('ccc333'), findsOneWidget);
+    });
+
+    testWidgets('search + tag filter work together (AND logic)',
+        (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Tag filter: morning → aaa111 + ccc333.
+      await tester.tap(find.widgetWithText(FilterChip, 'morning'));
+      await tester.pumpAndSettle();
+
+      // Search: "athlete" → only ccc333 notes contain "athlete".
+      await tester.enterText(find.byType(TextField), 'athlete');
+      await tester.pumpAndSettle();
+
+      expect(find.text('ccc333'), findsOneWidget);
+      expect(find.text('aaa111'), findsNothing);
+      expect(find.text('bbb222'), findsNothing);
+    });
+
+    testWidgets('session search shows no-results state', (tester) async {
+      final s = await searchStorage();
+      final c = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
+      );
+      addTearDown(c.dispose);
+      await pumpSearchPage(tester, c);
+
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'zzz_nomatch');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No results'), findsOneWidget);
     });
   });
 }

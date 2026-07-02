@@ -90,6 +90,19 @@ abstract class StorageRepository {
     String? videoFile,
   });
 
+  /// Updates the tags on a session's metadata. Replaces the existing tag list
+  /// entirely. Other fields are preserved. Throws if the session doesn't exist.
+  Future<void> updateSessionTags(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<String> tags,
+  );
+
+  /// Returns a flat list of all session metas across every topic and trial.
+  /// Used by the Browse search/filter and the Experiment tracker dashboard.
+  Future<List<SessionMeta>> listAllSessions();
+
   /// Reads the samples for a session, or empty list if not found.
   Future<List<BufferedSample>> readSamples(
     String topic,
@@ -349,6 +362,49 @@ class PathProviderStorageRepository implements StorageRepository {
   }
 
   @override
+  Future<void> updateSessionTags(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<String> tags,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    final metaFile = File('${trialDir.path}/session_${sessionId}_meta.json');
+    if (!metaFile.existsSync()) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final json =
+        jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+    json['tags'] = tags;
+    metaFile.writeAsStringSync(jsonEncode(json));
+  }
+
+  @override
+  Future<List<SessionMeta>> listAllSessions() async {
+    final root = await _rootDir();
+    final all = <SessionMeta>[];
+    for (final entity in root.listSync()) {
+      if (entity is! Directory) continue;
+      final topicName = entity.path.split(Platform.pathSeparator).last;
+      if (topicName.startsWith('.')) continue;
+      for (final trialEntity in entity.listSync()) {
+        if (trialEntity is! Directory) continue;
+        for (final file in trialEntity.listSync()) {
+          if (file is File && file.path.endsWith('_meta.json')) {
+            final json =
+                jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+            all.add(SessionMeta.fromJson(json));
+          }
+        }
+      }
+    }
+    return all;
+  }
+
+  @override
   Future<List<BufferedSample>> readSamples(
     String topic,
     int trialNumber,
@@ -572,7 +628,62 @@ class InMemoryStorageRepository implements StorageRepository {
       driftResidualRmsMsRight: old.driftResidualRmsMsRight,
       notes: notes,
       videoFileName: videoFile,
+      utcStartMs: old.utcStartMs,
+      tags: old.tags,
+      protocolTemplateId: old.protocolTemplateId,
     );
+  }
+
+  @override
+  Future<void> updateSessionTags(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<String> tags,
+  ) async {
+    final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
+    final metas = _sessions[key];
+    if (metas == null) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final i = metas.indexWhere((m) => m.sessionId == sessionId);
+    if (i < 0) {
+      throw StateError(
+        'Session not found: $topic/trial_$trialNumber/$sessionId',
+      );
+    }
+    final old = metas[i];
+    metas[i] = SessionMeta(
+      sessionId: old.sessionId,
+      topic: old.topic,
+      trialNumber: old.trialNumber,
+      athleteName: old.athleteName,
+      sampleRateHz: old.sampleRateHz,
+      startTime: old.startTime,
+      durationMs: old.durationMs,
+      sampleCount: old.sampleCount,
+      markerCount: old.markerCount,
+      offsetUsLeft: old.offsetUsLeft,
+      offsetUsRight: old.offsetUsRight,
+      driftResidualRmsMsLeft: old.driftResidualRmsMsLeft,
+      driftResidualRmsMsRight: old.driftResidualRmsMsRight,
+      notes: old.notes,
+      videoFileName: old.videoFileName,
+      utcStartMs: old.utcStartMs,
+      tags: List<String>.from(tags),
+      protocolTemplateId: old.protocolTemplateId,
+    );
+  }
+
+  @override
+  Future<List<SessionMeta>> listAllSessions() async {
+    final all = <SessionMeta>[];
+    for (final metas in _sessions.values) {
+      all.addAll(metas);
+    }
+    return all;
   }
 
   @override

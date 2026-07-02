@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
+import 'package:wheelathlete/records/protocol_repository.dart';
+import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/home_page.dart';
 
@@ -15,6 +18,8 @@ void main() {
   Future<void> pumpHome(
     WidgetTester tester, {
     FakeBleRepository? ble,
+    InMemoryProtocolRepository? protocolRepo,
+    InMemoryStorageRepository? storageRepo,
   }) async {
     final ctrl = ThemeModeController();
     await tester.pumpWidget(
@@ -22,6 +27,12 @@ void main() {
         overrides: [
           bleRepositoryProvider.overrideWith(
             (_) => ble ?? FakeBleRepository(devices: const []),
+          ),
+          protocolRepositoryProvider.overrideWith(
+            (_) => protocolRepo ?? InMemoryProtocolRepository(),
+          ),
+          storageRepositoryProvider.overrideWith(
+            (_) => storageRepo ?? InMemoryStorageRepository(),
           ),
         ],
         child: MaterialApp(
@@ -43,6 +54,7 @@ void main() {
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Live'), findsOneWidget);
     expect(find.text('Browse'), findsOneWidget);
+    expect(find.text('Experiments'), findsOneWidget);
   });
 
   testWidgets('starts on Connect tab — shows ConnectionCard content',
@@ -73,6 +85,16 @@ void main() {
 
     // BrowsePage renders a Scaffold with AppBar title 'Browse'.
     expect(find.text('Browse'), findsWidgets);
+  });
+
+  testWidgets('tapping Experiments tab reveals New Template FAB',
+      (tester) async {
+    await pumpHome(tester);
+
+    await tester.tap(find.text('Experiments'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('New Template'), findsOneWidget);
   });
 
   testWidgets('switching tabs back to Connect restores Connect content',

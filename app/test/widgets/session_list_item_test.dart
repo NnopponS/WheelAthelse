@@ -85,4 +85,28 @@ void main() {
     );
     expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
   });
+
+  testWidgets('renders tag chips when tags are provided', (tester) async {
+    await pumpThemed(
+      tester,
+      const SessionListItem(
+        title: 's',
+        subtitle: 't',
+        tags: ['good', 'athlete-A'],
+      ),
+    );
+    expect(find.text('good'), findsOneWidget);
+    expect(find.text('athlete-A'), findsOneWidget);
+  });
+
+  testWidgets('hides tag chips when tags list is empty', (tester) async {
+    await pumpThemed(
+      tester,
+      const SessionListItem(title: 's', subtitle: 't', tags: []),
+    );
+    // No chip widgets with tag text should be present. We check that the
+    // 'label' text isn't rendered as a Chip — there is no easy direct
+    // assertion, so verify no Chip widgets exist below the subtitle row.
+    expect(find.byType(Chip), findsNothing);
+  });
 }

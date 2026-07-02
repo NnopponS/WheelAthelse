@@ -166,6 +166,86 @@ void main() {
       expect(meta.notes, isNull);
       expect(meta.videoFileName, isNull);
     });
+
+    test('tags default to empty list when not provided in constructor', () {
+      final meta = SessionMeta(
+        sessionId: 's1',
+        topic: 't',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 1, 1),
+        durationMs: 0,
+        sampleCount: 0,
+        markerCount: 0,
+      );
+      expect(meta.tags, isEmpty);
+    });
+
+    test('protocolTemplateId defaults to null when not provided', () {
+      final meta = SessionMeta(
+        sessionId: 's1',
+        topic: 't',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 1, 1),
+        durationMs: 0,
+        sampleCount: 0,
+        markerCount: 0,
+      );
+      expect(meta.protocolTemplateId, isNull);
+    });
+
+    test('serializes tags + protocolTemplateId to JSON', () {
+      final meta = SessionMeta(
+        sessionId: 'abc',
+        topic: 't',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 1, 1),
+        durationMs: 0,
+        sampleCount: 0,
+        markerCount: 0,
+        tags: ['good', 'athlete-A'],
+        protocolTemplateId: 'tpl-123',
+      );
+      final json = meta.toJson();
+      expect(json['tags'], ['good', 'athlete-A']);
+      expect(json['protocol_template_id'], 'tpl-123');
+    });
+
+    test('deserializes tags + protocolTemplateId from JSON round-trip', () {
+      final original = SessionMeta(
+        sessionId: 'abc',
+        topic: 't',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 1, 1),
+        durationMs: 0,
+        sampleCount: 0,
+        markerCount: 0,
+        tags: ['good', 'bad-take'],
+        protocolTemplateId: 'tpl-1',
+      );
+      final restored = SessionMeta.fromJson(original.toJson());
+      expect(restored.tags, ['good', 'bad-take']);
+      expect(restored.protocolTemplateId, 'tpl-1');
+    });
+
+    test('old session JSON without tags/protocolTemplateId defaults correctly',
+        () {
+      final meta = SessionMeta.fromJson({
+        'session_id': 's1',
+        'topic': 't',
+        'trial_number': 1,
+        'sample_rate_hz': 100,
+        'start_time': '2026-06-29T10:30:00.000Z',
+        'duration_ms': 0,
+        'sample_count': 0,
+        'marker_count': 0,
+      });
+      expect(meta.tags, isEmpty);
+      expect(meta.protocolTemplateId, isNull);
+    });
   });
 
   group('BufferedSample', () {

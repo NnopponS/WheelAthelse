@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/browse_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/browse_page.dart';
 import 'package:wheelathlete/ui/connect_page.dart';
+import 'package:wheelathlete/ui/experiment_tracker_page.dart';
 import 'package:wheelathlete/ui/live_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart' show ConnectionStatus;
 
@@ -11,6 +13,7 @@ import 'package:wheelathlete/widgets/widgets.dart' show ConnectionStatus;
 ///   0 – Connect  : BLE scan + connect L/R wheels
 ///   1 – Live & Record : realtime IMU display + start/stop recording
 ///   2 – Browse   : topic → trial → session hierarchy + CSV share
+///   3 – Experiments : protocol template dashboard with progress bars
 ///
 /// The Connect tab badge shows how many wheels are currently connected so the
 /// user can always see sensor status at a glance without switching tabs.
@@ -25,6 +28,10 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _tab = 0;
+
+  /// Switches the active tab to Browse (index 2). Called by the Experiments tab
+  /// after a template card tap sets [selectedTopicProvider].
+  void _switchToBrowse() => setState(() => _tab = 2);
 
   static const _tabs = [
     _TabSpec(
@@ -41,6 +48,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       icon: Icon(Icons.folder_rounded),
       activeIcon: Icon(Icons.folder_open_rounded),
       label: 'Browse',
+    ),
+    _TabSpec(
+      icon: Icon(Icons.science_rounded),
+      activeIcon: Icon(Icons.science_rounded),
+      label: 'Experiments',
     ),
   ];
 
@@ -70,6 +82,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           _ConnectTab(),
           _LiveTab(),
           _BrowseTab(),
+          _ExperimentsTab(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -96,6 +109,11 @@ class _HomePageState extends ConsumerState<HomePage> {
             icon: _tabs[2].icon,
             selectedIcon: _tabs[2].activeIcon,
             label: _tabs[2].label,
+          ),
+          NavigationDestination(
+            icon: _tabs[3].icon,
+            selectedIcon: _tabs[3].activeIcon,
+            label: _tabs[3].label,
           ),
         ],
       ),
@@ -146,6 +164,33 @@ class _BrowseTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const BrowsePage();
+  }
+}
+
+/// The Experiments tab body — wraps [ExperimentTrackerPage] (protocol template
+/// dashboard with progress bars). Tapping a card sets
+/// [selectedTopicProvider] and switches to the Browse tab (index 2); BrowsePage
+/// consumes the pending topic on its next init.
+class _ExperimentsTab extends ConsumerWidget {
+  const _ExperimentsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ExperimentTrackerPage(
+      onOpenTopic: (topic) {
+        ref.read(selectedTopicProvider.notifier).set(topic);
+        // Switch to the Browse tab (index 2). The _HomePageState is the
+        // ancestor; we use a shared notifier + a post-frame callback in
+        // BrowsePage to consume it.
+        _switchToBrowse(context);
+      },
+    );
+  }
+
+  void _switchToBrowse(BuildContext context) {
+    // Find the HomePage state and set its tab index to Browse (2).
+    final state = context.findAncestorStateOfType<_HomePageState>();
+    state?._switchToBrowse();
   }
 }
 
