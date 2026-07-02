@@ -241,6 +241,40 @@ void main() {
       expect(imuState.bySide[WheelSide.right]!.streaming, isFalse);
     });
 
+    test('samples use absolute UTC timestamp when utcOffsetMs is set', () async {
+      await pumpProviders();
+      await storage.createTopic('sprint_test');
+      final notifier = container.read(recordingProvider.notifier);
+
+      const utcOffsetMs = 1780000000000;
+      const startUtcMs = utcOffsetMs + 1000;
+      await notifier.startRecording(SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        utcStartMs: startUtcMs,
+        utcOffsetMs: utcOffsetMs,
+        startTime: DateTime.fromMillisecondsSinceEpoch(startUtcMs, isUtc: true),
+      ));
+
+      // Emit a sample with tDeviceUs = 5000 -> relativeSyncedMs = 5.0
+      ble.imuController('L1')!.add(_batch([
+        _sample(seq: 0, tDeviceUs: 5000),
+      ]));
+      await Future<void>.delayed(Duration.zero);
+
+      await notifier.stopRecording();
+
+      final sessionId = notifier.state.savedSessionId!;
+      final samples = await storage.readSamples('sprint_test', 1, sessionId);
+      expect(samples, isNotEmpty);
+      expect(samples.first.timestampSyncedMs, utcOffsetMs + 5.0);
+
+      final meta = await storage.readSessionMeta('sprint_test', 1, sessionId);
+      expect(meta!.utcStartMs, startUtcMs);
+      expect(meta.startTime.toUtc().millisecondsSinceEpoch, startUtcMs);
+    });
+
     test('stopRecording throws if not recording', () async {
       await pumpProviders();
       final notifier = container.read(recordingProvider.notifier);

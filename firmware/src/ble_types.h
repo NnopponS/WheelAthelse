@@ -120,6 +120,28 @@ inline void packSyncEvent(SyncEvent event_id, const uint8_t* payload,
     }
 }
 
+// Compute the UTC start ms for a scheduled start.
+// Keeps the math in signed 64-bit so a slightly late start (negative delta_us)
+// does not wrap through an unsigned cast.
+// Returns 0 if UTC was never set.
+inline uint64_t computeStartFiredUtcMs(uint64_t utc_epoch_ms,
+                                       uint32_t target_start_us,
+                                       uint32_t now_us,
+                                       bool utc_set,
+                                       bool pending_start) {
+    if (!utc_set) return 0;
+    if (pending_start) {
+        const int64_t delta_us = static_cast<int64_t>(target_start_us) -
+                                 static_cast<int64_t>(now_us);
+        const int64_t delta_ms = delta_us / 1000;
+        const int64_t utc_start_ms_signed =
+            static_cast<int64_t>(utc_epoch_ms) + delta_ms;
+        return static_cast<uint64_t>(utc_start_ms_signed);
+    }
+    // Immediate start: UTC ≈ epoch (small delay from fire time is ignored).
+    return utc_epoch_ms;
+}
+
 // Pack START_FIRED event (v1.1.0 extended): [0x30][uint32 t_device_us][uint64 utc_start_ms]
 // utc_start_ms = 0 if UTC was never set.
 inline void packStartFired(uint32_t t_device_us, uint64_t utc_start_ms, uint8_t* buf) {

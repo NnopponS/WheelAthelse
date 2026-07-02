@@ -6,9 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/ble/device_info.dart';
 import 'package:wheelathlete/ble/wheel_id.dart';
+import 'package:wheelathlete/records/protocol_repository.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
@@ -45,10 +47,12 @@ Uint8List _startFiredEvent(int tDeviceUs) {
 void main() {
   late FakeBleRepository ble;
   late InMemoryStorageRepository storage;
+  late InMemoryProtocolRepository protocolRepo;
   late ProviderContainer container;
 
   setUp(() async {
     storage = InMemoryStorageRepository();
+    protocolRepo = InMemoryProtocolRepository();
     ble = FakeBleRepository(
       devices: [
         const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
@@ -60,6 +64,7 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => ble),
         storageRepositoryProvider.overrideWith((ref) => storage),
+        protocolRepositoryProvider.overrideWith((ref) => protocolRepo),
         rssiPollIntervalProvider.overrideWith((ref) => null),
         countdownDurationProvider.overrideWith(
           (ref) => const Duration(milliseconds: 200),
@@ -292,6 +297,235 @@ void main() {
 
       final state = container.read(recordingProvider);
       expect(state.status, RecordingStatus.idle);
+    });
+
+    // ── Protocol template picker (Phase 3, subtask #23) ────────────────────
+    group('template picker', () {
+      testWidgets('idle view shows Custom chip + template chips',
+          (tester) async {
+        await protocolRepo.createTemplate(
+          name: 'Sprint Test',
+          topicName: 'sprint_test',
+          targetTrialCount: 5,
+          sampleRateHz: 200,
+        );
+        await pumpPage(tester);
+
+        // "Custom" chip is always present (default selected).
+        expect(find.text('Custom'), findsOneWidget);
+        // Template chip is rendered.
+        expect(find.text('Sprint Test'), findsOneWidget);
+      });
+
+      testWidgets('Custom chip is selected by default and shows topic dropdown',
+          (tester) async {
+        await pumpPage(tester);
+        // Custom is selected → topic dropdown ("Select topic" hint or the
+        // seeded topic) is visible.
+        expect(find.text('Custom'), findsOneWidget);
+        expect(find.text('sprint_test'), findsWidgets);
+        // Topic label is shown in Custom mode.
+        expect(find.text('Topic'), findsOneWidget);
+      });
+
+      testWidgets('tapping a template chip selects it + fills topic + trial',
+          (tester) async {
+        await protocolRepo.createTemplate(
+          name: 'Balance Test',
+          topicName: 'balance_test',
+          targetTrialCount: 3,
+          sampleRateHz: 50,
+        );
+        await pumpPage(tester);
+
+        // Tap the template chip.
+        await tester.tap(find.text('Balance Test'));
+        await tester.pumpAndSettle();
+
+        // The template's topic was created + selected → trial info shows.
+        expect(find.text('trial_01'), findsOneWidget);
+        // Topic dropdown is hidden when a template is selected (no "Topic"
+        // label from the dropdown section).
+        expect(find.text('Select topic'), findsNothing);
+        // Start button is enabled.
+        expect(find.text('Start Recording'), findsOneWidget);
+        // The topic folder was auto-created.
+        final topics = await storage.listTopics();
+        expect(topics.any((t) => t.name == 'balance_test'), isTrue);
+      });
+
+      testWidgets('tapping Custom after a template restores topic dropdown',
+          (tester) async {
+        await protocolRepo.createTemplate(
+          name: 'Balance Test',
+          topicName: 'balance_test',
+          targetTrialCount: 3,
+        );
+        await pumpPage(tester);
+        await tester.tap(find.text('Balance Test'));
+        await tester.pumpAndSettle();
+        // Template selected → no topic dropdown.
+        expect(find.text('Select topic'), findsNothing);
+
+        // Switch back to Custom.
+        await tester.tap(find.text('Custom'));
+        await tester.pumpAndSettle();
+        // Topic dropdown is back.
+        expect(find.text('Topic'), findsOneWidget);
+      });
+
+      // ── Quick re-record (Phase 3, subtask #24) ───────────────────────────
+      group('quick re-record', () {
+        Future<void> pumpStopped(
+          WidgetTester tester, {
+          SessionConfig config = const SessionConfig(
+            topic: 'sprint_test',
+            trialNumber: 1,
+            sampleRateHz: 100,
+          ),
+        }) async {
+          await pumpPage(tester);
+          await tester.runAsync(() async {
+            await container
+                .read(recordingProvider.notifier)
+                .startRecording(config);
+          });
+          await tester.pumpAndSettle();
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        testWidgets('stopped view shows Re-record button', (tester) async {
+          await pumpStopped(tester);
+          expect(find.text('Re-record'), findsOneWidget);
+          // New Recording button is still present.
+          expect(find.text('New Recording'), findsOneWidget);
+        });
+
+        testWidgets('tapping Re-record starts countdown with next trial number',
+            (tester) async {
+          await pumpStopped(tester);
+          // After stopping trial 1, next trial number is 2. Tap Re-record and
+          // drive the countdown to completion by injecting START_FIRED events.
+          await tester.runAsync(() async {
+            await tester.tap(find.text('Re-record'));
+            // Wait for the async nextTrialNumber lookup + sync burst + countdown
+            // start to complete.
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            // Inject START_FIRED from both wheels to trigger recording.
+            ble.syncController('L1')?.add(_startFiredEvent(1000000));
+            ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await tester.pumpAndSettle();
+
+          // Recording should now be active with the carried-over config.
+          final recState = container.read(recordingProvider);
+          expect(recState.status, RecordingStatus.recording);
+          expect(recState.config?.trialNumber, 2);
+          expect(recState.config?.topic, 'sprint_test');
+          expect(recState.config?.sampleRateHz, 100);
+
+          // Clean up: stop recording so timers/streams are torn down.
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        });
+
+        testWidgets('Re-record carries over protocolTemplateId',
+            (tester) async {
+          final template = await protocolRepo.createTemplate(
+            name: 'Sprint Test',
+            topicName: 'sprint_test',
+            targetTrialCount: 5,
+            sampleRateHz: 200,
+          );
+          await pumpStopped(
+            tester,
+            config: SessionConfig(
+              topic: 'sprint_test',
+              trialNumber: 1,
+              sampleRateHz: 200,
+              protocolTemplateId: template.id,
+            ),
+          );
+
+          await tester.runAsync(() async {
+            await tester.tap(find.text('Re-record'));
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            ble.syncController('L1')?.add(_startFiredEvent(1000000));
+            ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await tester.pumpAndSettle();
+
+          final recConfig = container.read(recordingProvider).config;
+          expect(recConfig?.protocolTemplateId, template.id);
+          expect(recConfig?.sampleRateHz, 200);
+          expect(recConfig?.trialNumber, 2);
+
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        });
+
+        testWidgets('Re-record is disabled when no wheels are connected',
+            (tester) async {
+          // Disconnect both wheels.
+          await container
+              .read(connectionManagerProvider.notifier)
+              .disconnect(WheelSide.left);
+          await container
+              .read(connectionManagerProvider.notifier)
+              .disconnect(WheelSide.right);
+          await pumpStopped(tester);
+
+          // The Re-record button (a PrimaryActionButton / FilledButton) should
+          // be disabled — find it by label and check its onPressed is null.
+          final button = tester.widget<FilledButton>(
+            find.ancestor(
+              of: find.text('Re-record'),
+              matching: find.byType(FilledButton),
+            ).first,
+          );
+          expect(button.onPressed, isNull);
+        });
+      });
+
+      testWidgets('SessionConfig carries protocolTemplateId when template used',
+          (tester) async {
+        final template = await protocolRepo.createTemplate(
+          name: 'Sprint Test',
+          topicName: 'sprint_test',
+          targetTrialCount: 5,
+          sampleRateHz: 200,
+        );
+        await pumpPage(tester);
+
+        // Tap the template chip then start recording.
+        await tester.tap(find.text('Sprint Test'));
+        await tester.pumpAndSettle();
+        await tester.runAsync(() async {
+          await container.read(recordingProvider.notifier).startRecording(
+                    SessionConfig(
+                      topic: 'sprint_test',
+                      trialNumber: 1,
+                      sampleRateHz: 200,
+                      protocolTemplateId: template.id,
+                    ),
+                  );
+        });
+        await tester.pumpAndSettle();
+
+        final state = container.read(recordingProvider);
+        expect(state.status, RecordingStatus.recording);
+        expect(state.config?.protocolTemplateId, template.id);
+        expect(state.config?.sampleRateHz, 200);
+      });
     });
   });
 }

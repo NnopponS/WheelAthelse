@@ -84,7 +84,7 @@ columns: seq, wheel, timestamp_app_ms, timestamp_device_us, timestamp_synced_ms,
 - `seq` = ลำดับ packet จาก firmware (ใช้ตรวจ packet loss)
 - `timestamp_app_ms` = เวลาบนมือถือตอนรับ (epoch ms) — มี jitter จาก BLE
 - `timestamp_device_us` = micros() บน M5 — ใช้คำนวณ interval จริงในแต่ละตัว
-- `timestamp_synced_ms` = **เวลาบน common timeline หลังแก้ offset/drift** — ใช้จับคู่ 2 ล้อ + กล้อง (คอลัมน์หลักสำหรับ train model)
+- `timestamp_synced_ms` = **absolute UTC epoch milliseconds หลังแก้ offset/drift** — ใช้จับคู่ 2 ล้อ + กล้อง (คอลัมน์หลักสำหรับ train model)
 - `marker` = 1 เมื่อกด Mark Event, 0 ปกติ
 - มีไฟล์ `session_<id>_meta.json`: ผู้ทดสอบ, วันเวลา, sample rate, sync quality (offset/drift residual), หมายเหตุ, ชื่อไฟล์วิดีโอกล้อง
 

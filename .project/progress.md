@@ -322,9 +322,13 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 |---|---------|-------|--------|---------|-----------|--------|
 | 20 | Remove Mark Event from recording UI | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | d1b9c8a |
 | 21 | Delete at all 3 levels (topic/trial/session) in Browse | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | af86778 |
-| 22 | Protocol template model + repository + Riverpod providers | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
-| 23 | Template picker in Record page idle view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
-| 24 | Quick re-record in stopped view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 22 | Protocol template model + repository + Riverpod providers | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | dc538be |
+| 23 | Template picker in Record page idle view | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | c985dd9 |
+| 24 | Quick re-record in stopped view | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | f8cc6c1 |
 | 25 | Session tags (model + storage + edit UI) | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 26 | Search/filter on Browse | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 27 | Experiment tracker dashboard | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 28 | Align countdown to next whole second | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 23ffc9e |
+| 29 | Convert `timestamp_synced_ms` to absolute UTC | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | bc18ee8 |
+| 30 | Update docs and metadata for UTC timestamps | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 9b58d34 |
+| 31 | Verify firmware UTC start computation | cpp-coding-standards + cpp-testing + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 76b5396 |

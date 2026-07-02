@@ -246,7 +246,7 @@ seq,wheel,timestamp_app_ms,timestamp_device_us,timestamp_synced_ms,ax,ay,az,gx,g
 | `wheel`               | L/R   | ล้อซ้ายหรือขวา |
 | `timestamp_app_ms`    | ms    | เวลามือถือตอนรับ notify (epoch ms) — มี jitter จาก BLE |
 | `timestamp_device_us` | µs    | `micros()` บน M5 — ใช้คำนวณ interval จริงในแต่ละตัว |
-| `timestamp_synced_ms` | ms    | **เวลาบน common timeline หลังแก้ offset/drift** — คอลัมน์หลักสำหรับ train model |
+| `timestamp_synced_ms` | ms    | **absolute UTC epoch milliseconds หลังแก้ offset/drift** — คอลัมน์หลักสำหรับ train model + จับคู่กับเวลากล้องโดยตรง |
 | `ax, ay, az`          | g     | accel 3 แกน (แปลงจาก raw แล้ว) |
 | `gx, gy, gz`          | dps   | gyro 3 แกน (แปลงจาก raw แล้ว) |
 | `marker`              | 0/1   | 1 เมื่อกด Mark Event, 0 ปกติ |

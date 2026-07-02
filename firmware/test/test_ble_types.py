@@ -82,6 +82,16 @@ def pack_start_fired_utc(t_device_us, utc_start_ms):
     """Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms] = 13B"""
     return struct.pack('<BIQ', EVENT_START_FIRED, t_device_us, utc_start_ms)
 
+def compute_start_fired_utc_ms(utc_epoch_ms, target_start_us, now_us, utc_set, pending_start):
+    """Mirror of computeStartFiredUtcMs in ble_types.h"""
+    if not utc_set:
+        return 0
+    if pending_start:
+        delta_us = int(target_start_us) - int(now_us)
+        delta_ms = delta_us // 1000
+        return (int(utc_epoch_ms) + delta_ms) & 0xFFFFFFFFFFFFFFFF
+    return utc_epoch_ms
+
 def pack_utc_set(utc_epoch_ms):
     """UTC_SET event (v1.1.0): [0x50][uint64 utc_epoch_ms] = 9B"""
     return struct.pack('<BQ', EVENT_UTC_SET, utc_epoch_ms)
@@ -468,6 +478,41 @@ class TestStartFiredUtc(unittest.TestCase):
         utc = struct.unpack('<Q', buf[5:13])[0]
         self.assertEqual(t_dev, 0xFFFFFFFF)
         self.assertEqual(utc, 0xFFFFFFFFFFFFFFFF)
+
+
+class TestComputeStartFiredUtcMs(unittest.TestCase):
+    """AC: computeStartFiredUtcMs guards against unsigned wrap on late start"""
+
+    def test_on_time(self):
+        epoch = 1719691200000
+        target = 5000000
+        now = 5000000
+        result = compute_start_fired_utc_ms(epoch, target, now, True, True)
+        self.assertEqual(result, epoch)
+
+    def test_one_ms_early(self):
+        epoch = 1719691200000
+        target = 5000000
+        now = 4999000
+        result = compute_start_fired_utc_ms(epoch, target, now, True, True)
+        self.assertEqual(result, epoch + 1)
+
+    def test_one_ms_late(self):
+        """Negative delta_us must not wrap through an unsigned cast."""
+        epoch = 1719691200000
+        target = 5000000
+        now = 5001000
+        result = compute_start_fired_utc_ms(epoch, target, now, True, True)
+        self.assertEqual(result, epoch - 1)
+
+    def test_not_set(self):
+        result = compute_start_fired_utc_ms(1719691200000, 5000000, 5000000, False, True)
+        self.assertEqual(result, 0)
+
+    def test_immediate_start(self):
+        epoch = 1719691200000
+        result = compute_start_fired_utc_ms(epoch, 5000000, 5000000, True, False)
+        self.assertEqual(result, epoch)
 
 
 class TestBatteryLevel(unittest.TestCase):

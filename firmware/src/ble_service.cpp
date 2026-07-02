@@ -488,16 +488,8 @@ void BleService::handleSetUtc(uint64_t utc_epoch_ms) {
 void BleService::sendStartFired() {
     // Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
     const uint32_t now_us = micros();
-    uint64_t utc_start_ms = 0;
-    if (utc_set_ && pending_start_) {
-        // utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000
-        const int64_t delta_us = static_cast<int64_t>(target_start_us_) -
-                                 static_cast<int64_t>(now_us);
-        utc_start_ms = utc_epoch_ms_ + static_cast<uint64_t>(delta_us / 1000);
-    } else if (utc_set_) {
-        // Immediate start: UTC = epoch + (now - fire_time)/1000 ≈ epoch
-        utc_start_ms = utc_epoch_ms_;
-    }
+    const uint64_t utc_start_ms = computeStartFiredUtcMs(
+        utc_epoch_ms_, target_start_us_, now_us, utc_set_, pending_start_);
     uint8_t buf[13];
     packStartFired(now_us, utc_start_ms, buf);
     s_char_sync->setValue(buf, 13);
