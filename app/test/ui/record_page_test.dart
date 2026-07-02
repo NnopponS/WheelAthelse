@@ -374,6 +374,128 @@ void main() {
         expect(find.text('Topic'), findsOneWidget);
       });
 
+      // ── Quick re-record (Phase 3, subtask #24) ───────────────────────────
+      group('quick re-record', () {
+        Future<void> pumpStopped(
+          WidgetTester tester, {
+          SessionConfig config = const SessionConfig(
+            topic: 'sprint_test',
+            trialNumber: 1,
+            sampleRateHz: 100,
+          ),
+        }) async {
+          await pumpPage(tester);
+          await tester.runAsync(() async {
+            await container
+                .read(recordingProvider.notifier)
+                .startRecording(config);
+          });
+          await tester.pumpAndSettle();
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        testWidgets('stopped view shows Re-record button', (tester) async {
+          await pumpStopped(tester);
+          expect(find.text('Re-record'), findsOneWidget);
+          // New Recording button is still present.
+          expect(find.text('New Recording'), findsOneWidget);
+        });
+
+        testWidgets('tapping Re-record starts countdown with next trial number',
+            (tester) async {
+          await pumpStopped(tester);
+          // After stopping trial 1, next trial number is 2. Tap Re-record and
+          // drive the countdown to completion by injecting START_FIRED events.
+          await tester.runAsync(() async {
+            await tester.tap(find.text('Re-record'));
+            // Wait for the async nextTrialNumber lookup + sync burst + countdown
+            // start to complete.
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            // Inject START_FIRED from both wheels to trigger recording.
+            ble.syncController('L1')?.add(_startFiredEvent(1000000));
+            ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await tester.pumpAndSettle();
+
+          // Recording should now be active with the carried-over config.
+          final recState = container.read(recordingProvider);
+          expect(recState.status, RecordingStatus.recording);
+          expect(recState.config?.trialNumber, 2);
+          expect(recState.config?.topic, 'sprint_test');
+          expect(recState.config?.sampleRateHz, 100);
+
+          // Clean up: stop recording so timers/streams are torn down.
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        });
+
+        testWidgets('Re-record carries over protocolTemplateId',
+            (tester) async {
+          final template = await protocolRepo.createTemplate(
+            name: 'Sprint Test',
+            topicName: 'sprint_test',
+            targetTrialCount: 5,
+            sampleRateHz: 200,
+          );
+          await pumpStopped(
+            tester,
+            config: SessionConfig(
+              topic: 'sprint_test',
+              trialNumber: 1,
+              sampleRateHz: 200,
+              protocolTemplateId: template.id,
+            ),
+          );
+
+          await tester.runAsync(() async {
+            await tester.tap(find.text('Re-record'));
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            ble.syncController('L1')?.add(_startFiredEvent(1000000));
+            ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await tester.pumpAndSettle();
+
+          final recConfig = container.read(recordingProvider).config;
+          expect(recConfig?.protocolTemplateId, template.id);
+          expect(recConfig?.sampleRateHz, 200);
+          expect(recConfig?.trialNumber, 2);
+
+          await tester.runAsync(
+            () => container.read(recordingProvider.notifier).stopRecording(),
+          );
+          await tester.pumpAndSettle();
+        });
+
+        testWidgets('Re-record is disabled when no wheels are connected',
+            (tester) async {
+          // Disconnect both wheels.
+          await container
+              .read(connectionManagerProvider.notifier)
+              .disconnect(WheelSide.left);
+          await container
+              .read(connectionManagerProvider.notifier)
+              .disconnect(WheelSide.right);
+          await pumpStopped(tester);
+
+          // The Re-record button (a PrimaryActionButton / FilledButton) should
+          // be disabled — find it by label and check its onPressed is null.
+          final button = tester.widget<FilledButton>(
+            find.ancestor(
+              of: find.text('Re-record'),
+              matching: find.byType(FilledButton),
+            ).first,
+          );
+          expect(button.onPressed, isNull);
+        });
+      });
+
       testWidgets('SessionConfig carries protocolTemplateId when template used',
           (tester) async {
         final template = await protocolRepo.createTemplate(

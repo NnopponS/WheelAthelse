@@ -395,6 +395,12 @@ class _RecordPageState extends ConsumerState<RecordPage> {
     ThemeData theme,
     RecordingState rec,
   ) {
+    // Re-record is only enabled when at least one wheel is connected — the
+    // countdown flow requires a connected wheel to send the scheduled START.
+    final connState = ref.watch(connectionManagerProvider);
+    final wheelsConnected = connState.bySide.values.any(
+      (c) => c.status == ConnectionStatus.connected,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -433,14 +439,24 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
+        // Quick re-record (Phase 3, subtask #24): one-tap restart of the same
+        // protocol at the next trial number. Carries over topic, sampleRateHz,
+        // and protocolTemplateId from the just-finished session.
         PrimaryActionButton(
-          label: 'New Recording',
-          icon: Icons.refresh_rounded,
+          label: 'Re-record',
+          icon: Icons.replay_rounded,
+          intent: ActionIntent.start,
+          onPressed: wheelsConnected ? () => _reRecord(rec) : null,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        FilledButton.tonalIcon(
           onPressed: () {
             ref.read(recordingProvider.notifier).reset();
             ref.read(recordCountdownProvider.notifier).reset();
             _refreshTopics();
           },
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('New Recording'),
         ),
       ],
     );
@@ -461,6 +477,33 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       trialNumber: _trialNumber,
       sampleRateHz: _sampleRateHz,
       protocolTemplateId: _selectedTemplateId,
+    );
+    try {
+      await ref.read(recordCountdownProvider.notifier).start(config);
+    } on Object catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start: $e')),
+        );
+      }
+    }
+  }
+
+  /// Quick re-record (Phase 3, subtask #24): starts a new recording with the
+  /// same topic + sample rate + protocol template as the just-finished
+  /// session, but at the next trial number for that topic. Goes through the
+  /// same countdown flow as [_startRecording].
+  Future<void> _reRecord(RecordingState rec) async {
+    final prevConfig = rec.config;
+    if (prevConfig == null) return;
+    final storage = ref.read(storageRepositoryProvider);
+    final nextTrial = await storage.nextTrialNumber(prevConfig.topic);
+    if (!mounted) return;
+    final config = SessionConfig(
+      topic: prevConfig.topic,
+      trialNumber: nextTrial,
+      sampleRateHz: prevConfig.sampleRateHz,
+      protocolTemplateId: prevConfig.protocolTemplateId,
     );
     try {
       await ref.read(recordCountdownProvider.notifier).start(config);

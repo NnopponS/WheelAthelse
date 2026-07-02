@@ -316,6 +316,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       notes: _pendingConfig!.notes,
       utcStartMs: _utcStartMs,
       utcOffsetMs: _utcOffsetMs,
+      protocolTemplateId: _pendingConfig!.protocolTemplateId,
       startTime: startTime,
     );
     try {
