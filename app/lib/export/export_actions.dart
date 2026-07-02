@@ -77,6 +77,10 @@ class ExportActions {
 
     Future<void> writeSession(String sid, int trial) async {
       final samples = await _storage.readSamples(topic, trial, sid);
+      if (samples.isEmpty) {
+        // Skip empty sessions (e.g. recorded before the scheduled-start fix).
+        return;
+      }
       final csv = CsvExporter.toCsvString(samples);
       final path = '$dir/session_$sid.csv';
       await writeFile(path, csv);

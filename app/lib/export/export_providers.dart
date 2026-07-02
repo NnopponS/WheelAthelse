@@ -33,6 +33,8 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
 
   /// Exports a single session to CSV. If [resample] is true, samples are
   /// resampled to [gridIntervalMs] before writing. Returns the file path.
+  ///
+  /// Throws [StateError] if the session has no samples (empty recording).
   Future<String> exportSession({
     required String topic,
     required int trialNumber,
@@ -50,6 +52,13 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
       }
 
       var samples = await storage.readSamples(topic, trialNumber, sessionId);
+      if (samples.isEmpty) {
+        throw StateError(
+          'Session "$sessionId" has no data. This may happen if the '
+          'recording was made before the scheduled-start fix. Please '
+          'record a new session.',
+        );
+      }
       if (resample) {
         samples = Resampler.resample(samples, gridIntervalMs: gridIntervalMs);
       }
