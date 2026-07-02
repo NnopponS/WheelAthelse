@@ -29,10 +29,16 @@ class ControlCommand {
   /// `START` (0x01): begin acquisition at `targetStartUs` (local micros).
   /// Pass 0 for immediate start; pass a scheduled time for synchronized
   /// start across two wheels (§3.2).
+  ///
+  /// The firmware expects a uint32 (0..4294967295). Values outside this
+  /// range are wrapped to uint32 to match the firmware's `micros()` wrap
+  /// behavior (every ~71 minutes at 4.29e9 µs).
   static List<int> start(int targetStartUs) {
+    // Wrap to uint32 range — matches firmware's micros() wrap behavior.
+    final wrapped = targetStartUs.toUnsigned(32);
     final b = ByteData(5)
       ..setUint8(0, ControlCommandId.start)
-      ..setUint32(1, targetStartUs, Endian.little);
+      ..setUint32(1, wrapped, Endian.little);
     return b.buffer.asUint8List();
   }
 

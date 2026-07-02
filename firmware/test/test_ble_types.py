@@ -105,9 +105,18 @@ def pack_info(wheel_id, fw_major, fw_minor, fw_patch,
                        accel_range, gyro_range, accel_scale, gyro_scale, 0)
 
 def check_beep_schedule(target_start_us, current_us, last_beep_fired):
-    """Returns index of beep to fire, or -1."""
+    """Returns index of beep to fire, or -1.
+    Matches the C++ implementation: skips beeps with negative beep_time
+    unless current_us has wrapped past UINT32_MAX."""
     for i in range(last_beep_fired + 1, len(BEEP_SCHEDULE)):
         beep_time = target_start_us + BEEP_SCHEDULE[i][0]
+        if beep_time < 0:
+            # Only fire if current_us has wrapped (represented as negative
+            # when cast to int32). In practice never taken during a normal
+            # countdown.
+            if current_us > 0xFFFFFFFF and (current_us & 0xFFFFFFFF) >= beep_time:
+                return i
+            continue
         if current_us >= beep_time:
             return i
     return -1
@@ -115,6 +124,8 @@ def check_beep_schedule(target_start_us, current_us, last_beep_fired):
 def should_start_now(target_start_us, current_us):
     if target_start_us == 0:
         return True
+    # Simple unsigned comparison — safe for our use case where the
+    # scheduled start is always within ~5 seconds of "now".
     return current_us >= target_start_us
 
 def clamp_battery_level(raw):
@@ -334,6 +345,28 @@ class TestBeepSchedule(unittest.TestCase):
                 fired.append(result)
                 last = result
         self.assertEqual(fired, [0, 1, 2, 3])
+
+    def test_no_beep_when_target_near_zero(self):
+        """Beeps with negative beep_time must not fire immediately
+        when target_start_us is small (e.g., device just booted)."""
+        # target = 1s after boot, T-3s beep_time = 1M - 3M = -2M (negative)
+        target = 1_000_000
+        current = 1_000_000  # at target time
+        # beep 0 (T-3s): beep_time = -2M → negative → skipped
+        # beep 1 (T-2s): beep_time = -1M → negative → skipped
+        # beep 2 (T-1s): beep_time = 0 → current >= 0 → fire!
+        # beep 3 (T-0):  beep_time = 1M → would fire but beep 2 fires first
+        result = check_beep_schedule(target, current, -1)
+        self.assertEqual(result, 2)  # beep 2 (T-1s) is the first valid one
+
+    def test_no_beep_at_all_when_target_too_small(self):
+        """If target < 1s, even T-0 beep_time might be < current."""
+        target = 500_000
+        current = 100_000  # well before target
+        result = check_beep_schedule(target, current, -1)
+        # All beep_times: 500K-3M=-2.5M, 500K-2M=-1.5M, 500K-1M=-500K, 500K
+        # First 3 are negative → skipped. beep 3 = 500K, current=100K < 500K → -1
+        self.assertEqual(result, -1)
 
 
 class TestScheduledStart(unittest.TestCase):

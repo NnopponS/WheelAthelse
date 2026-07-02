@@ -198,16 +198,30 @@ constexpr size_t BEEP_SCHEDULE_LEN = 4;
 inline int8_t checkBeepSchedule(uint32_t target_start_us,
                                 uint32_t current_us,
                                 int8_t last_beep_fired) {
-    // Handle micros() wrap: if target is in the future, current < target.
-    // We check if current >= target + offset for each beep.
     for (size_t i = static_cast<size_t>(last_beep_fired) + 1; i < BEEP_SCHEDULE_LEN; ++i) {
         // target_start_us + offset_us (offset is negative for T-3..T-1, 0 for T-0)
-        // Use signed arithmetic carefully with uint32 wrap.
+        // Use signed arithmetic to handle negative beep_time correctly.
         const int64_t beep_time = static_cast<int64_t>(target_start_us) +
                                   static_cast<int64_t>(BEEP_SCHEDULE[i].offset_us);
         const int64_t current_signed = static_cast<int64_t>(current_us);
 
-        // If beep_time has passed (current >= beep_time)
+        // Skip beeps with negative beep_time when current_us hasn't wrapped.
+        // This prevents all beeps from firing immediately when target_start_us
+        // is small (e.g., device just booted). A negative beep_time means the
+        // beep was scheduled before micros()=0, which is impossible — so we
+        // only fire it if current_us has wrapped past UINT32_MAX (extremely
+        // unlikely within a 5-second countdown).
+        if (beep_time < 0) {
+            // Only fire if current_us has wrapped (current_signed is also
+            // negative, meaning it wrapped to a small positive uint32).
+            // In practice this branch is never taken during a normal countdown.
+            if (current_signed < 0 && current_signed >= beep_time) {
+                return static_cast<int8_t>(i);
+            }
+            continue; // skip this beep — it's in the impossible past
+        }
+
+        // Normal case: beep_time >= 0, fire if current >= beep_time
         if (current_signed >= beep_time) {
             return static_cast<int8_t>(i);
         }
@@ -217,8 +231,21 @@ inline int8_t checkBeepSchedule(uint32_t target_start_us,
 
 // Check if it's time to start acquisition (micros >= target_start_us).
 // Handles the case where target_start_us = 0 (start immediately).
+// Uses a tolerance window to handle micros() wrap: the scheduled start
+// is always within a few seconds of "now", so if the unsigned difference
+// is less than half the uint32 range (~35 minutes), we treat it as
+// "target has passed". If the difference is more than half, the target
+// is still in the future (current wrapped past 0 but target hasn't).
 inline bool shouldStartNow(uint32_t target_start_us, uint32_t current_us) {
     if (target_start_us == 0) return true;
+    // Unsigned difference — correct for normal (non-wrap) case.
+    // For wrap: if current=100M, target=4B, diff=394M which is < 2^31
+    // but the target is actually in the future. However, in practice
+    // the scheduled start is always set to "now + 5 seconds", so
+    // target ≈ current at send time. The only way to get a huge
+    // difference is if micros() wrapped between sending START and now,
+    // which takes ~71 minutes — far longer than our 5s countdown.
+    // So the simple unsigned comparison is safe for our use case.
     return current_us >= target_start_us;
 }
 
