@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wheelathlete/records/protocol_template.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
@@ -26,6 +28,15 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   String? _selectedTopic;
   int _trialNumber = 1;
   bool _loadingTopics = true;
+
+  /// Id of the protocol template currently selected in the idle view, or null
+  /// when "Custom" mode is active (manual topic dropdown). Set by tapping a
+  /// template chip in the horizontal picker row.
+  String? _selectedTemplateId;
+
+  /// Sample rate to use when starting a recording. Driven by the selected
+  /// template's [ProtocolTemplate.sampleRateHz], or 100 in Custom mode.
+  int _sampleRateHz = 100;
 
   @override
   void initState() {
@@ -213,20 +224,54 @@ class _RecordPageState extends ConsumerState<RecordPage> {
     if (_loadingTopics) {
       return const Center(child: CircularProgressIndicator());
     }
+    final templatesAsync = ref.watch(protocolTemplatesProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Topic', style: theme.textTheme.titleMedium),
+        // Protocol template picker — horizontal scrollable chip row.
+        // "Custom" = current behavior (manual topic dropdown); tapping a
+        // template auto-fills topic + trial + sample rate.
+        Text('Protocol', style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.xs),
-        _TopicDropdown(
-          selectedTopic: _selectedTopic,
-          onChanged: (topic) async {
-            setState(() => _selectedTopic = topic);
-            await _refreshTrialNumber();
-          },
-          onRefresh: _refreshTopics,
+        templatesAsync.when(
+          data: (templates) => _TemplateChipRow(
+            templates: templates,
+            selectedTemplateId: _selectedTemplateId,
+            onSelected: (id) => _onTemplateSelected(id, templates),
+          ),
+          loading: () => const SizedBox(
+            height: 40,
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          error: (e, _) => Text(
+            'Failed to load templates: $e',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
+        // Topic picker — only shown in Custom mode. When a template is
+        // selected the template drives the topic, so the dropdown is hidden.
+        if (_selectedTemplateId == null) ...[
+          Text('Topic', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          _TopicDropdown(
+            selectedTopic: _selectedTopic,
+            onChanged: (topic) async {
+              setState(() => _selectedTopic = topic);
+              await _refreshTrialNumber();
+            },
+            onRefresh: _refreshTopics,
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
         if (_selectedTopic != null) ...[
           _TrialInfo(trialNumber: _trialNumber),
           const SizedBox(height: AppSpacing.lg),
@@ -238,7 +283,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                 ? () => _startRecording()
                 : null,
           ),
-        ] else ...[
+        ] else if (_selectedTemplateId == null) ...[
           Text(
             'Create a topic first to start recording.',
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -254,6 +299,47 @@ class _RecordPageState extends ConsumerState<RecordPage> {
         ],
       ],
     );
+  }
+
+  /// Handles a template chip tap. When a template is selected:
+  /// 1. Set `_selectedTemplateId` + the template's sample rate.
+  /// 2. Ensure the template's topic folder exists (create if missing).
+  /// 3. Set `_selectedTopic` to the template's topic name.
+  /// 4. Refresh the trial number for that topic.
+  /// When "Custom" (id == null) is tapped, clear the selection and fall back
+  /// to the manual topic dropdown.
+  Future<void> _onTemplateSelected(
+    String? id,
+    List<ProtocolTemplate> templates,
+  ) async {
+    if (id == null) {
+      // Custom mode — restore manual topic dropdown behavior.
+      setState(() {
+        _selectedTemplateId = null;
+        _sampleRateHz = 100;
+      });
+      await _refreshTopics();
+      return;
+    }
+    final template = templates.firstWhere((t) => t.id == id);
+    final storage = ref.read(storageRepositoryProvider);
+    // Ensure the topic folder exists; create it if missing. Tolerate the race
+    // where another flow already created it (catch StateError).
+    final topics = await storage.listTopics();
+    if (!topics.any((t) => t.name == template.topicName)) {
+      try {
+        await storage.createTopic(template.topicName);
+      } on StateError {
+        // Already exists — ignore.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedTemplateId = id;
+      _selectedTopic = template.topicName;
+      _sampleRateHz = template.sampleRateHz;
+    });
+    await _refreshTrialNumber();
   }
 
   Widget _buildRecordingView(
@@ -373,7 +459,8 @@ class _RecordPageState extends ConsumerState<RecordPage> {
     final config = SessionConfig(
       topic: _selectedTopic!,
       trialNumber: _trialNumber,
-      sampleRateHz: 100,
+      sampleRateHz: _sampleRateHz,
+      protocolTemplateId: _selectedTemplateId,
     );
     try {
       await ref.read(recordCountdownProvider.notifier).start(config);
@@ -582,6 +669,48 @@ class _TrialInfo extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Horizontal scrollable row of protocol template chips shown at the top of
+/// the Record page idle view. The first chip is always "Custom" (manual topic
+/// dropdown); the rest are the user's saved [ProtocolTemplate]s. Tapping a
+/// chip calls [onSelected] with the template id (or null for Custom).
+class _TemplateChipRow extends StatelessWidget {
+  const _TemplateChipRow({
+    required this.templates,
+    required this.selectedTemplateId,
+    required this.onSelected,
+  });
+
+  final List<ProtocolTemplate> templates;
+  final String? selectedTemplateId;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          ChoiceChip(
+            label: const Text('Custom'),
+            selected: selectedTemplateId == null,
+            onSelected: (_) => onSelected(null),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          for (final template in templates) ...[
+            ChoiceChip(
+              label: Text(template.name),
+              selected: selectedTemplateId == template.id,
+              onSelected: (_) => onSelected(template.id),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+          ],
+        ],
+      ),
     );
   }
 }

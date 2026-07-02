@@ -101,6 +101,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
       notes: config.notes,
       utcStartMs: config.utcStartMs,
       utcOffsetMs: config.utcOffsetMs,
+      protocolTemplateId: config.protocolTemplateId,
       startTime: startTime,
     );
 
