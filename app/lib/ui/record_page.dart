@@ -8,12 +8,12 @@ import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
-/// Recording screen: pick a topic, start/stop recording, drop Mark Events,
-/// and see live sample/marker counts.
+/// Recording screen: pick a topic, start/stop recording, and see live sample
+/// counts.
 ///
 /// State machine driven by [RecordingNotifier]:
 /// - idle: topic picker + "Start Recording" button
-/// - recording: live stats + "Stop Recording" + Mark Event button
+/// - recording: live stats + "Stop Recording" button
 /// - stopped: "Session saved" + "New Recording" button
 class RecordPage extends ConsumerStatefulWidget {
   const RecordPage({super.key});
@@ -284,11 +284,6 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                       icon: Icons.scatter_plot_rounded,
                     ),
                     StatusBadge(
-                      label: '${rec.markerCount} markers',
-                      icon: Icons.flag_rounded,
-                      tone: BadgeTone.info,
-                    ),
-                    StatusBadge(
                       label: _elapsedLabel(rec),
                       icon: Icons.timer_outlined,
                     ),
@@ -296,13 +291,6 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                 ),
               ],
             ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        Center(
-          child: MarkEventButton(
-            onPressed: () => ref.read(recordingProvider.notifier).markEvent(),
-            markerCount: rec.markerCount,
           ),
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -351,11 +339,6 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                     StatusBadge(
                       label: '${rec.sampleCount} samples',
                       icon: Icons.scatter_plot_rounded,
-                    ),
-                    StatusBadge(
-                      label: '${rec.markerCount} markers',
-                      icon: Icons.flag_rounded,
-                      tone: BadgeTone.info,
                     ),
                   ],
                 ),

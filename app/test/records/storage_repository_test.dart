@@ -121,6 +121,42 @@ void main() {
       expect(await storage.listTopics(), isEmpty);
       expect(await storage.listSessions('test', 1), isEmpty);
     });
+
+    test('deleteTrial removes the trial folder and all sessions inside',
+        () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's2', trialNumber: 1), []);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's3', trialNumber: 2), []);
+
+      await storage.deleteTrial('test', 1);
+
+      // Trial 1 sessions gone.
+      expect(await storage.listSessions('test', 1), isEmpty);
+      // Trial 1 no longer listed.
+      expect(await storage.listTrials('test'), [2]);
+      // Trial 2 sessions untouched.
+      final remaining = await storage.listSessions('test', 2);
+      expect(remaining.map((m) => m.sessionId).toList(), ['s3']);
+    });
+
+    test('deleteTrial throws if the trial does not exist', () async {
+      await storage.createTopic('test');
+      expect(
+        () => storage.deleteTrial('test', 99),
+        throwsStateError,
+      );
+    });
+
+    test('deleteTrial throws if the topic does not exist', () async {
+      expect(
+        () => storage.deleteTrial('missing', 1),
+        throwsStateError,
+      );
+    });
   });
 
   group('StorageRepository — rename topic', () {
