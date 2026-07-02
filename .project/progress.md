@@ -325,7 +325,7 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 22 | Protocol template model + repository + Riverpod providers | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | dc538be |
 | 23 | Template picker in Record page idle view | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | c985dd9 |
 | 24 | Quick re-record in stopped view | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | f8cc6c1 |
-| 25 | Session tags (model + storage + edit UI) | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 25 | Session tags (model + storage + edit UI) | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | 074f158 |
 | 26 | Search/filter on Browse | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 27 | Experiment tracker dashboard | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 28 | Align countdown to next whole second | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 23ffc9e |
