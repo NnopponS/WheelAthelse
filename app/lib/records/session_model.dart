@@ -192,7 +192,9 @@ class BufferedSample {
   /// Phone epoch ms when the batch was received (has BLE jitter).
   final int timestampAppMs;
 
-  /// Synced timeline ms (after offset/drift correction).
+  /// Synced timeline ms (after offset/drift correction). When `utcOffsetMs` is
+  /// set, this is an absolute UTC epoch millisecond value; otherwise it is
+  /// relative to the sync-engine reference.
   final double timestampSyncedMs;
 
   /// True if a Mark Event was active when this sample was buffered.

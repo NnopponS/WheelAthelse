@@ -10,7 +10,7 @@ import 'package:wheelathlete/theme/theme.dart';
 /// ```
 ///
 /// - Samples from both wheels are merged into one file, sorted by
-///   `timestamp_synced_ms` (the common timeline after offset/drift correction).
+///   `timestamp_synced_ms` (absolute UTC epoch ms after offset/drift correction).
 /// - `wheel` column is `L` or `R`.
 /// - `marker` is `1` when a Mark Event was active, `0` otherwise.
 /// - Double values are formatted without unnecessary trailing zeros.
