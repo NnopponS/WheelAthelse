@@ -313,3 +313,18 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 - 2026-06-29: #17 completed (commit 025041b). Added `renameTopic`, `updateTopicDescription`, `updateSessionMeta` to `StorageRepository` interface + both impls; topic overflow menu (rename/description) + session overflow menu (notes/video) in BrowsePage; widget + unit tests green.
 - 2026-06-29: #18 completed (commit d2a2510). Added `ExportActions` (share dispatch + save-to-device via file_picker) + `ExportOperations` interface; wired share/save at session/trial/topic levels in BrowsePage; `file_picker 12.0.0-beta.7` pinned (only series compatible with share_plus 13.x win32 ^6); errors surfaced via SnackBar, actions disabled while `isExporting`; unit + widget tests green.
 - 2026-06-29: #19 completed (commit 6540469). Added rolling `recent` ring buffer (cap 300) to `WheelImuState` appended on each IMU batch in `ImuStreamNotifier`; new `ImuChart` widget (fl_chart `LineChart`) renders per-axis accel (ax/ay/az) + gyro (gx/gy/gz) scrolling line charts with a ~5s window, decimated to ~80 points (cap/trim/decimate pure logic in `ImuChartBuffer`); per-axis colors from design system (x=wheel identity, y=success, z=warning); numeric `LiveMetricTile` summary retained below charts; `LineChart` duration zero (no infinite animation — pumpAndSettle-safe); unit + widget tests green (333 passing).
+
+---
+
+# Phase 3: Browse & Record Workflow Hardening
+
+| # | Subtask | Skill | Status | Started | Completed | Commit |
+|---|---------|-------|--------|---------|-----------|--------|
+| 20 | Remove Mark Event from recording UI | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 21 | Delete at all 3 levels (topic/trial/session) in Browse | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 22 | Protocol template model + repository + Riverpod providers | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 23 | Template picker in Record page idle view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 24 | Quick re-record in stopped view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 25 | Session tags (model + storage + edit UI) | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 26 | Search/filter on Browse | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 27 | Experiment tracker dashboard | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |

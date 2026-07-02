@@ -72,3 +72,45 @@
 - ระหว่างนับถอยหลัง: ลำโพง M5 ทั้ง 2 ตัว beep 3-2-1 พร้อมกัน
 - beep ถูกอัดในวิดีโอกล้อง + เป็น event เวลาแน่นอนใน IMU → ใช้ align วิดีโอ↔IMU (ไม่ต้องเคาะล้อก็ได้)
 - กระทบ subtask #3 (firmware beep + scheduled start) และ #7 (app schedule + countdown)
+
+---
+
+# Phase 3 Decisions (Browse & Record Workflow Hardening)
+
+## D16: Remove Mark Event from app — sync with camera in post-processing
+- User ไม่เข้าใจ Mark Event และไม่ใช้ → ลบออกจาก recording UI
+- จะ sync IMU กับวิดีโอใน post-processing แทน (ใช้ beep ที่อัดในวิดีโอ + spike ใน accel)
+- เก็บ marker column ใน CSV ไว้ (backward compat กับ session เก่า) — ค่าเป็น 0 เสมอสำหรับ session ใหม่
+- เก็บ MarkerEvent model + markers field ใน SessionMeta ไว้สำหรับอ่าน session เก่า แต่ไม่ populate แล้ว
+
+## D17: Delete at all 3 hierarchy levels (topic/trial/session)
+- ผู้ใช้สะสม session เยอะ → ต้องลดได้ทุกระดับ
+- มี confirmation dialog ทุกระดับ แสดงจำนวน session ที่จะลบ
+- StorageRepository มี deleteTopic + deleteSession อยู่แล้ว → เพิ่ม deleteTrial ใหม่
+
+## D18: Protocol templates — reusable experiment definitions
+- ผู้ใช้ทำ mixed research → ต้องสร้าง protocol ซ้ำๆ (เช่น "20m Sprint", "Balance Test")
+- Template เก็บ: name, description, topicName, targetTrialCount, sampleRateHz
+- เก็บเป็น protocols.json ใน app docs dir (ข้าง WheelAthleteData/)
+- 1 template → 1 topic folder (auto-created); sessions ใน topic นั้น link กลับด้วย protocolTemplateId
+
+## D19: Quick re-record — one-tap to re-record same protocol
+- หลัง stop → แสดง summary card + ปุ่ม "Re-record" → เริ่ม recording ใหม่ที่ trial number ถัดไป
+- ลดจำนวน tap จาก ~5 ครั้งเป็น 1 ครั้งเมื่อทำซ้ำ protocol เดิม
+
+## D20: Session tags/labels — custom tags for filtering
+- เพิ่ม tags: List<String> ใน SessionMeta (default [])
+- ตัวอย่าง: "good", "bad-take", "athlete-A", "morning"
+- แก้ไขได้จาก Browse → session → edit → tag editor dialog
+- ใช้ filter ใน Browse + Experiment tracker
+
+## D21: Search/filter on Browse — scale to hundreds of sessions
+- Search bar ที่ Topic list level: filter ตาม topic name
+- Search bar ที่ Session list level: filter ตาม session ID, notes, date, tags
+- Tag filter chips: horizontal row ของ unique tags → tap เพื่อ filter
+
+## D22: Experiment tracker dashboard — 4th tab
+- แท็บใหม่ "Experiments" ใน bottom nav
+- แสดง protocol templates เป็น cards พร้อม progress bar (sessions / targetTrialCount)
+- กด card → ไป Browse ที่ topic ของ template นั้น
+- ทำให้เห็นว่า experiment ไหนทำครบแล้ว / ยังเหลือ
