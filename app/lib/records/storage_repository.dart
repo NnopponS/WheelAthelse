@@ -47,6 +47,10 @@ abstract class StorageRepository {
   /// Deletes a topic folder and all its trials/sessions.
   Future<void> deleteTopic(String name);
 
+  /// Deletes a trial folder and all sessions inside it. Throws if the trial
+  /// does not exist.
+  Future<void> deleteTrial(String topic, int trialNumber);
+
   /// Returns the next trial number for [topic] (max existing + 1, or 1).
   Future<int> nextTrialNumber(String topic);
 
@@ -189,6 +193,18 @@ class PathProviderStorageRepository implements StorageRepository {
     final root = await _rootDir();
     final dir = _topicDir(root, name);
     if (dir.existsSync()) dir.deleteSync(recursive: true);
+  }
+
+  @override
+  Future<void> deleteTrial(String topic, int trialNumber) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    if (!trialDir.existsSync()) {
+      throw StateError(
+        'Trial $trialNumber not found in topic "$topic"',
+      );
+    }
+    trialDir.deleteSync(recursive: true);
   }
 
   @override
@@ -457,6 +473,18 @@ class InMemoryStorageRepository implements StorageRepository {
     _topics.remove(name);
     _sessions.removeWhere((key, _) => key.startsWith('$name/'));
     _samples.removeWhere((key, _) => key.startsWith('$name/'));
+  }
+
+  @override
+  Future<void> deleteTrial(String topic, int trialNumber) async {
+    final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
+    if (!_sessions.containsKey(key)) {
+      throw StateError(
+        'Trial $trialNumber not found in topic "$topic"',
+      );
+    }
+    _sessions.remove(key);
+    _samples.removeWhere((k, _) => k.startsWith('$key/'));
   }
 
   @override

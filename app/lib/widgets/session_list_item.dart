@@ -19,6 +19,7 @@ class SessionListItem extends StatelessWidget {
     this.onShare,
     this.onSave,
     this.onEdit,
+    this.onDelete,
   });
 
   final String title;
@@ -43,6 +44,9 @@ class SessionListItem extends StatelessWidget {
   /// Optional edit callback. When set, an overflow menu is shown that lets the
   /// user edit the session's notes / video filename.
   final VoidCallback? onEdit;
+
+  /// Optional delete callback. When set, a delete icon button is shown.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +97,12 @@ class SessionListItem extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onDelete != null)
+                    IconButton(
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      tooltip: 'Delete',
+                    ),
                   if (onShare != null)
                     IconButton(
                       onPressed: onShare,

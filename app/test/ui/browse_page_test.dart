@@ -428,4 +428,128 @@ void main() {
       expect(fakeActions.lastTopic, 'sprint_test');
     });
   });
+
+  group('BrowsePage — delete', () {
+    testWidgets('topic overflow menu offers Delete', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets(
+        'topic delete confirmation shows trial + session count and deletes on confirm',
+        (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog shows the topic name + counts.
+      expect(find.textContaining('Delete topic'), findsOneWidget);
+      expect(find.textContaining('sprint_test'), findsWidgets);
+      // 1 trial, 2 sessions.
+      expect(find.textContaining('1 trial'), findsOneWidget);
+      expect(find.textContaining('2 sessions'), findsOneWidget);
+
+      // Confirm the delete.
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      // Topic gone from the list.
+      expect(find.text('sprint_test'), findsNothing);
+      final topics = await storage.listTopics();
+      expect(topics, isEmpty);
+    });
+
+    testWidgets('topic delete confirmation cancels without deleting',
+        (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      // Topic still present.
+      expect(find.text('sprint_test'), findsWidgets);
+      final topics = await storage.listTopics();
+      expect(topics.map((t) => t.name).toList(), ['sprint_test']);
+    });
+
+    testWidgets('trial list has a popup menu with Delete', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+
+      // Trial row has a more-vert overflow menu.
+      expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets(
+        'trial delete confirmation shows session count and deletes on confirm',
+        (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog shows trial name + session count.
+      expect(find.textContaining('Delete trial'), findsOneWidget);
+      expect(find.textContaining('trial_01'), findsWidgets);
+      expect(find.textContaining('2 sessions'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      // Trial gone from the list.
+      expect(find.text('trial_01'), findsNothing);
+      expect(await storage.listTrials('sprint_test'), isEmpty);
+    });
+
+    testWidgets('session list has a delete button per row', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Two session rows → two delete icons.
+      expect(find.byIcon(Icons.delete_outline_rounded), findsNWidgets(2));
+    });
+
+    testWidgets(
+        'session delete confirmation deletes the session and refreshes the list',
+        (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog shows session id.
+      expect(find.textContaining('Delete session'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      // One session gone — only one delete icon remains.
+      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
+      final sessions = await storage.listSessions('sprint_test', 1);
+      expect(sessions.length, 1);
+    });
+  });
 }

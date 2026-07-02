@@ -320,8 +320,8 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 
 | # | Subtask | Skill | Status | Started | Completed | Commit |
 |---|---------|-------|--------|---------|-----------|--------|
-| 20 | Remove Mark Event from recording UI | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
-| 21 | Delete at all 3 levels (topic/trial/session) in Browse | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
+| 20 | Remove Mark Event from recording UI | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | d1b9c8a |
+| 21 | Delete at all 3 levels (topic/trial/session) in Browse | dart-flutter-patterns + tdd-workflow + verification-loop | completed | 2026-07-02 | 2026-07-02 | af86778 |
 | 22 | Protocol template model + repository + Riverpod providers | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 23 | Template picker in Record page idle view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 24 | Quick re-record in stopped view | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |

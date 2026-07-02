@@ -43,6 +43,38 @@ Future<String?> showTextEditDialog(
   );
 }
 
+/// Shows a destructive-action confirmation dialog with a red warning icon
+/// and [message]. Returns true if the user confirms, false (or null) otherwise.
+Future<bool> showDeleteConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.warning_amber_rounded,
+          color: Colors.red, size: 40),
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red,
+          ),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
 /// Browse screen: topic → trial → session hierarchy.
 ///
 /// Three-level navigation:
@@ -147,6 +179,35 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     }
   }
 
+  Future<void> _deleteTopic(TopicEntry t) async {
+    final repo = ref.read(storageRepositoryProvider);
+    final trials = await repo.listTrials(t.name);
+    var sessionCount = 0;
+    for (final trial in trials) {
+      sessionCount += (await repo.listSessions(t.name, trial)).length;
+    }
+    if (!mounted) return;
+    final confirmed = await showDeleteConfirmDialog(
+      context,
+      title: "Delete topic '${t.name}'?",
+      message: 'This will remove ${trials.length} '
+          '${trials.length == 1 ? 'trial' : 'trials'} and '
+          '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'}. '
+          'This cannot be undone.',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await repo.deleteTopic(t.name);
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -197,6 +258,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                             _renameTopic(t);
                           } else if (value == 'description') {
                             _editDescription(t);
+                          } else if (value == 'delete') {
+                            _deleteTopic(t);
                           }
                         },
                         itemBuilder: (context) => [
@@ -214,6 +277,17 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                             child: ListTile(
                               leading: Icon(Icons.edit_note_rounded),
                               title: Text('Edit description'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: ListTile(
+                              leading: Icon(Icons.delete_outline_rounded,
+                                  color: Colors.red),
+                              title: Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
                               contentPadding: EdgeInsets.zero,
                               dense: true,
                             ),
@@ -249,6 +323,43 @@ class _TrialListView extends ConsumerStatefulWidget {
 }
 
 class _TrialListViewState extends ConsumerState<_TrialListView> {
+  Future<List<int>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    _future = ref.read(storageRepositoryProvider).listTrials(widget.topic);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteTrial(int trialNumber) async {
+    final repo = ref.read(storageRepositoryProvider);
+    final sessions = await repo.listSessions(widget.topic, trialNumber);
+    if (!mounted) return;
+    final confirmed = await showDeleteConfirmDialog(
+      context,
+      title: 'Delete trial_${trialNumber.toString().padLeft(2, '0')}?',
+      message: 'This will remove ${sessions.length} '
+          '${sessions.length == 1 ? 'session' : 'sessions'}. '
+          'This cannot be undone.',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await repo.deleteTrial(widget.topic, trialNumber);
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
+    }
+  }
+
   Future<void> _shareTopic(BuildContext context) async {
     final actions = ref.read(exportActionsProvider);
     final messenger = ScaffoldMessenger.of(context);
@@ -309,7 +420,7 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
         ],
       ),
       body: FutureBuilder<List<int>>(
-        future: ref.read(storageRepositoryProvider).listTrials(widget.topic),
+        future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -331,7 +442,34 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
                 child: ListTile(
                   leading: const Icon(Icons.layers_rounded),
                   title: Text('trial_${trial.toString().padLeft(2, '0')}'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        tooltip: 'Trial actions',
+                        icon: const Icon(Icons.more_vert_rounded),
+                        onSelected: (value) {
+                          if (value == 'delete') {
+                            _deleteTrial(trial);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: ListTile(
+                              leading: Icon(Icons.delete_outline_rounded,
+                                  color: Colors.red),
+                              title: Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.chevron_right_rounded),
+                    ],
+                  ),
                   onTap: () => widget.onTrialTap(trial),
                 ),
               );
@@ -404,6 +542,30 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Update failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteSession(SessionMeta meta) async {
+    final confirmed = await showDeleteConfirmDialog(
+      context,
+      title: "Delete session '${meta.sessionId}'?",
+      message: 'This will permanently remove the session and its CSV data. '
+          'This cannot be undone.',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await ref.read(storageRepositoryProvider).deleteSession(
+            widget.topic,
+            widget.trialNumber,
+            meta.sessionId,
+          );
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
       );
     }
   }
@@ -512,6 +674,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                     ? null
                     : () => _saveSessionToDevice(meta),
                 onEdit: () => _editSessionMeta(meta),
+                onDelete: () => _deleteSession(meta),
               );
             },
           );
