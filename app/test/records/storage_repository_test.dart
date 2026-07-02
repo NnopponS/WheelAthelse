@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
+import 'package:wheelathlete/theme/wheel_side.dart';
 
 void main() {
   late InMemoryStorageRepository storage;
@@ -358,6 +360,133 @@ void main() {
       expect(all.first.sessionId, 'b1');
     });
   });
+
+  group('StorageRepository — readSampleChunk', () {
+    test('chunk from middle of session returns correct slice', () async {
+      await storage.createTopic('test');
+      final samples = List.generate(10, _makeSample);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        's1',
+        offset: 3,
+        count: 4,
+      );
+      expect(chunk.length, 4);
+      // Samples 3..6 (seq values 3..6).
+      expect(chunk.map((s) => s.reading.seq).toList(), [3, 4, 5, 6]);
+    });
+
+    test('chunk at end returns partial count when fewer samples remain',
+        () async {
+      await storage.createTopic('test');
+      final samples = List.generate(10, _makeSample);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        's1',
+        offset: 8,
+        count: 10,
+      );
+      expect(chunk.length, 2);
+      expect(chunk.map((s) => s.reading.seq).toList(), [8, 9]);
+    });
+
+    test('offset beyond sample count returns empty list', () async {
+      await storage.createTopic('test');
+      final samples = List.generate(10, _makeSample);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        's1',
+        offset: 100,
+        count: 5,
+      );
+      expect(chunk, isEmpty);
+    });
+
+    test('negative offset throws ArgumentError', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      expect(
+        () => storage.readSampleChunk('test', 1, 's1', offset: -1, count: 5),
+        throwsArgumentError,
+      );
+    });
+
+    test('zero count throws ArgumentError', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      expect(
+        () => storage.readSampleChunk('test', 1, 's1', offset: 0, count: 0),
+        throwsArgumentError,
+      );
+    });
+
+    test('negative count throws ArgumentError', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      expect(
+        () => storage.readSampleChunk('test', 1, 's1', offset: 0, count: -3),
+        throwsArgumentError,
+      );
+    });
+
+    test('full session as single chunk returns all samples', () async {
+      await storage.createTopic('test');
+      final samples = List.generate(10, _makeSample);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        's1',
+        offset: 0,
+        count: 100,
+      );
+      expect(chunk.length, 10);
+      expect(chunk.map((s) => s.reading.seq).toList(),
+          List.generate(10, (i) => i));
+    });
+
+    test('chunk from session that does not exist returns empty list',
+        () async {
+      await storage.createTopic('test');
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        'nope',
+        offset: 0,
+        count: 5,
+      );
+      expect(chunk, isEmpty);
+    });
+
+    test('chunk from offset zero returns from the start', () async {
+      await storage.createTopic('test');
+      final samples = List.generate(5, _makeSample);
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+      final chunk = await storage.readSampleChunk(
+        'test',
+        1,
+        's1',
+        offset: 0,
+        count: 3,
+      );
+      expect(chunk.length, 3);
+      expect(chunk.map((s) => s.reading.seq).toList(), [0, 1, 2]);
+    });
+  });
 }
 
 SessionMeta _makeMeta({
@@ -373,4 +502,21 @@ SessionMeta _makeMeta({
       durationMs: 1000,
       sampleCount: 100,
       markerCount: 0,
+    );
+
+BufferedSample _makeSample(int i) => BufferedSample(
+      reading: ImuReading(
+        seq: i,
+        tDeviceUs: i * 1000,
+        ax: i.toDouble(),
+        ay: 0,
+        az: 0,
+        gx: 0,
+        gy: 0,
+        gz: 0,
+      ),
+      wheel: WheelSide.left,
+      timestampAppMs: i * 10,
+      timestampSyncedMs: i * 10.0,
+      marker: false,
     );

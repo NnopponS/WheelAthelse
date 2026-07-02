@@ -110,6 +110,19 @@ abstract class StorageRepository {
     String sessionId,
   );
 
+  /// Reads a chunk of samples `[offset, offset+count)` from the session CSV.
+  /// Used by the preview page for lazy loading. Returns an empty list if
+  /// [offset] is beyond the sample count or the session doesn't exist.
+  ///
+  /// Throws [ArgumentError] if [offset] is negative or [count] is <= 0.
+  Future<List<BufferedSample>> readSampleChunk(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    required int offset,
+    required int count,
+  });
+
   /// Lists all trial numbers for a topic, sorted ascending.
   Future<List<int>> listTrials(String topic);
 
@@ -442,6 +455,70 @@ class PathProviderStorageRepository implements StorageRepository {
   }
 
   @override
+  Future<List<BufferedSample>> readSampleChunk(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    required int offset,
+    required int count,
+  }) async {
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', 'must be >= 0');
+    }
+    if (count <= 0) {
+      throw ArgumentError.value(count, 'count', 'must be > 0');
+    }
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    final csvFile = File('${trialDir.path}/session_$sessionId.csv');
+    if (!csvFile.existsSync()) return [];
+    // Parse CSV line by line: skip header, skip `offset` data lines, then
+    // read up to `count` data lines. Uses a stream so the whole file is not
+    // loaded into memory for large sessions.
+    final samples = <BufferedSample>[];
+    final lineStream =
+        utf8.decoder.bind(csvFile.openRead()).transform(const LineSplitter());
+    var dataIndex = 0;
+    var collected = 0;
+    var isHeader = true;
+    await for (final line in lineStream) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (isHeader) {
+        isHeader = false;
+        continue;
+      }
+      if (dataIndex < offset) {
+        dataIndex++;
+        continue;
+      }
+      final f = trimmed.split(',');
+      if (f.length >= 12) {
+        samples.add(BufferedSample(
+          reading: ImuReading(
+            seq: int.parse(f[0]),
+            tDeviceUs: int.parse(f[3]),
+            ax: double.parse(f[5]),
+            ay: double.parse(f[6]),
+            az: double.parse(f[7]),
+            gx: double.parse(f[8]),
+            gy: double.parse(f[9]),
+            gz: double.parse(f[10]),
+          ),
+          wheel: f[1] == 'L' ? WheelSide.left : WheelSide.right,
+          timestampAppMs: int.parse(f[2]),
+          timestampSyncedMs: double.parse(f[4]),
+          marker: f[11] == '1',
+        ));
+      }
+      dataIndex++;
+      collected++;
+      if (collected >= count) break;
+    }
+    return samples;
+  }
+
+  @override
   Future<List<int>> listTrials(String topic) async {
     final root = await _rootDir();
     final topicDir = Directory('${root.path}/$topic');
@@ -750,6 +827,27 @@ class InMemoryStorageRepository implements StorageRepository {
   ) async {
     final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
     return List<BufferedSample>.from(_samples['$key/$sessionId'] ?? []);
+  }
+
+  @override
+  Future<List<BufferedSample>> readSampleChunk(
+    String topic,
+    int trialNumber,
+    String sessionId, {
+    required int offset,
+    required int count,
+  }) async {
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', 'must be >= 0');
+    }
+    if (count <= 0) {
+      throw ArgumentError.value(count, 'count', 'must be > 0');
+    }
+    final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
+    final all = _samples['$key/$sessionId'];
+    if (all == null || offset >= all.length) return [];
+    final end = (offset + count < all.length) ? offset + count : all.length;
+    return all.sublist(offset, end);
   }
 
   @override
