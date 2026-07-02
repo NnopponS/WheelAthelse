@@ -330,5 +330,5 @@ Branches: `feat/phase2-firmware-issue-1` · `feat/phase2-app-conn-issue-2` · `f
 | 27 | Experiment tracker dashboard | dart-flutter-patterns + tdd-workflow + verification-loop | pending | - | - | - |
 | 28 | Align countdown to next whole second | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 23ffc9e |
 | 29 | Convert `timestamp_synced_ms` to absolute UTC | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | bc18ee8 |
-| 30 | Update docs and metadata for UTC timestamps | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
+| 30 | Update docs and metadata for UTC timestamps | dart-flutter-patterns + tdd-workflow | completed | 2026-07-02 | 2026-07-02 | 9b58d34 |
 | 31 | Verify firmware UTC start computation | cpp-coding-standards + cpp-testing + tdd-workflow | pending | - | - | - |
