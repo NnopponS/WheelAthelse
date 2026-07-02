@@ -15,10 +15,12 @@ class SessionListItem extends StatelessWidget {
     this.sampleCount,
     this.markerCount = 0,
     this.syncQuality,
+    this.tags = const [],
     this.onTap,
     this.onShare,
     this.onSave,
     this.onEdit,
+    this.onEditTags,
     this.onDelete,
   });
 
@@ -35,6 +37,10 @@ class SessionListItem extends StatelessWidget {
   /// implicitly via [syncQuality]; here we just render it as info.
   final String? syncQuality;
 
+  /// Free-form tags/labels for this session. Shown as small chips below the
+  /// subtitle. Defaults to an empty list (no chips rendered).
+  final List<String> tags;
+
   final VoidCallback? onTap;
   final VoidCallback? onShare;
 
@@ -44,6 +50,10 @@ class SessionListItem extends StatelessWidget {
   /// Optional edit callback. When set, an overflow menu is shown that lets the
   /// user edit the session's notes / video filename.
   final VoidCallback? onEdit;
+
+  /// Optional edit-tags callback. When set, the overflow menu gains an
+  /// "Edit tags" entry that opens the tag editor dialog.
+  final VoidCallback? onEditTags;
 
   /// Optional delete callback. When set, a delete icon button is shown.
   final VoidCallback? onDelete;
@@ -94,6 +104,28 @@ class SessionListItem extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (tags.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.xxs),
+                          Wrap(
+                            spacing: AppSpacing.xxs,
+                            runSpacing: AppSpacing.xxs,
+                            children: [
+                              for (final tag in tags)
+                                Chip(
+                                  label: Text(tag),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  labelPadding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.xs,
+                                  ),
+                                  backgroundColor:
+                                      scheme.secondaryContainer,
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -115,23 +147,35 @@ class SessionListItem extends StatelessWidget {
                       icon: const Icon(Icons.save_alt_rounded),
                       tooltip: 'Save to device',
                     ),
-                  if (onEdit != null)
+                  if (onEdit != null || onEditTags != null)
                     PopupMenuButton<String>(
                       tooltip: 'More',
                       icon: const Icon(Icons.more_vert_rounded),
                       onSelected: (value) {
                         if (value == 'edit') onEdit?.call();
+                        if (value == 'edit_tags') onEditTags?.call();
                       },
                       itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: ListTile(
-                            leading: Icon(Icons.edit_note_rounded),
-                            title: Text('Edit notes / video'),
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
+                        if (onEdit != null)
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: ListTile(
+                              leading: Icon(Icons.edit_note_rounded),
+                              title: Text('Edit notes / video'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
                           ),
-                        ),
+                        if (onEditTags != null)
+                          const PopupMenuItem(
+                            value: 'edit_tags',
+                            child: ListTile(
+                              leading: Icon(Icons.sell_outlined),
+                              title: Text('Edit tags'),
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                            ),
+                          ),
                       ],
                     ),
                 ],

@@ -6,6 +6,7 @@ import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/tag_editor_dialog.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Shows a dialog with a single text field pre-filled with [initialValue].
@@ -546,6 +547,29 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     }
   }
 
+  Future<void> _editTags(SessionMeta meta) async {
+    final updated = await showTagEditorDialog(
+      context,
+      initialTags: meta.tags,
+    );
+    if (updated == null || !mounted) return;
+    try {
+      await ref.read(storageRepositoryProvider).updateSessionTags(
+            widget.topic,
+            widget.trialNumber,
+            meta.sessionId,
+            updated,
+          );
+      if (!mounted) return;
+      _refresh();
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update failed: $e')),
+      );
+    }
+  }
+
   Future<void> _deleteSession(SessionMeta meta) async {
     final confirmed = await showDeleteConfirmDialog(
       context,
@@ -667,6 +691,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                 syncQuality: meta.driftResidualRmsMsLeft != null
                     ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                     : null,
+                tags: meta.tags,
                 onShare: exportState.isExporting
                     ? null
                     : () => _shareSession(meta),
@@ -674,6 +699,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                     ? null
                     : () => _saveSessionToDevice(meta),
                 onEdit: () => _editSessionMeta(meta),
+                onEditTags: () => _editTags(meta),
                 onDelete: () => _deleteSession(meta),
               );
             },

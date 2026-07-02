@@ -260,6 +260,104 @@ void main() {
       );
     });
   });
+
+  group('StorageRepository — session tags', () {
+    test('updateSessionTags sets tags on a session', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionTags('test', 1, 's1', ['good', 'athlete-A']);
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.tags, ['good', 'athlete-A']);
+    });
+
+    test('updateSessionTags overwrites existing tags', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionTags('test', 1, 's1', ['a', 'b']);
+      await storage.updateSessionTags('test', 1, 's1', ['c']);
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.tags, ['c']);
+    });
+
+    test('updateSessionTags can clear tags with empty list', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionTags('test', 1, 's1', ['a']);
+      await storage.updateSessionTags('test', 1, 's1', []);
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.tags, isEmpty);
+    });
+
+    test('updateSessionTags preserves other fields', () async {
+      await storage.createTopic('test');
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+      await storage.updateSessionTags('test', 1, 's1', ['tag1']);
+      final meta = await storage.readSessionMeta('test', 1, 's1');
+      expect(meta, isNotNull);
+      expect(meta!.sampleRateHz, 100);
+      expect(meta.durationMs, 1000);
+      expect(meta.sessionId, 's1');
+    });
+
+    test('updateSessionTags throws if session does not exist', () async {
+      await storage.createTopic('test');
+      expect(
+        () => storage.updateSessionTags('test', 1, 'nope', ['x']),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('StorageRepository — listAllSessions', () {
+    test('returns empty list when no sessions exist', () async {
+      final all = await storage.listAllSessions();
+      expect(all, isEmpty);
+    });
+
+    test('returns flat list across all topics and trials', () async {
+      await storage.createTopic('topicA');
+      await storage.createTopic('topicB');
+      await storage.saveSession(
+          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 1), []);
+      await storage.saveSession(
+          'topicA', _makeMeta(sessionId: 'a2', trialNumber: 2), []);
+      await storage.saveSession(
+          'topicB', _makeMeta(sessionId: 'b1', trialNumber: 1), []);
+      final all = await storage.listAllSessions();
+      expect(all.length, 3);
+      final ids = all.map((m) => m.sessionId).toSet();
+      expect(ids, {'a1', 'a2', 'b1'});
+    });
+
+    test('returns sessions with their trialNumber intact', () async {
+      await storage.createTopic('topicA');
+      await storage.saveSession(
+          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 3), []);
+      final all = await storage.listAllSessions();
+      expect(all.length, 1);
+      expect(all.first.trialNumber, 3);
+    });
+
+    test('does not include sessions from deleted topics', () async {
+      await storage.createTopic('topicA');
+      await storage.createTopic('topicB');
+      await storage.saveSession(
+          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 1), []);
+      await storage.saveSession(
+          'topicB', _makeMeta(sessionId: 'b1', trialNumber: 1), []);
+      await storage.deleteTopic('topicA');
+      final all = await storage.listAllSessions();
+      expect(all.length, 1);
+      expect(all.first.sessionId, 'b1');
+    });
+  });
 }
 
 SessionMeta _makeMeta({

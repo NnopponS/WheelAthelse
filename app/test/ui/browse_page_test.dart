@@ -288,6 +288,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
       await tester.pumpAndSettle();
       expect(find.text('Edit notes / video'), findsOneWidget);
+      expect(find.text('Edit tags'), findsOneWidget);
     });
 
     testWidgets('edit session meta updates notes + videoFile', (tester) async {
@@ -318,6 +319,31 @@ void main() {
       expect(meta, isNotNull);
       expect(meta!.notes, 'updated notes');
       expect(meta.videoFileName, 'cam_01.mp4');
+    });
+
+    testWidgets('edit tags opens TagEditorDialog and saves tags', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit tags'));
+      await tester.pumpAndSettle();
+
+      // Tag editor dialog is open.
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'good-take');
+      await tester.tap(find.widgetWithText(TextButton, 'Add'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final meta = await storage.readSessionMeta('sprint_test', 1, 'abc123');
+      expect(meta, isNotNull);
+      expect(meta!.tags, contains('good-take'));
     });
   });
 

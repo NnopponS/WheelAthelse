@@ -108,6 +108,8 @@ class SessionMeta {
     this.notes,
     this.videoFileName,
     this.utcStartMs,
+    this.tags = const [],
+    this.protocolTemplateId,
   });
 
   final String sessionId;
@@ -130,6 +132,17 @@ class SessionMeta {
   /// alignment). Null when the session was started without a countdown.
   final int? utcStartMs;
 
+  /// Free-form tags/labels for this session (e.g. "good", "bad-take",
+  /// "athlete-A"). Used for filtering in Browse + the Experiment tracker.
+  /// Defaults to an empty list. Old sessions without `tags` default to `[]`.
+  final List<String> tags;
+
+  /// Optional id of the protocol template this session was recorded under
+  /// (Phase 3, §6). Links the session to a [ProtocolTemplate] for the
+  /// Experiment tracker dashboard. Null for "Custom" (manual topic) sessions
+  /// and old sessions.
+  final String? protocolTemplateId;
+
   Map<String, dynamic> toJson() => {
         'session_id': sessionId,
         'topic': topic,
@@ -147,6 +160,8 @@ class SessionMeta {
         'notes': notes,
         'video_file_name': videoFileName,
         'utc_start_ms': utcStartMs,
+        'tags': tags,
+        'protocol_template_id': protocolTemplateId,
       };
 
   factory SessionMeta.fromJson(Map<String, dynamic> json) => SessionMeta(
@@ -168,6 +183,11 @@ class SessionMeta {
         notes: json['notes'] as String?,
         videoFileName: json['video_file_name'] as String?,
         utcStartMs: json['utc_start_ms'] as int?,
+        tags: (json['tags'] as List?)
+                ?.map((e) => e as String)
+                .toList(growable: false) ??
+            const [],
+        protocolTemplateId: json['protocol_template_id'] as String?,
       );
 }
 
