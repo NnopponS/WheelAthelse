@@ -2,9 +2,9 @@
 
 | # | Subtask | Skill | Status | Started | Completed | Commit |
 |---|---------|-------|--------|---------|-----------|--------|
-| 30 | Sample chunk reader + decimation for preview | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
-| 31 | Session stats computation (pure logic) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
-| 32 | Quality badge color thresholds (pure logic) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
+| 30 | Sample chunk reader + decimation for preview | dart-flutter-patterns + tdd-workflow | done | 2026-07-02 | 2026-07-02 | f0728e3 |
+| 31 | Session stats computation (pure logic) | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
+| 32 | Quality badge color thresholds (pure logic) | dart-flutter-patterns + tdd-workflow | done | 2026-07-02 | 2026-07-02 | f2e727a |
 | 33 | Session preview page (chart + scrub + stats) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
 | 34 | Preview entry points (Browse tap + stopped view) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
 | 35 | Export/share from preview page | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
