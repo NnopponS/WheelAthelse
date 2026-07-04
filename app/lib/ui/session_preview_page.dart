@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
+import 'package:wheelathlete/export/export_actions.dart';
+import 'package:wheelathlete/export/export_providers.dart';
 import 'package:wheelathlete/records/quality_badge.dart';
+import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/session_stats.dart';
 import 'package:wheelathlete/state/preview_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
@@ -29,8 +32,10 @@ class SessionPreviewPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(previewControllerProvider(source));
+    final exportState = ref.watch(exportProvider);
     final theme = Theme.of(context);
     final wc = context.wheelColors;
+    final canExport = !state.isLoading && state.error == null;
 
     return Scaffold(
       appBar: AppBar(
@@ -46,7 +51,37 @@ class SessionPreviewPage extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
+            )
+          else ...[
+            IconButton(
+              onPressed: (exportState.isExporting || !canExport)
+                  ? null
+                  : () => _share(context, ref, state.meta),
+              icon: const Icon(Icons.ios_share_rounded),
+              tooltip: 'Share',
             ),
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                if (value == 'save') {
+                  _saveToDevice(context, ref, state.meta);
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'save',
+                  enabled: !exportState.isExporting && canExport,
+                  child: const ListTile(
+                    leading: Icon(Icons.save_alt_rounded),
+                    title: Text('Save to device'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
       body: state.isLoading
@@ -55,6 +90,58 @@ class SessionPreviewPage extends ConsumerWidget {
               ? _ErrorView(message: state.error!)
               : _PreviewBody(source: source, state: state, theme: theme, wc: wc),
     );
+  }
+
+  /// Shares the session CSV via share_plus (Phase 4, subtask #35). Uses the
+  /// shared [exportActionsProvider] — same path as Browse share. Works for
+  /// both disk and in-memory sources because the session is already saved to
+  /// disk by the time the preview opens.
+  Future<void> _share(
+    BuildContext context,
+    WidgetRef ref,
+    SessionMeta meta,
+  ) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await actions.share(
+        level: ExportLevel.session,
+        topic: meta.topic,
+        trialNumber: meta.trialNumber,
+        sessionId: meta.sessionId,
+      );
+    } on Object catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  /// Saves the session CSV to a user-picked directory (Phase 4, subtask #35).
+  Future<void> _saveToDevice(
+    BuildContext context,
+    WidgetRef ref,
+    SessionMeta meta,
+  ) async {
+    final actions = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final written = await actions.saveToDevice(
+        level: ExportLevel.session,
+        topic: meta.topic,
+        trialNumber: meta.trialNumber,
+        sessionId: meta.sessionId,
+        pickDirectory: pickDirectory,
+        writeFile: writeCsvFile,
+      );
+      if (!context.mounted) return;
+      if (written.isEmpty) return; // user cancelled
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved ${written.length} file(s) to device')),
+      );
+    } on Object catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
   }
 }
 

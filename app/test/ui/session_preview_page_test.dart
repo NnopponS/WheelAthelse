@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
+import 'package:wheelathlete/export/export_actions.dart';
+import 'package:wheelathlete/export/export_providers.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -10,6 +12,61 @@ import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/session_preview_page.dart';
 
 import '../helpers/pump.dart';
+
+/// Fake [ExportActions] that records the last call instead of invoking
+/// share_plus / file_picker.
+class _RecordingExportActions extends ExportActions {
+  _RecordingExportActions() : super(_NoopOps(), InMemoryStorageRepository());
+
+  ExportLevel? lastLevel;
+  String? lastTopic;
+  int? lastTrial;
+  String? lastSession;
+
+  @override
+  Future<void> share({
+    required ExportLevel level,
+    required String topic,
+    int? trialNumber,
+    String? sessionId,
+  }) async {
+    lastLevel = level;
+    lastTopic = topic;
+    lastTrial = trialNumber;
+    lastSession = sessionId;
+  }
+
+  @override
+  Future<List<String>> saveToDevice({
+    required ExportLevel level,
+    required String topic,
+    int? trialNumber,
+    String? sessionId,
+    required DirectoryPicker pickDirectory,
+    required FileSink writeFile,
+  }) async {
+    lastLevel = level;
+    lastTopic = topic;
+    lastTrial = trialNumber;
+    lastSession = sessionId;
+    return const ['/fake/path/session.csv'];
+  }
+}
+
+class _NoopOps implements ExportOperations {
+  @override
+  Future<void> shareSession({
+    required String topic,
+    required int trialNumber,
+    required String sessionId,
+  }) async {}
+
+  @override
+  Future<void> shareTrial({required String topic, required int trialNumber}) async {}
+
+  @override
+  Future<void> shareTopic({required String topic}) async {}
+}
 
 BufferedSample _sample(
   ImuReading reading, {
@@ -219,5 +276,82 @@ void main() {
     expect(find.text('deadbeef'), findsOneWidget);
     expect(find.text('Summary'), findsOneWidget);
     expect(find.text('Accelerometer (g)'), findsOneWidget);
+  });
+
+  group('export/share from preview', () {
+    testWidgets('share button invokes ExportActions.share with session meta',
+        (tester) async {
+      final exportActions = _RecordingExportActions();
+      final samples = _mixedSamples(50);
+      final meta = _meta(sampleCount: 50);
+      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+
+      await _pumpPage(
+        tester,
+        ProviderScope(
+          overrides: [
+            exportActionsProvider.overrideWith((ref) => exportActions),
+          ],
+          child: SessionPreviewPage(source: source),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byIcon(Icons.ios_share_rounded));
+      await tester.pumpAndSettle();
+
+      expect(exportActions.lastLevel, ExportLevel.session);
+      expect(exportActions.lastTopic, 'test-topic');
+      expect(exportActions.lastTrial, 1);
+      expect(exportActions.lastSession, 'deadbeef');
+    });
+
+    testWidgets('overflow menu Save to device invokes saveToDevice',
+        (tester) async {
+      final exportActions = _RecordingExportActions();
+      final samples = _mixedSamples(50);
+      final meta = _meta(sampleCount: 50);
+      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+
+      await _pumpPage(
+        tester,
+        ProviderScope(
+          overrides: [
+            exportActionsProvider.overrideWith((ref) => exportActions),
+          ],
+          child: SessionPreviewPage(source: source),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save to device'));
+      await tester.pumpAndSettle();
+
+      expect(exportActions.lastLevel, ExportLevel.session);
+      expect(exportActions.lastSession, 'deadbeef');
+      // SnackBar confirms the save.
+      expect(find.textContaining('Saved'), findsOneWidget);
+    });
+
+    testWidgets('share button is hidden while loading', (tester) async {
+      final exportActions = _RecordingExportActions();
+      final samples = _mixedSamples(50);
+      final meta = _meta(sampleCount: 50);
+      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+
+      await _pumpPage(
+        tester,
+        ProviderScope(
+          overrides: [
+            exportActionsProvider.overrideWith((ref) => exportActions),
+          ],
+          child: SessionPreviewPage(source: source),
+        ),
+      );
+      // Don't settle — still loading. Share icon should not be present.
+      expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
+    });
   });
 }
