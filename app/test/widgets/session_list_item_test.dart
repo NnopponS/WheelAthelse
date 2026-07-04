@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wheelathlete/records/quality_badge.dart';
 import 'package:wheelathlete/widgets/session_list_item.dart';
+import 'package:wheelathlete/widgets/status_badge.dart';
 
 import '../helpers/pump.dart';
 
@@ -108,5 +110,95 @@ void main() {
     // 'label' text isn't rendered as a Chip — there is no easy direct
     // assertion, so verify no Chip widgets exist below the subtitle row.
     expect(find.byType(Chip), findsNothing);
+  });
+
+  group('quality badge tone', () {
+    /// Finds the [StatusBadge] whose label starts with `sync` and returns its
+    /// [BadgeTone]. Throws if no sync badge is rendered.
+    BadgeTone _syncBadgeTone(WidgetTester tester) {
+      final badges = tester.widgetList<StatusBadge>(
+        find.bySubtype<StatusBadge>(),
+      );
+      final syncBadge = badges.firstWhere(
+        (b) => b.label.startsWith('sync'),
+        orElse: () => throw StateError('no sync badge rendered'),
+      );
+      return syncBadge.tone;
+    }
+
+    testWidgets('qualityLevel=good -> success tone (green)', (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(
+          title: 's',
+          subtitle: 't',
+          syncQuality: '±0.8 ms',
+          qualityLevel: SyncQuality.good,
+        ),
+      );
+      expect(_syncBadgeTone(tester), BadgeTone.success);
+    });
+
+    testWidgets('qualityLevel=fair -> warning tone (amber)', (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(
+          title: 's',
+          subtitle: 't',
+          syncQuality: '±3.2 ms',
+          qualityLevel: SyncQuality.fair,
+        ),
+      );
+      expect(_syncBadgeTone(tester), BadgeTone.warning);
+    });
+
+    testWidgets('qualityLevel=poor -> danger tone (red)', (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(
+          title: 's',
+          subtitle: 't',
+          syncQuality: '±8.0 ms',
+          qualityLevel: SyncQuality.poor,
+        ),
+      );
+      expect(_syncBadgeTone(tester), BadgeTone.danger);
+    });
+
+    testWidgets('qualityLevel=unknown -> neutral tone (grey)',
+        (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(
+          title: 's',
+          subtitle: 't',
+          syncQuality: 'n/a',
+          qualityLevel: SyncQuality.unknown,
+        ),
+      );
+      expect(_syncBadgeTone(tester), BadgeTone.neutral);
+    });
+
+    testWidgets('qualityLevel null but syncQuality set -> neutral tone',
+        (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(
+          title: 's',
+          subtitle: 't',
+          syncQuality: '±0.8 ms',
+        ),
+      );
+      expect(_syncBadgeTone(tester), BadgeTone.neutral);
+    });
+
+    testWidgets('no sync badge when both qualityLevel and syncQuality null',
+        (tester) async {
+      await pumpThemed(
+        tester,
+        const SessionListItem(title: 's', subtitle: 't'),
+      );
+      expect(find.textContaining('sync'), findsNothing);
+    });
   });
 }

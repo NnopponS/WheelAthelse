@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/export_providers.dart';
+import 'package:wheelathlete/records/quality_badge.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -930,6 +931,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                       syncQuality: meta.driftResidualRmsMsLeft != null
                           ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                           : null,
+                      qualityLevel: QualityBadge.fromMeta(meta),
                       tags: meta.tags,
                       onShare: exportState.isExporting
                           ? null

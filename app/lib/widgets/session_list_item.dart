@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:wheelathlete/records/quality_badge.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/status_badge.dart';
 
@@ -15,6 +16,7 @@ class SessionListItem extends StatelessWidget {
     this.sampleCount,
     this.markerCount = 0,
     this.syncQuality,
+    this.qualityLevel,
     this.tags = const [],
     this.onTap,
     this.onShare,
@@ -36,6 +38,12 @@ class SessionListItem extends StatelessWidget {
   /// Optional sync-quality label (e.g. "±0.8 ms"). Tone is chosen by the caller
   /// implicitly via [syncQuality]; here we just render it as info.
   final String? syncQuality;
+
+  /// Optional [SyncQuality] level used to pick the badge color tone. When
+  /// provided, the sync badge is colored green (good), amber (fair), red
+  /// (poor), or grey (unknown). When `null` but [syncQuality] is set, the
+  /// badge falls back to [BadgeTone.neutral].
+  final SyncQuality? qualityLevel;
 
   /// Free-form tags/labels for this session. Shown as small chips below the
   /// subtitle. Defaults to an empty list (no chips rendered).
@@ -208,7 +216,7 @@ class SessionListItem extends StatelessWidget {
                     StatusBadge(
                       label: 'sync $syncQuality',
                       icon: Icons.sync_alt_rounded,
-                      tone: BadgeTone.success,
+                      tone: _syncTone(qualityLevel),
                       dense: true,
                     ),
                 ],
@@ -229,5 +237,18 @@ class SessionListItem extends StatelessWidget {
   static String _fmtCount(int n) {
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
     return '$n';
+  }
+
+  /// Maps a [SyncQuality] level to a [BadgeTone] for the sync badge. Falls
+  /// back to [BadgeTone.neutral] when [qualityLevel] is `null` (caller did not
+  /// classify the session).
+  static BadgeTone _syncTone(SyncQuality? level) {
+    return switch (level) {
+      SyncQuality.good => BadgeTone.success,
+      SyncQuality.fair => BadgeTone.warning,
+      SyncQuality.poor => BadgeTone.danger,
+      SyncQuality.unknown => BadgeTone.neutral,
+      null => BadgeTone.neutral,
+    };
   }
 }

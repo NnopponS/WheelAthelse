@@ -8,7 +8,7 @@
 | 33 | Session preview page (chart + scrub + stats) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
 | 34 | Preview entry points (Browse tap + stopped view) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
 | 35 | Export/share from preview page | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
-| 36 | Quality badges in Browse session list | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
+| 36 | Quality badges in Browse session list | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
 
 ## Dependency Order
 1. #30, #31, #32 — independent, can run in parallel
