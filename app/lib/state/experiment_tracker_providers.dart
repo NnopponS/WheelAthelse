@@ -46,6 +46,17 @@ final experimentProgressProvider =
   return computeExperimentProgress(templates, sessions);
 });
 
+/// Maps topic names to their [ExperimentProgress] (if a protocol template
+/// exists for that topic). Used by the Browse page's topic list to show
+/// progress bars inline. Topics without a template are absent from the map.
+final topicProgressProvider =
+    FutureProvider<Map<String, ExperimentProgress>>((ref) async {
+  final progressList = await ref.watch(experimentProgressProvider.future);
+  return {
+    for (final p in progressList) p.template.topicName: p,
+  };
+});
+
 /// Pure function that groups [sessions] under [templates] and returns one
 /// [ExperimentProgress] per template, sorted by template name. Extracted from
 /// the provider so it can be unit-tested directly without a ProviderContainer.

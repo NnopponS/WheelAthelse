@@ -54,7 +54,8 @@ void main() {
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Live'), findsOneWidget);
     expect(find.text('Browse'), findsOneWidget);
-    expect(find.text('Experiments'), findsOneWidget);
+    // Experiments tab was merged into Browse (Phase 4 follow-up).
+    expect(find.text('Experiments'), findsNothing);
   });
 
   testWidgets('starts on Connect tab — shows ConnectionCard content',
@@ -87,11 +88,13 @@ void main() {
     expect(find.text('Browse'), findsWidgets);
   });
 
-  testWidgets('tapping Experiments tab reveals New Template FAB',
+  testWidgets('tapping Browse tab reveals New Template FAB',
       (tester) async {
     await pumpHome(tester);
 
-    await tester.tap(find.text('Experiments'));
+    await tester.tap(find.text('Browse'));
+    // BrowsePage contains a FutureBuilder with CircularProgressIndicator which
+    // animates continuously — pumpAndSettle would time out. Use pump() instead.
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('New Template'), findsOneWidget);

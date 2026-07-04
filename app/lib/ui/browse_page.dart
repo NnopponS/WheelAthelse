@@ -7,7 +7,9 @@ import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/browse_providers.dart';
+import 'package:wheelathlete/state/experiment_tracker_providers.dart';
 import 'package:wheelathlete/state/preview_providers.dart';
+import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/session_preview_page.dart';
 import 'package:wheelathlete/ui/tag_editor_dialog.dart';
@@ -222,21 +224,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
   String? _selectedTopic;
   int? _selectedTrial;
 
-  @override
-  void initState() {
-    super.initState();
-    // Consume a pending topic set by the Experiment tracker dashboard (Phase 3,
-    // §8) on the first frame (e.g. when the app starts with a pending topic).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final pending = ref.read(selectedTopicProvider);
-      if (pending != null) {
-        ref.read(selectedTopicProvider.notifier).clear();
-        setState(() => _selectedTopic = pending);
-      }
-    });
-  }
-
   void _resetSearch() {
     ref.read(browseSearchProvider.notifier).clear();
     ref.read(browseTagFilterProvider.notifier).clear();
@@ -244,21 +231,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen for cross-tab navigation from the Experiment tracker. Because
-    // BrowsePage stays alive inside IndexedStack, this listener fires even when
-    // the Browse tab is not currently visible — pre-selecting the topic so it's
-    // ready when the user switches over.
-    ref.listen<String?>(selectedTopicProvider, (previous, next) {
-      if (next != null && next != _selectedTopic) {
-        ref.read(selectedTopicProvider.notifier).clear();
-        _resetSearch();
-        setState(() {
-          _selectedTopic = next;
-          _selectedTrial = null;
-        });
-      }
-    });
-
     if (_selectedTrial != null && _selectedTopic != null) {
       return _SessionListView(
         topic: _selectedTopic!,
@@ -385,11 +357,24 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     }
   }
 
+  Future<void> _showCreateTemplateDialog(BuildContext context, WidgetRef ref) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => const _CreateTemplateDialog(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(browseSearchProvider);
+    final topicProgress = ref.watch(topicProgressProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Browse')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateTemplateDialog(context, ref),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New Template'),
+      ),
       body: FutureBuilder<List<TopicEntry>>(
         future: _future,
         builder: (context, snapshot) {
@@ -441,65 +426,165 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                       const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (context, i) {
                     final t = topics[i];
+                    // Look up experiment progress for this topic (if a
+                    // protocol template exists for it).
+                    final progress = topicProgress.maybeWhen(
+                      data: (map) => map[t.name],
+                      orElse: () => null,
+                    );
                     return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.folder_rounded),
-                        title: Text(t.name),
-                        subtitle: t.description != null
-                            ? Text(t.description!)
-                            : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            PopupMenuButton<String>(
-                              tooltip: 'Edit topic',
-                              icon: const Icon(Icons.more_vert_rounded),
-                              onSelected: (value) {
-                                if (value == 'rename') {
-                                  _renameTopic(t);
-                                } else if (value == 'description') {
-                                  _editDescription(t);
-                                } else if (value == 'delete') {
-                                  _deleteTopic(t);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'rename',
-                                  child: ListTile(
-                                    leading:
-                                        Icon(Icons.drive_file_rename_outline_rounded),
-                                    title: Text('Rename'),
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'description',
-                                  child: ListTile(
-                                    leading: Icon(Icons.edit_note_rounded),
-                                    title: Text('Edit description'),
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: ListTile(
-                                    leading: Icon(Icons.delete_outline_rounded,
-                                        color: Colors.red),
-                                    title: Text('Delete',
-                                        style: TextStyle(color: Colors.red)),
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Icon(Icons.chevron_right_rounded),
-                          ],
-                        ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
                         onTap: () => widget.onTopicTap(t.name),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Colored accent strip — green when complete,
+                              // amber when in progress, grey when no template.
+                              Container(
+                                width: 4,
+                                height: progress != null ? 56 : 40,
+                                margin: const EdgeInsets.only(right: AppSpacing.sm),
+                                decoration: BoxDecoration(
+                                  color: progress == null
+                                      ? Theme.of(context).disabledColor
+                                      : (progress.isComplete
+                                          ? context.wheelColors.success.solid
+                                          : context.wheelColors.warning.solid),
+                                  borderRadius: AppRadius.brSm,
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.folder_rounded, size: 20),
+                                        const SizedBox(width: AppSpacing.xs),
+                                        Expanded(
+                                          child: Text(
+                                            t.name,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        PopupMenuButton<String>(
+                                          tooltip: 'Edit topic',
+                                          icon: const Icon(
+                                              Icons.more_vert_rounded),
+                                          onSelected: (value) {
+                                            if (value == 'rename') {
+                                              _renameTopic(t);
+                                            } else if (value == 'description') {
+                                              _editDescription(t);
+                                            } else if (value == 'delete') {
+                                              _deleteTopic(t);
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            const PopupMenuItem(
+                                              value: 'rename',
+                                              child: ListTile(
+                                                leading: Icon(Icons
+                                                    .drive_file_rename_outline_rounded),
+                                                title: Text('Rename'),
+                                                contentPadding: EdgeInsets.zero,
+                                                dense: true,
+                                              ),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'description',
+                                              child: ListTile(
+                                                leading:
+                                                    Icon(Icons.edit_note_rounded),
+                                                title: Text('Edit description'),
+                                                contentPadding: EdgeInsets.zero,
+                                                dense: true,
+                                              ),
+                                            ),
+                                            const PopupMenuItem(
+                                              value: 'delete',
+                                              child: ListTile(
+                                                leading: Icon(
+                                                    Icons.delete_outline_rounded,
+                                                    color: Colors.red),
+                                                title: Text('Delete',
+                                                    style: TextStyle(
+                                                        color: Colors.red)),
+                                                contentPadding: EdgeInsets.zero,
+                                                dense: true,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    if (t.description != null) ...[
+                                      const SizedBox(height: AppSpacing.xxs),
+                                      Text(
+                                        t.description!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                    if (progress != null) ...[
+                                      const SizedBox(height: AppSpacing.sm),
+                                      LinearProgressIndicator(
+                                        value: progress.progress,
+                                        minHeight: 6,
+                                        borderRadius: const BorderRadius.all(
+                                            Radius.circular(AppRadius.pill)),
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .surfaceContainerHigh,
+                                        color: progress.isComplete
+                                            ? context.wheelColors.success.solid
+                                            : context.wheelColors.warning.solid,
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${progress.sessionCount} / '
+                                            '${progress.template.targetTrialCount} trials',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelMedium
+                                                ?.copyWith(
+                                                  color: progress.isComplete
+                                                      ? context.wheelColors.success.solid
+                                                      : context.wheelColors.warning.solid,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                          ),
+                                          const Spacer(),
+                                          if (progress.lastSessionDate != null)
+                                            Text(
+                                              _formatDate(
+                                                  progress.lastSessionDate!),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall,
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded),
+                            ],
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -1009,6 +1094,186 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
+  }
+}
+
+/// Formats a [DateTime] as `YYYY-MM-DD` for display.
+String _formatDate(DateTime date) {
+  final y = date.year.toString();
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
+
+/// Dialog for creating a new protocol template. Fields: name (required),
+/// description (optional), topicName (required), targetTrialCount (required,
+/// dropdown 1–20), sampleRateHz (optional, dropdown 50/100/200, default 100).
+///
+/// On save, calls [ProtocolTemplateNotifier.createTemplate] and refreshes the
+/// topic list via [experimentProgressProvider] invalidation.
+class _CreateTemplateDialog extends ConsumerStatefulWidget {
+  const _CreateTemplateDialog();
+
+  @override
+  ConsumerState<_CreateTemplateDialog> createState() =>
+      _CreateTemplateDialogState();
+}
+
+class _CreateTemplateDialogState extends ConsumerState<_CreateTemplateDialog> {
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _topicController = TextEditingController();
+  int _targetTrialCount = 5;
+  int _sampleRateHz = 100;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _topicController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameController.text.trim();
+    final topic = _topicController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required');
+      return;
+    }
+    if (topic.isEmpty) {
+      setState(() => _error = 'Topic name is required');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final notifier = ref.read(protocolTemplateNotifierProvider.notifier);
+      await notifier.createTemplate(
+        name: name,
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        topicName: topic,
+        targetTrialCount: _targetTrialCount,
+        sampleRateHz: _sampleRateHz,
+      );
+      // Refresh the progress so the new template's progress bar shows.
+      ref.invalidate(experimentProgressProvider);
+      if (mounted) Navigator.of(context).pop();
+    } on Object catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('New Protocol Template'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Name *',
+                hintText: 'e.g. 20m Sprint Test',
+              ),
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                hintText: 'Optional',
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _topicController,
+              decoration: const InputDecoration(
+                labelText: 'Topic name *',
+                hintText: 'e.g. sprint_20m',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _targetTrialCount,
+                    decoration: const InputDecoration(
+                      labelText: 'Target trials',
+                    ),
+                    items: [
+                      for (var n = 1; n <= 20; n++)
+                        DropdownMenuItem(value: n, child: Text('$n')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _targetTrialCount = v ?? 5),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _sampleRateHz,
+                    decoration: const InputDecoration(
+                      labelText: 'Sample rate (Hz)',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 50, child: Text('50')),
+                      DropdownMenuItem(value: 100, child: Text('100')),
+                      DropdownMenuItem(value: 200, child: Text('200')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _sampleRateHz = v ?? 100),
+                  ),
+                ),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                _error!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Create'),
+        ),
+      ],
+    );
   }
 }
 
