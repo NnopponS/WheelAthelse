@@ -73,6 +73,8 @@ class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
   }
 
   /// Writes SET_NAME, SET_WHEEL, and SET_RATE commands to the board.
+  /// After writing, re-reads the Config characteristic to confirm the
+  /// changes took effect and updates the displayed config.
   Future<void> save({
     required String name,
     required int wheelByte,
@@ -92,13 +94,19 @@ class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
       config: state.config,
     );
     try {
+      // Write commands with a small delay between each to avoid BLE stack
+      // write-queue issues when sending multiple writes in rapid succession.
       await _ble.writeControl(deviceId, ControlCommand.setName(name));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       await _ble.writeControl(deviceId, ControlCommand.setWheel(wheelByte));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       await _ble.writeControl(deviceId, ControlCommand.setRate(rateHz));
+      // Re-read the Config characteristic to confirm changes and update UI.
+      final updatedConfig = await _ble.readConfig(deviceId);
       if (!ref.mounted) return;
       state = BoardSettingsState(
         status: BoardSettingsStatus.saved,
-        config: state.config,
+        config: updatedConfig,
       );
     } on Object catch (e) {
       if (!ref.mounted) return;

@@ -502,12 +502,18 @@ class FakeBleRepository implements BleRepository {
   /// none). Tests inspect this to verify the app sent the right bytes.
   List<int>? lastControlWrite(String deviceId) => _lastControlWrites[deviceId];
 
+  /// Records all Control commands written for [deviceId], in order.
+  List<List<int>> allControlWrites(String deviceId) =>
+      List.unmodifiable(_allControlWrites[deviceId] ?? const []);
+
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {
     _lastControlWrites[deviceId] = bytes;
+    (_allControlWrites[deviceId] ??= []).add(bytes);
   }
 
   final Map<String, List<int>> _lastControlWrites = {};
+  final Map<String, List<List<int>>> _allControlWrites = {};
 
   StreamController<List<int>> _imuController(String deviceId) =>
       _imuControllers.putIfAbsent(

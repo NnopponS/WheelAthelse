@@ -168,8 +168,8 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
             const SizedBox(height: AppSpacing.lg),
           ],
 
-          // ── Save button ─────────────────────────────────────────────
-          if (settings.status == BoardSettingsStatus.saved)
+          // ── Success banner (shown after save, keeps Save button visible) ──
+          if (settings.status == BoardSettingsStatus.saved) ...[
             Card(
               color: theme.colorScheme.primaryContainer,
               child: Padding(
@@ -179,28 +179,33 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
                     Icon(Icons.check_circle_rounded,
                         color: theme.colorScheme.primary),
                     const SizedBox(width: AppSpacing.sm),
-                    const Text('Settings saved to board'),
+                    const Expanded(
+                      child: Text('Settings saved to board'),
+                    ),
                   ],
                 ),
               ),
-            )
-          else
-            FilledButton.icon(
-              onPressed: saving ||
-                      _nameController.text.isEmpty ||
-                      _wheelByte == null ||
-                      _rateHz == null
-                  ? null
-                  : () => _save(),
-              icon: saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_rounded),
-              label: Text(saving ? 'Saving…' : 'Save to Board'),
             ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          // ── Save button ─────────────────────────────────────────────
+          FilledButton.icon(
+            onPressed: saving ||
+                    _nameController.text.isEmpty ||
+                    _wheelByte == null ||
+                    _rateHz == null
+                ? null
+                : () => _save(),
+            icon: saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_rounded),
+            label: Text(saving ? 'Saving…' : 'Save to Board'),
+          ),
         ],
       ),
     );

@@ -39,22 +39,28 @@ void main() {
   group('CsvExporter', () {
     test('header matches schema (§3)', () {
       final csv = CsvExporter.toCsvString(const []);
-      final firstLine = csv.split('\n').first;
+      final lines = csv.split('\n');
+      // First line is the L section comment, second is the header.
+      expect(lines[0], '# Wheel: L');
       expect(
-        firstLine,
+        lines[1],
         'seq,wheel,timestamp_app_ms,timestamp_device_us,'
         'timestamp_synced_ms,ax,ay,az,gx,gy,gz,marker',
       );
     });
 
-    test('empty samples produces header only', () {
+    test('empty samples produces L and R section headers only', () {
       final csv = CsvExporter.toCsvString(const []);
       final lines = csv.trim().split('\n');
-      expect(lines.length, 1);
-      expect(lines.first, startsWith('seq,'));
+      // # Wheel: L, header, (empty), # Wheel: R, header
+      expect(lines[0], '# Wheel: L');
+      expect(lines[1], startsWith('seq,'));
+      expect(lines[2], ''); // blank line separator
+      expect(lines[3], '# Wheel: R');
+      expect(lines[4], startsWith('seq,'));
     });
 
-    test('single sample produces correct row', () {
+    test('single L sample produces correct row in L table', () {
       final samples = [
         _sample(
           seq: 42,
@@ -72,8 +78,13 @@ void main() {
       ];
       final csv = CsvExporter.toCsvString(samples);
       final lines = csv.trim().split('\n');
-      expect(lines.length, 2);
-      expect(lines[1], '42,L,2000,1000000,1000.5,1,2,3,4,5,6,0');
+      // # Wheel: L, header, data, (empty), # Wheel: R, header
+      expect(lines[0], '# Wheel: L');
+      expect(lines[1], startsWith('seq,'));
+      expect(lines[2], '42,L,2000,1000000,1000.5,1,2,3,4,5,6,0');
+      expect(lines[3], ''); // blank line separator
+      expect(lines[4], '# Wheel: R');
+      expect(lines[5], startsWith('seq,'));
     });
 
     test('marker flag is 1 when marker=true', () {
@@ -87,36 +98,34 @@ void main() {
         ),
       ];
       final csv = CsvExporter.toCsvString(samples);
-      final lines = csv.trim().split('\n');
-      expect(lines[1].endsWith(',1'), isTrue);
+      final dataLines = csv.trim().split('\n').where((l) {
+        final t = l.trim();
+        return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
+      }).toList();
+      expect(dataLines.first.endsWith(',1'), isTrue);
     });
 
-    test('wheel column is L or R', () {
+    test('wheel column is L or R in separate tables', () {
       final samples = [
         _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.left),
         _sample(seq: 1, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.right),
       ];
       final csv = CsvExporter.toCsvString(samples);
       final lines = csv.trim().split('\n');
-      expect(lines[1].split(',')[1], 'L');
-      expect(lines[2].split(',')[1], 'R');
+      // L table: comment, header, 0,L
+      // blank
+      // R table: comment, header, 1,R
+      expect(lines[0], '# Wheel: L');
+      expect(lines[1], startsWith('seq,'));
+      expect(lines[2].split(',')[1], 'L');
+      expect(lines[3], ''); // blank line separator
+      expect(lines[4], '# Wheel: R');
+      expect(lines[5], startsWith('seq,'));
+      expect(lines[6].split(',')[1], 'R');
     });
 
-    test('samples sorted by timestamp_synced_ms', () {
-      final samples = [
-        _sample(seq: 3, tDeviceUs: 3000, syncedMs: 3000, wheel: WheelSide.left),
-        _sample(seq: 1, tDeviceUs: 1000, syncedMs: 1000, wheel: WheelSide.left),
-        _sample(seq: 2, tDeviceUs: 2000, syncedMs: 2000, wheel: WheelSide.right),
-      ];
-      final csv = CsvExporter.toCsvString(samples);
-      final lines = csv.trim().split('\n');
-      // seq should be 1, 2, 3 after sorting by synced_ms
-      expect(lines[1].split(',')[0], '1');
-      expect(lines[2].split(',')[0], '2');
-      expect(lines[3].split(',')[0], '3');
-    });
-
-    test('L and R interleaved by synced_ms', () {
+    test('L and R samples are in separate tables, each sorted by synced_ms',
+        () {
       final samples = [
         _sample(seq: 10, tDeviceUs: 100, syncedMs: 100, wheel: WheelSide.right),
         _sample(seq: 5, tDeviceUs: 50, syncedMs: 50, wheel: WheelSide.left),
@@ -125,11 +134,16 @@ void main() {
       ];
       final csv = CsvExporter.toCsvString(samples);
       final lines = csv.trim().split('\n');
-      // After sorting: 50(L), 100(L), 100(R), 200(R)
-      expect(lines[1].split(',')[1], 'L'); // synced=50
-      expect(lines[2].split(',')[1], 'L'); // synced=100 (L comes first)
-      expect(lines[3].split(',')[1], 'R'); // synced=100 (R)
-      expect(lines[4].split(',')[1], 'R'); // synced=200
+      // L table: # Wheel: L, header, 5(L@50), 10(L@100)
+      // blank
+      // R table: # Wheel: R, header, 10(R@100), 20(R@200)
+      expect(lines[0], '# Wheel: L');
+      expect(lines[2].split(',')[0], '5'); // L synced=50
+      expect(lines[3].split(',')[0], '10'); // L synced=100
+      expect(lines[4], ''); // blank line separator
+      expect(lines[5], '# Wheel: R');
+      expect(lines[7].split(',')[0], '10'); // R synced=100
+      expect(lines[8].split(',')[0], '20'); // R synced=200
     });
 
     test('double values formatted without trailing zeros', () {
@@ -145,8 +159,11 @@ void main() {
         ),
       ];
       final csv = CsvExporter.toCsvString(samples);
-      final line = csv.trim().split('\n')[1];
-      final fields = line.split(',');
+      final dataLines = csv.trim().split('\n').where((l) {
+        final t = l.trim();
+        return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
+      }).toList();
+      final fields = dataLines.first.split(',');
       expect(fields[5], '1.5'); // ax
       expect(fields[6], '0'); // ay
       expect(fields[7], '-2.3'); // az
@@ -160,8 +177,16 @@ void main() {
       ]);
       final csv = sink.toString();
       final lines = csv.trim().split('\n');
-      expect(lines.length, 3); // header + 2 rows
-      expect(lines[0], startsWith('seq,'));
+      // L table: comment, header, 1 row
+      // blank
+      // R table: comment, header, 1 row
+      expect(lines[0], '# Wheel: L');
+      expect(lines[1], startsWith('seq,'));
+      expect(lines[2].split(',')[1], 'L');
+      expect(lines[3], ''); // blank line separator
+      expect(lines[4], '# Wheel: R');
+      expect(lines[5], startsWith('seq,'));
+      expect(lines[6].split(',')[1], 'R');
     });
 
     test('handles negative synced timestamps', () {
@@ -174,8 +199,11 @@ void main() {
         ),
       ];
       final csv = CsvExporter.toCsvString(samples);
-      final line = csv.trim().split('\n')[1];
-      expect(line.split(',')[4], '-100.5');
+      final dataLines = csv.trim().split('\n').where((l) {
+        final t = l.trim();
+        return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
+      }).toList();
+      expect(dataLines.first.split(',')[4], '-100.5');
     });
 
     test('handles large seq numbers (uint32 max)', () {
@@ -188,9 +216,39 @@ void main() {
         ),
       ];
       final csv = CsvExporter.toCsvString(samples);
-      final line = csv.trim().split('\n')[1];
-      expect(line.split(',')[0], '4294967295');
-      expect(line.split(',')[3], '4294967295');
+      final dataLines = csv.trim().split('\n').where((l) {
+        final t = l.trim();
+        return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
+      }).toList();
+      final fields = dataLines.first.split(',');
+      expect(fields[0], '4294967295');
+      expect(fields[3], '4294967295');
+    });
+
+    test('L table always comes before R table', () {
+      final samples = [
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.right),
+        _sample(seq: 1, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.left),
+      ];
+      final csv = CsvExporter.toCsvString(samples);
+      final lIdx = csv.indexOf('# Wheel: L');
+      final rIdx = csv.indexOf('# Wheel: R');
+      expect(lIdx, lessThan(rIdx));
+    });
+
+    test('blank line separates L and R tables', () {
+      final samples = [
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.left),
+        _sample(seq: 1, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.right),
+      ];
+      final csv = CsvExporter.toCsvString(samples);
+      // After L data row, there should be a blank line before # Wheel: R
+      final lines = csv.split('\n');
+      final lDataIdx = lines.indexWhere((l) => l.startsWith('0,L'));
+      final rCommentIdx = lines.indexWhere((l) => l.trim() == '# Wheel: R');
+      // The line between L data and R comment should be empty
+      expect(lines[lDataIdx + 1].trim(), isEmpty);
+      expect(rCommentIdx, lDataIdx + 2);
     });
   });
 }

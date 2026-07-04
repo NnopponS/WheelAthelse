@@ -94,12 +94,26 @@ void main() {
     final state = container.read(boardSettingsProvider(WheelSide.left));
     expect(state.status, BoardSettingsStatus.saved);
 
-    // Verify the three commands were written.
-    final writes = ble.lastControlWrite('L1');
-    // The last write is SET_RATE (0x03). We can't see all writes since
-    // FakeBleRepository only stores the last one. Verify the last one.
-    expect(writes, isNotNull);
-    expect(writes![0], ControlCommandId.setRate);
+    // Verify all three commands were written in order.
+    final writes = ble.allControlWrites('L1');
+    expect(writes.length, 3);
+    expect(writes[0][0], ControlCommandId.setName);
+    expect(writes[1][0], ControlCommandId.setWheel);
+    expect(writes[2][0], ControlCommandId.setRate);
+  });
+
+  test('BoardSettingsNotifier.save re-reads config after save', () async {
+    // Load config first.
+    container.read(boardSettingsProvider(WheelSide.left));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final notifier = container.read(
+      boardSettingsProvider(WheelSide.left).notifier,
+    );
+    await notifier.save(name: 'NewName', wheelByte: 0x52, rateHz: 200);
+    final state = container.read(boardSettingsProvider(WheelSide.left));
+    expect(state.status, BoardSettingsStatus.saved);
+    // Config should be re-read (not null) after save.
+    expect(state.config, isNotNull);
   });
 
   test('BoardSettingsNotifier.save with disconnected wheel sets error',

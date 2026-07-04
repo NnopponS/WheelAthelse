@@ -267,6 +267,9 @@ void BleService::onDisconnect() {
     ble().pending_start_ = false;
     // Persist config to NVS on disconnect (limit wear)
     configStore().save();
+    // Apply the advertised name right before re-advertising so the new
+    // name/wheel is visible in the next scan.
+    ble().updateAdvertisedName();
     NimBLEDevice::startAdvertising();
     Serial.println("[BLE] Disconnected — resuming advertising");
 }
@@ -454,7 +457,9 @@ void BleService::handleSetName(const uint8_t* name_data, size_t len) {
 
     configStore().setName(name_buf);
     updateConfigCharacteristic();
-    updateAdvertisedName();
+    // Note: advertised name is updated on disconnect (before re-advertising).
+    // Calling updateAdvertisedName() here disrupts the BLE stack during an
+    // active connection and causes subsequent writes to fail.
     Serial.printf("[BLE] SET_NAME: '%s'\n", configStore().name());
 }
 
@@ -467,7 +472,7 @@ void BleService::handleSetWheel(uint8_t wheel_id) {
     wheel_id_ = static_cast<char>(wheel_id);
     updateInfoCharacteristic();
     updateConfigCharacteristic();
-    updateAdvertisedName();
+    // Note: advertised name is updated on disconnect (before re-advertising).
     Serial.printf("[BLE] SET_WHEEL: %c\n", wheel_id_);
 }
 
@@ -488,8 +493,21 @@ void BleService::handleSetUtc(uint64_t utc_epoch_ms) {
 void BleService::sendStartFired() {
     // Extended START_FIRED (v1.1.0): [0x30][uint32 t_device_us][uint64 utc_start_ms]
     const uint32_t now_us = micros();
-    const uint64_t utc_start_ms = computeStartFiredUtcMs(
-        utc_epoch_ms_, target_start_us_, now_us, utc_set_, pending_start_);
+    uint64_t utc_start_ms = 0;
+    if (utc_set_ && pending_start_) {
+        // utc_start_ms = utc_epoch + (target_start_us - now_us) / 1000
+        // Keep the math in signed 64-bit until the final store so a slightly
+        // late start (negative delta) does not wrap through an unsigned cast.
+        const int64_t delta_us = static_cast<int64_t>(target_start_us_) -
+                                 static_cast<int64_t>(now_us);
+        const int64_t delta_ms = delta_us / 1000;
+        const int64_t utc_start_ms_signed =
+            static_cast<int64_t>(utc_epoch_ms_) + delta_ms;
+        utc_start_ms = static_cast<uint64_t>(utc_start_ms_signed);
+    } else if (utc_set_) {
+        // Immediate start: UTC = epoch + (now - fire_time)/1000 ≈ epoch
+        utc_start_ms = utc_epoch_ms_;
+    }
     uint8_t buf[13];
     packStartFired(now_us, utc_start_ms, buf);
     s_char_sync->setValue(buf, 13);

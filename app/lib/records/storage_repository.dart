@@ -428,11 +428,16 @@ class PathProviderStorageRepository implements StorageRepository {
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     if (!csvFile.existsSync()) return [];
     // Parse CSV back into BufferedSample list.
+    // New format: two separate tables (L then R) with `#` comment markers
+    // and a `seq,` header before each table. Skip both.
     final lines = csvFile.readAsLinesSync();
     final samples = <BufferedSample>[];
-    for (final line in lines.skip(1)) {
-      if (line.trim().isEmpty) continue;
-      final f = line.split(',');
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.startsWith('#')) continue;
+      if (trimmed.startsWith('seq,')) continue;
+      final f = trimmed.split(',');
       if (f.length < 12) continue;
       samples.add(BufferedSample(
         reading: ImuReading(
@@ -472,22 +477,20 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, trialNumber);
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     if (!csvFile.existsSync()) return [];
-    // Parse CSV line by line: skip header, skip `offset` data lines, then
-    // read up to `count` data lines. Uses a stream so the whole file is not
-    // loaded into memory for large sessions.
+    // Parse CSV line by line: skip comments (`#`), headers (`seq,`), and
+    // empty lines. Skip `offset` data lines, then read up to `count`.
+    // Uses a stream so the whole file is not loaded into memory for large
+    // sessions.
     final samples = <BufferedSample>[];
     final lineStream =
         utf8.decoder.bind(csvFile.openRead()).transform(const LineSplitter());
     var dataIndex = 0;
     var collected = 0;
-    var isHeader = true;
     await for (final line in lineStream) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
-      if (isHeader) {
-        isHeader = false;
-        continue;
-      }
+      if (trimmed.startsWith('#')) continue;
+      if (trimmed.startsWith('seq,')) continue;
       if (dataIndex < offset) {
         dataIndex++;
         continue;
