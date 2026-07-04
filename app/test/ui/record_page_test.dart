@@ -402,6 +402,19 @@ void main() {
           expect(find.text('Re-record'), findsOneWidget);
           // New Recording button is still present.
           expect(find.text('New Recording'), findsOneWidget);
+          // Preview button (Phase 4, subtask #34) is also present.
+          expect(find.text('Preview'), findsOneWidget);
+        });
+
+        testWidgets('tapping Preview opens the session preview page',
+            (tester) async {
+          await pumpStopped(tester);
+          await tester.tap(find.text('Preview'));
+          await tester.pumpAndSettle();
+
+          // Preview page should be pushed — Summary card + chart titles appear.
+          expect(find.text('Summary'), findsOneWidget);
+          expect(find.text('Accelerometer (g)'), findsOneWidget);
         });
 
         testWidgets('tapping Re-record starts countdown with next trial number',

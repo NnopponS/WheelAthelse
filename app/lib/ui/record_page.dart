@@ -4,10 +4,12 @@ import 'package:wheelathlete/records/protocol_template.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/preview_providers.dart';
 import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/session_preview_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
 /// Recording screen: pick a topic, start/stop recording, and see live sample
@@ -449,6 +451,17 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           onPressed: wheelsConnected ? () => _reRecord(rec) : null,
         ),
         const SizedBox(height: AppSpacing.sm),
+        // Preview the just-finished session (Phase 4, subtask #34). Opens
+        // SessionPreviewPage with an InMemoryPreviewSource so the chart +
+        // stats render from the in-memory buffer without a disk round-trip.
+        FilledButton.tonalIcon(
+          onPressed: rec.lastMeta == null
+              ? null
+              : () => _openStoppedPreview(rec),
+          icon: const Icon(Icons.preview_rounded),
+          label: const Text('Preview'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         FilledButton.tonalIcon(
           onPressed: () {
             ref.read(recordingProvider.notifier).reset();
@@ -514,6 +527,24 @@ class _RecordPageState extends ConsumerState<RecordPage> {
         );
       }
     }
+  }
+
+  /// Opens the session preview page for the just-stopped session (Phase 4,
+  /// subtask #34). Uses an [InMemoryPreviewSource] backed by the recording
+  /// buffer snapshot so the preview renders without re-reading the CSV from
+  /// disk.
+  void _openStoppedPreview(RecordingState rec) {
+    final meta = rec.lastMeta;
+    if (meta == null) return;
+    final samples = ref.read(recordingProvider.notifier).bufferedSamples;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SessionPreviewPage(
+          source: InMemoryPreviewSource(meta: meta, samples: samples),
+          title: meta.sessionId,
+        ),
+      ),
+    );
   }
 
   Future<void> _stopRecording() async {

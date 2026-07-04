@@ -6,7 +6,7 @@
 | 31 | Session stats computation (pure logic) | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
 | 32 | Quality badge color thresholds (pure logic) | dart-flutter-patterns + tdd-workflow | done | 2026-07-02 | 2026-07-02 | f2e727a |
 | 33 | Session preview page (chart + scrub + stats) | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
-| 34 | Preview entry points (Browse tap + stopped view) | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
+| 34 | Preview entry points (Browse tap + stopped view) | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
 | 35 | Export/share from preview page | dart-flutter-patterns + tdd-workflow | pending | - | - | - |
 | 36 | Quality badges in Browse session list | dart-flutter-patterns + tdd-workflow | done | 2026-07-04 | 2026-07-04 | (this commit) |
 

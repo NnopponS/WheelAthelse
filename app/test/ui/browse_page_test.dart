@@ -199,6 +199,23 @@ void main() {
       expect(find.text('sprint_test'), findsWidgets);
     });
 
+    testWidgets('tapping a session row opens the preview page', (tester) async {
+      await pumpPage(tester);
+      await tester.tap(find.text('sprint_test').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('trial_01').first);
+      await tester.pumpAndSettle();
+
+      // Tap the first session card body (not the share/delete buttons).
+      await tester.tap(find.text('abc123'));
+      await tester.pumpAndSettle();
+
+      // Preview page should be pushed — AppBar shows the session id and the
+      // Summary card appears after the async load settles.
+      expect(find.text('Summary'), findsOneWidget);
+      expect(find.text('Accelerometer (g)'), findsOneWidget);
+    });
+
     testWidgets('shows empty state when no topics', (tester) async {
       // Create a fresh container with empty storage.
       final emptyStorage = InMemoryStorageRepository();

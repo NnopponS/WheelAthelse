@@ -7,7 +7,9 @@ import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/browse_providers.dart';
+import 'package:wheelathlete/state/preview_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
+import 'package:wheelathlete/ui/session_preview_page.dart';
 import 'package:wheelathlete/ui/tag_editor_dialog.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
@@ -812,6 +814,24 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     }
   }
 
+  /// Opens the session preview page for [meta] (Phase 4, subtask #34). Pushes
+  /// [SessionPreviewPage] with a [DiskPreviewSource] so chunks lazy-load from
+  /// storage as the user scrubs.
+  void _openPreview(SessionMeta meta) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SessionPreviewPage(
+          source: DiskPreviewSource(
+            topic: widget.topic,
+            trialNumber: widget.trialNumber,
+            sessionId: meta.sessionId,
+          ),
+          title: meta.sessionId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveSessionToDevice(SessionMeta meta) async {
     final actions = ref.read(exportActionsProvider);
     final messenger = ScaffoldMessenger.of(context);
@@ -933,6 +953,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                           : null,
                       qualityLevel: QualityBadge.fromMeta(meta),
                       tags: meta.tags,
+                      onTap: () => _openPreview(meta),
                       onShare: exportState.isExporting
                           ? null
                           : () => _shareSession(meta),

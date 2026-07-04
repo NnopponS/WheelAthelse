@@ -20,6 +20,7 @@ class RecordingState {
     this.startTime,
     this.sampleCount = 0,
     this.savedSessionId,
+    this.lastMeta,
     this.error,
   });
 
@@ -28,6 +29,13 @@ class RecordingState {
   final DateTime? startTime;
   final int sampleCount;
   final String? savedSessionId;
+
+  /// The [SessionMeta] of the most recently stopped session. Set when
+  /// [RecordingNotifier.stopRecording] completes and cleared on [reset].
+  /// Used by the stopped view's Preview button to open [SessionPreviewPage]
+  /// without re-reading from disk.
+  final SessionMeta? lastMeta;
+
   final String? error;
 
   RecordingState copyWith({
@@ -36,6 +44,7 @@ class RecordingState {
     DateTime? startTime,
     int? sampleCount,
     Object? savedSessionId = _unset,
+    Object? lastMeta = _unset,
     Object? error = _unset,
   }) =>
       RecordingState(
@@ -46,6 +55,9 @@ class RecordingState {
         savedSessionId: identical(savedSessionId, _unset)
             ? this.savedSessionId
             : savedSessionId as String?,
+        lastMeta: identical(lastMeta, _unset)
+            ? this.lastMeta
+            : lastMeta as SessionMeta?,
         error: identical(error, _unset) ? this.error : error as String?,
       );
 
@@ -238,6 +250,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
     state = state.copyWith(
       status: RecordingStatus.stopped,
       savedSessionId: sessionId,
+      lastMeta: meta,
     );
   }
 
@@ -247,6 +260,15 @@ class RecordingNotifier extends Notifier<RecordingState> {
     _buffer.clear();
     state = const RecordingState();
   }
+
+  /// A snapshot copy of the in-memory sample buffer. Used by the stopped
+  /// view's Preview button to open [SessionPreviewPage] without re-reading
+  /// the CSV from disk. Returns a defensive copy so later [reset] / buffer
+  /// mutations do not affect the preview page.
+  ///
+  /// Returns an empty list when no session has been recorded yet or the
+  /// buffer has already been cleared by [reset].
+  List<BufferedSample> get bufferedSamples => List<BufferedSample>.of(_buffer);
 }
 
 final recordingProvider =
