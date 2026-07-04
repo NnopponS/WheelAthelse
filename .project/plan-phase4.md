@@ -7,13 +7,13 @@
 See `architecture-phase4.md`
 
 ## Subtasks
-- [ ] #30: Sample chunk reader + decimation for preview — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #31: Session stats computation (pure logic) — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #32: Quality badge color thresholds (pure logic) — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #33: Session preview page (chart + scrub + stats) — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #34: Preview entry points (Browse tap + stopped view button) — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #35: Export/share from preview page — skill: dart-flutter-patterns + tdd-workflow
-- [ ] #36: Quality badges in Browse session list — skill: dart-flutter-patterns + tdd-workflow
+- [x] #30: Sample chunk reader + decimation for preview — skill: dart-flutter-patterns + tdd-workflow
+- [x] #31: Session stats computation (pure logic) — skill: dart-flutter-patterns + tdd-workflow
+- [x] #32: Quality badge color thresholds (pure logic) — skill: dart-flutter-patterns + tdd-workflow
+- [x] #33: Session preview page (chart + scrub + stats) — skill: dart-flutter-patterns + tdd-workflow
+- [x] #34: Preview entry points (Browse tap + stopped view button) — skill: dart-flutter-patterns + tdd-workflow
+- [x] #35: Export/share from preview page — skill: dart-flutter-patterns + tdd-workflow
+- [x] #36: Quality badges in Browse session list — skill: dart-flutter-patterns + tdd-workflow
 
 ## Progress
 See `progress.md`
