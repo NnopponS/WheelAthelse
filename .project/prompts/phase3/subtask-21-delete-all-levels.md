@@ -28,8 +28,8 @@ Notes:
 - Use showDialog with AlertDialog for confirmations (red error icon + warning text)
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§3 Delete at all 3 levels)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§3 Delete at all 3 levels)
 3. อ่าน .project/context.md D17 สำหรับเหตุผล
 4. อ่าน app/lib/records/storage_repository.dart ก่อน — ดู deleteTopic + deleteSession pattern ที่มีอยู่
 5. เขียน test ก่อน (TDD) — test deleteTrial in InMemoryStorageRepository, test delete confirmation dialogs

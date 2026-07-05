@@ -100,6 +100,25 @@ void main() {
     expect(find.text('New Template'), findsOneWidget);
   });
 
+  testWidgets('Live page Browse button switches to the bottom-nav Browse tab',
+      (tester) async {
+    await pumpHome(tester);
+
+    await tester.tap(find.text('Live'));
+    await tester.pumpAndSettle();
+    expect(find.text('Live IMU'), findsOneWidget);
+
+    // Tap the folder icon in the Live AppBar (tooltip 'Browse').
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.folder_open_rounded));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Should now be on the Browse tab: Browse AppBar shows and Live content
+    // is hidden (no second Browse page was pushed on the nav stack).
+    expect(find.text('Browse'), findsWidgets);
+    expect(find.text('Live IMU'), findsNothing);
+    expect(find.text('New Template'), findsOneWidget);
+  });
+
   testWidgets('switching tabs back to Connect restores Connect content',
       (tester) async {
     await pumpHome(tester);

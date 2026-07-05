@@ -18,8 +18,8 @@ Context:
   - app/test/widgets/session_list_item_test.dart — add onTap test
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §5 (Preview entry points)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §5 (Preview entry points)
 3. อ่าน app/lib/ui/session_preview_page.dart (from #33)
 4. อ่าน app/lib/widgets/session_list_item.dart — current structure
 5. อ่าน app/lib/ui/browse_page.dart — _SessionListView
@@ -38,4 +38,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #34 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #34 เสร็จแล้ว

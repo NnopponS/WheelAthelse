@@ -1,1 +1,0 @@
-﻿fix: disconnect button + battery voltage fix + single-wheel record + chart labels + CSV export data

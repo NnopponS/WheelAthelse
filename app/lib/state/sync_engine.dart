@@ -8,21 +8,22 @@
 /// - `docs/ble-protocol.md` §4.2 (offset), §4.3 (drift), §3.2 (scheduled start)
 library;
 
-/// One `(t_device_us, t_app_ms)` pair collected from a SYNC_PING round trip.
+/// One `(t_device_us, t_app_us)` pair collected from a SYNC_PING round trip.
 ///
 /// Used as input to [DriftFit.fit] to build the linear mapping from device
-/// micros to phone milliseconds (the common timeline).
+/// micros to phone microseconds (the common timeline). Both timestamps use
+/// microsecond precision for sub-ms sync accuracy.
 class SyncPoint {
-  const SyncPoint({required this.tDeviceUs, required this.tAppMs});
+  const SyncPoint({required this.tDeviceUs, required this.tAppUs});
   final int tDeviceUs;
-  final int tAppMs;
+  final int tAppUs;
 }
 
 /// Result of a single offset-estimation round trip (§4.2).
 class OffsetEstimate {
   const OffsetEstimate({required this.rttMs, required this.offsetUs});
 
-  /// Round-trip time in milliseconds (T3 − T1).
+  /// Round-trip time in milliseconds (T3 − T1), with sub-ms precision.
   final double rttMs;
 
   /// Clock offset in microseconds: `offset = T2 − (T1 + RTT/2)`.
@@ -34,19 +35,25 @@ class OffsetEstimate {
 
   /// Computes offset from a SYNC_PING round trip (§4.2).
   ///
-  /// - [t1AppMs]: phone time when SYNC_PING was sent (T1).
-  /// - [t2DeviceUs]: device `micros()` when it received/responded (T2).
-  /// - [t3AppMs]: phone time when the Sync response was received (T3).
+  /// Uses **microsecond-precision** T1/T3 for sub-ms offset accuracy.
+  /// The protocol sends T1 to the device in milliseconds (uint32), but the
+  /// phone records both T1 and T3 in microseconds locally so the RTT and
+  /// offset calculations are not quantized to 1ms.
   ///
-  /// `RTT = T3 − T1` (ms), `offset = T2 − (T1*1000 + RTT_us/2)` (µs).
+  /// - [t1AppUs]: phone time (µs since epoch) when SYNC_PING was sent (T1).
+  /// - [t2DeviceUs]: device `micros()` when it received/responded (T2).
+  /// - [t3AppUs]: phone time (µs since epoch) when the Sync response was
+  ///   received (T3).
+  ///
+  /// `RTT = (T3 − T1) / 1000` (ms, float), `offset = T2 − (T1 + RTT_us/2)` (µs).
   factory OffsetEstimate.compute({
-    required int t1AppMs,
+    required int t1AppUs,
     required int t2DeviceUs,
-    required int t3AppMs,
+    required int t3AppUs,
   }) {
-    final rttMs = (t3AppMs - t1AppMs).toDouble();
-    final rttUs = (rttMs * 1000).round();
-    final offsetUs = t2DeviceUs - (t1AppMs * 1000 + rttUs ~/ 2);
+    final rttUs = t3AppUs - t1AppUs;
+    final rttMs = rttUs / 1000.0;
+    final offsetUs = t2DeviceUs - (t1AppUs + rttUs ~/ 2);
     return OffsetEstimate(rttMs: rttMs, offsetUs: offsetUs);
   }
 }
@@ -82,23 +89,23 @@ class MinRttTracker {
   }
 }
 
-/// Linear fit `t_app_ms = slope * t_device_us + interceptMs` from collected
+/// Linear fit `t_app_us = slope * t_device_us + interceptUs` from collected
 /// [SyncPoint]s (§4.3). Used to map every IMU sample's `t_device_us` onto the
-/// common phone timeline (`timestamp_synced_ms`).
+/// common phone timeline. Both axes are in microseconds for sub-ms accuracy.
 class DriftFit {
   const DriftFit({
     required this.slope,
-    required this.interceptMs,
+    required this.interceptUs,
     required this.residualRmsMs,
     required this.n,
   });
 
-  /// Slope of the linear fit (should be ≈ 1/1000 since device is in µs and
-  /// phone is in ms). Deviation from 1/1000 indicates clock drift.
+  /// Slope of the linear fit (should be ≈ 1.0 since both axes are in µs).
+  /// Deviation from 1.0 indicates clock drift.
   final double slope;
 
-  /// Intercept in milliseconds.
-  final double interceptMs;
+  /// Intercept in microseconds.
+  final double interceptUs;
 
   /// RMS of fit residuals in milliseconds — measures sync quality. Stored
   /// in `session_*_meta.json` as `residual_ms_rms`.
@@ -125,7 +132,7 @@ class DriftFit {
     var sumX = 0.0, sumY = 0.0, sumXY = 0.0, sumX2 = 0.0;
     for (final p in points) {
       final x = p.tDeviceUs.toDouble();
-      final y = p.tAppMs.toDouble();
+      final y = p.tAppUs.toDouble();
       sumX += x;
       sumY += y;
       sumXY += x * y;
@@ -135,25 +142,29 @@ class DriftFit {
     final slope = denom != 0 ? (n * sumXY - sumX * sumY) / denom : 0.0;
     final intercept = (sumY - slope * sumX) / n;
 
-    // Residual RMS
+    // Residual RMS (reported in ms for human-readable sync quality)
     var ssRes = 0.0;
     for (final p in points) {
       final predicted = slope * p.tDeviceUs + intercept;
-      final resid = p.tAppMs - predicted;
+      final resid = p.tAppUs - predicted;
       ssRes += resid * resid;
     }
-    final residualRms = (ssRes / n).abs() > 0 ? (ssRes / n).sqrt() : 0.0;
+    final residualRmsUs = (ssRes / n).abs() > 0 ? (ssRes / n).sqrt() : 0.0;
+    final residualRmsMs = residualRmsUs / 1000.0;
 
     return DriftFit(
       slope: slope,
-      interceptMs: intercept,
-      residualRmsMs: residualRms,
+      interceptUs: intercept,
+      residualRmsMs: residualRmsMs,
       n: n,
     );
   }
 
+  /// Converts a device timestamp (µs) to the common phone timeline (µs).
+  double toSyncedUs(int tDeviceUs) => slope * tDeviceUs + interceptUs;
+
   /// Converts a device timestamp (µs) to the common phone timeline (ms).
-  double toSyncedMs(int tDeviceUs) => slope * tDeviceUs + interceptMs;
+  double toSyncedMs(int tDeviceUs) => toSyncedUs(tDeviceUs) / 1000.0;
 }
 
 /// Scheduled synchronized start math (§3.2).

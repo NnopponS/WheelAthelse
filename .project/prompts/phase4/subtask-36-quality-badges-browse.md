@@ -16,8 +16,8 @@ Context:
   - app/test/ui/browse_page_test.dart — add quality badge rendering test
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §7 (Quality badges in Browse)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §7 (Quality badges in Browse)
 3. อ่าน app/lib/records/quality_badge.dart (from #32) — SyncQuality + QualityBadge
 4. อ่าน app/lib/widgets/session_list_item.dart — current structure
 5. อ่าน app/lib/ui/browse_page.dart — _SessionListView where SessionListItem is built
@@ -35,4 +35,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #36 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #36 เสร็จแล้ว

@@ -13,9 +13,9 @@ Context:
   - app/test/records/quality_badge_test.dart
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §3 (Quality badge)
-3. อ่าน .project/context-phase4.md D25 สำหรับ thresholds
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §3 (Quality badge)
+3. อ่าน .project/phases/phase4/context.md D25 สำหรับ thresholds
 4. อ่าน app/lib/records/session_model.dart — driftResidualRmsMs fields
 5. เขียน test ก่อน (TDD)
 6. ทำเสร็จ commit ด้วยข้อความ: "feat(app): quality badge color thresholds (#32)"
@@ -31,4 +31,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #32 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #32 เสร็จแล้ว

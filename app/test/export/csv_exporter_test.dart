@@ -44,8 +44,8 @@ void main() {
       expect(lines[0], '# Wheel: L');
       expect(
         lines[1],
-        'seq,wheel,timestamp_app_ms,timestamp_device_us,'
-        'timestamp_synced_ms,ax,ay,az,gx,gy,gz,marker',
+        'seq,wheel,timestamp_app_ms,timestamp_utc_ms,'
+        'ax,ay,az,gx,gy,gz,marker',
       );
     });
 
@@ -81,7 +81,7 @@ void main() {
       // # Wheel: L, header, data, (empty), # Wheel: R, header
       expect(lines[0], '# Wheel: L');
       expect(lines[1], startsWith('seq,'));
-      expect(lines[2], '42,L,2000,1000000,1000.5,1,2,3,4,5,6,0');
+      expect(lines[2], '42,L,2000,1000.5,1,2,3,4,5,6,0');
       expect(lines[3], ''); // blank line separator
       expect(lines[4], '# Wheel: R');
       expect(lines[5], startsWith('seq,'));
@@ -164,9 +164,9 @@ void main() {
         return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
       }).toList();
       final fields = dataLines.first.split(',');
-      expect(fields[5], '1.5'); // ax
-      expect(fields[6], '0'); // ay
-      expect(fields[7], '-2.3'); // az
+      expect(fields[4], '1.5'); // ax
+      expect(fields[5], '0'); // ay
+      expect(fields[6], '-2.3'); // az
     });
 
     test('streaming export via sink (for large files)', () {
@@ -203,7 +203,7 @@ void main() {
         final t = l.trim();
         return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
       }).toList();
-      expect(dataLines.first.split(',')[4], '-100.5');
+      expect(dataLines.first.split(',')[3], '-100.5');
     });
 
     test('handles large seq numbers (uint32 max)', () {
@@ -221,8 +221,25 @@ void main() {
         return !t.startsWith('#') && !t.startsWith('seq,') && t.isNotEmpty;
       }).toList();
       final fields = dataLines.first.split(',');
+      // seq handles uint32 max. The raw on-device microsecond timestamp is
+      // no longer exported (replaced by timestamp_utc_ms — see issue #4).
       expect(fields[0], '4294967295');
-      expect(fields[3], '4294967295');
+    });
+
+    test('does not export the raw device timestamp column', () {
+      final samples = [
+        _sample(seq: 0, tDeviceUs: 123456789, syncedMs: 42, wheel: WheelSide.left),
+      ];
+      final csv = CsvExporter.toCsvString(samples);
+      final lines = csv.trim().split('\n');
+      expect(lines[1], isNot(contains('timestamp_device_us')));
+      expect(lines[1], contains('timestamp_utc_ms'));
+      // Data row: seq,wheel,timestamp_app_ms,timestamp_utc_ms,ax..gz,marker
+      // (11 fields — no device-us column).
+      expect(lines[2].split(',').length, 11);
+      // 123456789 (the raw device us value) must not appear anywhere in the
+      // row — only the UTC ms value (42) should be present.
+      expect(lines[2], isNot(contains('123456789')));
     });
 
     test('L table always comes before R table', () {

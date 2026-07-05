@@ -13,8 +13,8 @@ Context:
   - app/test/records/session_stats_test.dart
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §2 (Session stats)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §2 (Session stats)
 3. อ่าน app/lib/records/session_model.dart — BufferedSample + SessionMeta
 4. อ่าน app/lib/ble/imu_packet.dart — ImuReading (ax/ay/az/gx/gy/gz)
 5. เขียน test ก่อน (TDD)
@@ -34,4 +34,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #31 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #31 เสร็จแล้ว

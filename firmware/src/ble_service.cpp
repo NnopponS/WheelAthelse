@@ -195,6 +195,13 @@ void BleService::updateBatteryLevel() {
     if (now_ms - last_battery_ms_ < 10000 && last_battery_ms_ != 0) {
         return;
     }
+
+    // Skip battery ADC reads while recording. The AXP192 ADC read sequence
+    // (8 samples × 2 ms delay = 16 ms blocking) stalls the main loop and
+    // can cause IMU queue buildup at high sample rates. Battery level is
+    // only useful between sessions, not during active recording.
+    if (imu().running()) return;
+
     last_battery_ms_ = now_ms;
 
     // Sample battery voltage multiple times and average to reduce ADC noise.
@@ -591,7 +598,10 @@ void BleService::bleTask() {
     const uint8_t max_count = maxBatchCount(mtu_);
     if (max_count == 0) return;
 
-    // Collect samples into a local array
+    // Send exactly ONE batch per call and return. This keeps notify() from
+    // blocking the Arduino loop for too long. A dedicated FreeRTOS task on
+    // Core 1 calls this repeatedly, so the queue is drained at high frequency
+    // without starving M5.update() / display / button handling.
     ImuSample samples[12];   // max 12 at MTU 247
     uint8_t count = 0;
 
@@ -602,7 +612,6 @@ void BleService::bleTask() {
 
     if (count == 0) return;
 
-    // Pack and notify
     const size_t batch_len = packBatch(samples, count, batch_buf_);
     s_char_imu->setValue(batch_buf_, batch_len);
     s_char_imu->notify();

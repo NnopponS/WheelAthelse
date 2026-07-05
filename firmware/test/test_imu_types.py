@@ -19,9 +19,9 @@ import unittest
 
 # ── Constants from imu_types.h ────────────────────────────────────────────────
 
-FIFO_SAMPLE_BYTES = 12
+FIFO_SAMPLE_BYTES = 14
 FIFO_CAPACITY_BYTES = 512
-SAMPLE_QUEUE_LEN = 64
+SAMPLE_QUEUE_LEN = 256
 MIN_SAMPLE_RATE_HZ = 50
 MAX_SAMPLE_RATE_HZ = 200
 DEFAULT_SAMPLE_RATE_HZ = 100
@@ -61,14 +61,24 @@ def sample_rate_divisor(rate_hz):
 def fifo_overflowed(fifo_bytes):
     return fifo_bytes >= FIFO_CAPACITY_BYTES
 
+def fifo_sample_count(fifo_bytes):
+    return fifo_bytes // FIFO_SAMPLE_BYTES
+
+def fifo_remainder_bytes(fifo_bytes):
+    return fifo_bytes % FIFO_SAMPLE_BYTES
+
+def estimated_dropped_samples_from_fifo_bytes(fifo_bytes):
+    samples = fifo_sample_count(fifo_bytes)
+    return samples if samples > 0 else 1
+
 def parse_fifo_sample(raw_bytes):
     """Parse 12 bytes (big-endian int16) → (ax, ay, az, gx, gy, gz)."""
     ax = struct.unpack('>h', raw_bytes[0:2])[0]
     ay = struct.unpack('>h', raw_bytes[2:4])[0]
     az = struct.unpack('>h', raw_bytes[4:6])[0]
-    gx = struct.unpack('>h', raw_bytes[6:8])[0]
-    gy = struct.unpack('>h', raw_bytes[8:10])[0]
-    gz = struct.unpack('>h', raw_bytes[10:12])[0]
+    gx = struct.unpack('>h', raw_bytes[8:10])[0]
+    gy = struct.unpack('>h', raw_bytes[10:12])[0]
+    gz = struct.unpack('>h', raw_bytes[12:14])[0]
     return (ax, ay, az, gx, gy, gz)
 
 def interpolate_timestamp(drain_us, rate_hz, n_samples, sample_index):
@@ -156,30 +166,48 @@ class TestFifoOverflow(unittest.TestCase):
 
     def test_not_overflowed_under_capacity(self):
         self.assertFalse(fifo_overflowed(0))
-        self.assertFalse(fifo_overflowed(120))    # 10 samples
-        self.assertFalse(fifo_overflowed(504))    # 42 samples
+        self.assertFalse(fifo_overflowed(140))    # 10 samples
+        self.assertFalse(fifo_overflowed(504))    # 36 samples
         self.assertFalse(fifo_overflowed(511))    # just under
 
     def test_overflowed_at_capacity(self):
         self.assertTrue(fifo_overflowed(512))     # exactly capacity
         self.assertTrue(fifo_overflowed(1024))    # way over
 
+    def test_sample_count_uses_complete_samples(self):
+        self.assertEqual(fifo_sample_count(0), 0)
+        self.assertEqual(fifo_sample_count(14), 1)
+        self.assertEqual(fifo_sample_count(140), 10)
+        self.assertEqual(fifo_sample_count(511), 36)
+
+    def test_remainder_detects_misalignment(self):
+        self.assertEqual(fifo_remainder_bytes(0), 0)
+        self.assertEqual(fifo_remainder_bytes(140), 0)
+        self.assertEqual(fifo_remainder_bytes(141), 1)
+        self.assertEqual(fifo_remainder_bytes(511), 7)
+
+    def test_estimated_dropped_samples_from_fifo_bytes(self):
+        self.assertEqual(estimated_dropped_samples_from_fifo_bytes(0), 1)
+        self.assertEqual(estimated_dropped_samples_from_fifo_bytes(13), 1)
+        self.assertEqual(estimated_dropped_samples_from_fifo_bytes(140), 10)
+        self.assertEqual(estimated_dropped_samples_from_fifo_bytes(511), 36)
+
 
 class TestFifoParsing(unittest.TestCase):
     """Journey: FIFO data is big-endian int16, must parse correctly"""
 
     def test_positive_values(self):
-        raw = struct.pack('>hhhhhh', 100, 200, 300, 10, 20, 30)
+        raw = struct.pack('>hhhhhhh', 100, 200, 300, 0x1234, 10, 20, 30)
         ax, ay, az, gx, gy, gz = parse_fifo_sample(raw)
         self.assertEqual((ax, ay, az, gx, gy, gz), (100, 200, 300, 10, 20, 30))
 
     def test_negative_values(self):
-        raw = struct.pack('>hhhhhh', -100, -200, -300, -10, -20, -30)
+        raw = struct.pack('>hhhhhhh', -100, -200, -300, 0x1234, -10, -20, -30)
         ax, ay, az, gx, gy, gz = parse_fifo_sample(raw)
         self.assertEqual((ax, ay, az, gx, gy, gz), (-100, -200, -300, -10, -20, -30))
 
     def test_max_min_values(self):
-        raw = struct.pack('>hhhhhh', 32767, -32768, 0, 32767, -32768, 0)
+        raw = struct.pack('>hhhhhhh', 32767, -32768, 0, 0x1234, 32767, -32768, 0)
         ax, ay, az, gx, gy, gz = parse_fifo_sample(raw)
         self.assertEqual((ax, ay, az, gx, gy, gz), (32767, -32768, 0, 32767, -32768, 0))
 

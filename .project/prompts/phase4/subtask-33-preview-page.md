@@ -15,8 +15,8 @@ Context:
   - app/test/ui/session_preview_page_test.dart
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §4 (Session preview page)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §4 (Session preview page)
 3. อ่าน app/lib/widgets/imu_chart.dart — ImuChart + ImuChartBuffer (reuse!)
 4. อ่าน app/lib/records/session_model.dart — BufferedSample, SessionMeta
 5. อ่าน app/lib/records/session_stats.dart (from #31) — SessionStats + Calculator
@@ -39,4 +39,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #33 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #33 เสร็จแล้ว

@@ -23,9 +23,20 @@ public:
                  uint8_t  battery_pct,
                  bool     running);
 
+    // Show countdown number on screen (3, 2, 1, GO).
+    // num: 3 → "3", 2 → "2", 1 → "1", 0 → "GO"
+    // Triggers an immediate draw (bypasses throttle).
+    void showCountdown(int8_t num);
+
+    // Clear countdown overlay and return to normal status display.
+    void clearCountdown();
+
 private:
-    bool     initialized_ = false;
-    uint32_t last_draw_   = 0;   // ms of last full redraw
+    bool     initialized_      = false;
+    uint32_t last_draw_        = 0;   // ms of last full redraw
+    bool     layout_drawn_     = false;  // fillScreen + header drawn once
+    bool     countdown_active_ = false;
+    int8_t   countdown_num_    = 0;      // 3, 2, 1, 0(GO)
 };
 
 StatusDisplay& display();

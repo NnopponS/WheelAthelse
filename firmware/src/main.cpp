@@ -15,6 +15,8 @@
 #include "ble_service.h"
 #include "config_store.h"
 
+#include <freertos/task.h>
+
 using namespace WheelAthlete;
 
 // ── Build-time wheel identity (from platformio.ini build_flags) ──
@@ -29,9 +31,17 @@ static constexpr char WHEEL = static_cast<char>(WHEEL_ID);
 static const char CSV_HEADER[] =
     "seq,wheel,timestamp_app_ms,timestamp_device_us,ax,ay,az,gx,gy,gz,marker\n";
 
-// ── BLE task (runs on Core 1 via Arduino loop, not a separate FreeRTOS task) ──
-// We call ble().bleTask() from loop() since Arduino loop is already on Core 1.
-// This keeps BLE streaming separate from IMU acquisition (Core 0 esp_timer).
+// ── Dedicated BLE streaming task on Core 1 ──
+// Runs independently of the Arduino loop so IMU queue draining is not delayed
+// by display refresh, button handling, or serial output. High frequency (1 ms
+// period) with one batch per call keeps the queue empty without blocking the
+// loop on slow notify() calls.
+static void bleStreamingTask(void* /*param*/) {
+    for (;;) {
+        ble().bleTask();
+        vTaskDelay(pdMS_TO_TICKS(1));   // 1 ms yield
+    }
+}
 
 void setup() {
     M5.begin();
@@ -118,6 +128,66 @@ void loop() {
                       imu().fifoDepth(),
                       static_cast<uint8_t>(M5.Power.getBatteryLevel()),
                       imu().running());
+
+    // ── Button A (M5 btn) = toggle start/stop (local, without BLE) ──
+    if (M5.BtnA.wasPressed()) {
+        if (imu().running()) {
+            imu().stop();
+            Serial.println("[MAIN] Acquisition stopped (BtnA)");
+        } else {
+            imu().start();
+            Serial.println("[MAIN] Acquisition started (BtnA)");
+        }
+    }
+
+    // ── Button B = cycle sample rate (50 → 100 → 200 → 50) ──
+    if (M5.BtnB.wasPressed()) {
+        uint16_t new_rate = 50;
+        switch (imu().rateHz()) {
+            case 50:  new_rate = 100; break;
+            case 100: new_rate = 200; break;
+            case 200: new_rate = 50;  break;
+            default:  new_rate = 100; break;
+        }
+        imu().setRate(new_rate);
+        Serial.printf("[MAIN] Sample rate → %u Hz\n", new_rate);
+    }
+
+    delay(2);   // small yield to keep loop responsive
+}
+        }
+        imu().setRate(new_rate);
+        Serial.printf("[MAIN] Sample rate → %u Hz\n", new_rate);
+    }
+
+    delay(2);   // small yield to keep loop responsive
+}
+    // ── Button A (M5 btn) = toggle start/stop (local, without BLE) ──
+    if (M5.BtnA.wasPressed()) {
+        if (imu().running()) {
+            imu().stop();
+            Serial.println("[MAIN] Acquisition stopped (BtnA)");
+        } else {
+            imu().start();
+            Serial.println("[MAIN] Acquisition started (BtnA)");
+        }
+    }
+
+    // ── Button B = cycle sample rate (50 → 100 → 200 → 50) ──
+    if (M5.BtnB.wasPressed()) {
+        uint16_t new_rate = 50;
+        switch (imu().rateHz()) {
+            case 50:  new_rate = 100; break;
+            case 100: new_rate = 200; break;
+            case 200: new_rate = 50;  break;
+            default:  new_rate = 100; break;
+        }
+        imu().setRate(new_rate);
+        Serial.printf("[MAIN] Sample rate → %u Hz\n", new_rate);
+    }
+
+    delay(2);   // small yield to keep loop responsive
+}
 
     // ── Button A (M5 btn) = toggle start/stop (local, without BLE) ──
     if (M5.BtnA.wasPressed()) {

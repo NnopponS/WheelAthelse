@@ -21,21 +21,50 @@ void StatusDisplay::refresh(char wheel_id,
                             bool     running) {
     if (!initialized_) return;
 
-    // Throttle redraw to ~5 fps to avoid starving the loop
+    // Throttle redraw to avoid starving the BLE streaming loop.
+    // Idle: ~5 fps (200 ms) — fast enough for status updates.
+    // Recording: ~1 fps (1000 ms) — display updates are irrelevant during
+    // active recording; the priority is draining the IMU queue. Every
+    // display refresh takes several ms of SPI time which delays bleTask().
     const uint32_t now = millis();
-    if (now - last_draw_ < 200) return;
+    const uint32_t interval = running ? 1000 : 200;
+    if (now - last_draw_ < interval) return;
     last_draw_ = now;
 
     auto& d = M5.Display;
 
-    // ── Header bar ──
-    d.fillScreen(BLACK);
-    d.fillRect(0, 0, d.width(), 20, (wheel_id == 'L') ? 0x001F : 0xF800);  // blue=L, red=R
-    d.setTextColor(WHITE);
-    d.setCursor(6, 4);
-    d.printf("WheelAthlete  %c", wheel_id);
+    // ── Draw background + header bar only once (not every frame) ──
+    // Text below uses setTextColor(fg, BLACK) which self-clears each char,
+    // so we don't need fillScreen every frame.
+    if (!layout_drawn_) {
+        d.fillScreen(BLACK);
+        d.fillRect(0, 0, d.width(), 20, (wheel_id == 'L') ? 0x001F : 0xF800);
+        d.setTextColor(WHITE);
+        d.setCursor(6, 4);
+        d.printf("WheelAthlete  %c", wheel_id);
+        layout_drawn_ = true;
+    }
 
-    // ── Status lines ──
+    // ── Countdown overlay takes priority over normal status ──
+    if (countdown_active_) {
+        // Clear the status area (below header) for the big number
+        d.fillRect(0, 20, d.width(), d.height() - 20, BLACK);
+        d.setTextSize(6);
+        d.setTextColor(WHITE, BLACK);
+        if (countdown_num_ > 0) {
+            // Single digit: center it
+            d.setCursor(d.width() / 2 - 18, d.height() / 2 - 24);
+            d.printf("%d", countdown_num_);
+        } else {
+            // "GO" at T-0
+            d.setCursor(d.width() / 2 - 36, d.height() / 2 - 24);
+            d.print("GO");
+        }
+        d.setTextSize(1);   // restore default
+        return;
+    }
+
+    // ── Status lines (text self-clears via setTextColor(fg, BLACK)) ──
     d.setTextColor(WHITE, BLACK);
     d.setCursor(6, 28);
     d.printf("Rate:  %u Hz", rate_hz);
@@ -64,6 +93,19 @@ void StatusDisplay::refresh(char wheel_id,
         d.setTextColor(DARKGREY, BLACK);
         d.print("○ IDLE");
     }
+}
+
+void StatusDisplay::showCountdown(int8_t num) {
+    countdown_num_ = num;
+    countdown_active_ = true;
+    last_draw_ = 0;   // force immediate draw on next refresh()
+}
+
+void StatusDisplay::clearCountdown() {
+    if (!countdown_active_) return;
+    countdown_active_ = false;
+    layout_drawn_ = false;   // force full redraw to clear big number
+    last_draw_ = 0;          // force immediate redraw
 }
 
 StatusDisplay& display() {

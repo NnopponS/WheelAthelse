@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/home_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
-import 'package:wheelathlete/ui/browse_page.dart';
 import 'package:wheelathlete/ui/record_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
 
@@ -21,14 +21,22 @@ class LivePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final conn = ref.watch(connectionManagerProvider);
-    final imu = ref.watch(imuStreamProvider);
     final notifier = ref.read(imuStreamProvider.notifier);
 
-    final anyConnected =
-        conn.bySide.values.any((c) => c.status == ConnectionStatus.connected);
-    final anyStreaming =
-        imu.bySide.values.any((s) => s.streaming);
+    // Use `select` so the page shell only rebuilds on connection/streaming
+    // status changes, not on every IMU sample. The per-wheel panels subscribe
+    // to their own side data below.
+    final anyConnected = ref.watch(
+      connectionManagerProvider.select(
+        (s) => s.bySide.values.any((c) => c.status == ConnectionStatus.connected),
+      ),
+    );
+    final anyStreaming = ref.watch(
+      imuStreamProvider.select(
+        (s) => s.bySide.values.any((v) => v.streaming),
+      ),
+    );
+    final connForToggle = ref.read(connectionManagerProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -46,11 +54,8 @@ class LivePage extends ConsumerWidget {
             tooltip: 'Record',
           ),
           IconButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const BrowsePage(),
-              ),
-            ),
+            onPressed: () =>
+                ref.read(homeTabIndexProvider.notifier).setTab(2),
             icon: const Icon(Icons.folder_open_rounded),
             tooltip: 'Browse',
           ),
@@ -61,16 +66,16 @@ class LivePage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _WheelPanel(side: WheelSide.left, conn: conn, imu: imu),
+            _WheelPanel(side: WheelSide.left),
             const SizedBox(height: AppSpacing.md),
-            _WheelPanel(side: WheelSide.right, conn: conn, imu: imu),
+            _WheelPanel(side: WheelSide.right),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         key: startButtonKey,
         onPressed: anyConnected
-            ? () => _toggleAll(notifier, anyStreaming, conn)
+            ? () => _toggleAll(notifier, anyStreaming, connForToggle)
             : null,
         icon: Icon(anyStreaming ? Icons.stop_rounded : Icons.play_arrow_rounded),
         label: Text(anyStreaming ? 'Stop' : 'Start'),
@@ -83,28 +88,36 @@ class LivePage extends ConsumerWidget {
     bool anyStreaming,
     ConnectionManagerState conn,
   ) async {
+    // Start/stop both wheels in parallel so the BLE stack sets up both
+    // notification channels at the same time. Sequential start causes the
+    // second wheel's setNotifyValue to race with the first wheel's active
+    // notification stream, leading to packet drops on the second board.
+    final futures = <Future<void>>[];
     for (final side in WheelSide.values) {
       if (conn.bySide[side]!.status == ConnectionStatus.connected) {
         if (anyStreaming) {
-          await notifier.stop(side);
+          futures.add(notifier.stop(side));
         } else {
-          await notifier.start(side);
+          futures.add(notifier.start(side));
         }
       }
     }
+    await Future.wait(futures);
   }
 }
 
-class _WheelPanel extends StatelessWidget {
-  const _WheelPanel({required this.side, required this.conn, required this.imu});
+class _WheelPanel extends ConsumerWidget {
+  const _WheelPanel({required this.side});
   final WheelSide side;
-  final ConnectionManagerState conn;
-  final ImuStreamState imu;
 
   @override
-  Widget build(BuildContext context) {
-    final connection = conn.bySide[side]!;
-    final imuState = imu.bySide[side]!;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connection = ref.watch(
+      connectionManagerProvider.select((s) => s.bySide[side]!),
+    );
+    final imuState = ref.watch(
+      imuStreamProvider.select((s) => s.bySide[side]!),
+    );
     final wc = context.wheelColors;
     final role = wc.forWheel(side);
 

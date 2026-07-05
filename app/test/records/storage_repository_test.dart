@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
@@ -485,6 +487,118 @@ void main() {
       );
       expect(chunk.length, 3);
       expect(chunk.map((s) => s.reading.seq).toList(), [0, 1, 2]);
+    });
+  });
+
+  group('StorageRepository — real file CSV round-trip', () {
+    late Directory tempDir;
+    late PathProviderStorageRepository storage;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('wa_storage_test_');
+      storage = PathProviderStorageRepository(rootDir: tempDir);
+    });
+
+    tearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('saveSession then readSamples round-trips mixed L/R samples through '
+        'the real CSV file (regression: the in-memory fake bypasses CSV '
+        'serialization, so a writer/reader schema mismatch would go '
+        'undetected)', () async {
+      await storage.createTopic('test');
+      final samples = [
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 0, tDeviceUs: 0, ax: 1, ay: 2, az: 3, gx: 4, gy: 5, gz: 6),
+          wheel: WheelSide.left,
+          timestampAppMs: 100,
+          timestampSyncedMs: 0.0,
+          marker: false,
+        ),
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 1, tDeviceUs: 1000, ax: 7, ay: 8, az: 9, gx: 10, gy: 11, gz: 12),
+          wheel: WheelSide.left,
+          timestampAppMs: 110,
+          timestampSyncedMs: 10.0,
+          marker: true,
+        ),
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 0, tDeviceUs: 0, ax: 13, ay: 14, az: 15, gx: 16, gy: 17, gz: 18),
+          wheel: WheelSide.right,
+          timestampAppMs: 105,
+          timestampSyncedMs: 5.0,
+          marker: false,
+        ),
+      ];
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+
+      final read = await storage.readSamples('test', 1, 's1');
+      expect(read.length, 3);
+      // Chronologically merged: L@0, R@5, L@10.
+      expect(read.map((s) => s.timestampSyncedMs).toList(), [0.0, 5.0, 10.0]);
+      expect(read.map((s) => s.wheel).toList(),
+          [WheelSide.left, WheelSide.right, WheelSide.left]);
+      // IMU values survive the round-trip.
+      expect(read[0].reading.ax, 1);
+      expect(read[2].reading.ax, 7);
+      expect(read[2].marker, isTrue);
+    });
+
+    test('readSampleChunk on a real file returns chronological slices '
+        '(offset N = Nth sample in the merged timeline, not Nth data line '
+        'in file order)', () async {
+      await storage.createTopic('test');
+      // Interleaved L/R so the merged order differs from file order (file
+      // stores all L then all R).
+      final samples = [
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 0, tDeviceUs: 0, ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+          wheel: WheelSide.left,
+          timestampAppMs: 0,
+          timestampSyncedMs: 0.0,
+        ),
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 0, tDeviceUs: 0, ax: 1, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+          wheel: WheelSide.right,
+          timestampAppMs: 5,
+          timestampSyncedMs: 5.0,
+        ),
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 1, tDeviceUs: 1000, ax: 2, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+          wheel: WheelSide.left,
+          timestampAppMs: 10,
+          timestampSyncedMs: 10.0,
+        ),
+        const BufferedSample(
+          reading: ImuReading(
+              seq: 1, tDeviceUs: 1000, ax: 3, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+          wheel: WheelSide.right,
+          timestampAppMs: 15,
+          timestampSyncedMs: 15.0,
+        ),
+      ];
+      await storage.saveSession(
+          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+
+      // offset 1, count 2 → merged timeline positions 1,2 = R@5, L@10.
+      final chunk = await storage.readSampleChunk(
+        'test', 1, 's1',
+        offset: 1, count: 2,
+      );
+      expect(chunk.length, 2);
+      expect(chunk.map((s) => s.timestampSyncedMs).toList(), [5.0, 10.0]);
+      expect(chunk.map((s) => s.wheel).toList(),
+          [WheelSide.right, WheelSide.left]);
     });
   });
 }

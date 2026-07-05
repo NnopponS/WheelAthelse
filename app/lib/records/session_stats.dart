@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
 
 /// Summary statistics for a recording session (or a chunk of it).

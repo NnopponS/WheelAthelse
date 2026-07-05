@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'package:wheelathlete/ble/ble_uuids.dart';
 import 'package:wheelathlete/ble/board_config.dart';
@@ -200,6 +202,25 @@ class FlutterBluePlusBleRepository implements BleRepository {
       mtu: BleUuids.defaultMtu,
       timeout: const Duration(seconds: 10),
     );
+
+    // Request HIGH connection priority on Android. This is critical for
+    // multi-connection streaming: without it, Android's BLE stack often
+    // assigns the second connected device a slow default connection interval
+    // (~100ms), which cannot keep up with 100 Hz IMU notifications and causes
+    // massive packet drops on the second board. HIGH priority requests a
+    // fast interval (7.5–15ms) for both devices so notifications flow
+    // reliably. No-op on iOS (iOS manages this automatically).
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        await device.requestConnectionPriority(
+          connectionPriorityRequest: fbp.ConnectionPriority.high,
+        );
+      } on Object {
+        // Non-fatal: some firmware/stacks reject this. The connection still
+        // works, just potentially at a slower interval.
+      }
+    }
+
     final services = await device.discoverServices();
     final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
     final infoChar = service.characteristics.firstWhere(

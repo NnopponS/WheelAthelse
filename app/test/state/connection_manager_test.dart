@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/ble/board_config.dart';
+import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/ble/device_info.dart';
 import 'package:wheelathlete/ble/wheel_id.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -41,10 +41,9 @@ void main() {
         ),
       },
     );
-    container = ProviderContainer(overrides: [
-      bleRepositoryProvider.overrideWith((ref) => ble),
-      rssiPollIntervalProvider.overrideWith((ref) => null),
-    ]);
+    container = ProviderContainer(
+      overrides: [bleRepositoryProvider.overrideWith((ref) => ble)],
+    );
     addTearDown(container.dispose);
   });
 
@@ -59,16 +58,19 @@ void main() {
     expect(s.error, isNull);
   });
 
-  test('startScan populates scanResults and sets isScanning during scan', () async {
-    final manager = container.read(connectionManagerProvider.notifier);
-    final before = state();
-    expect(before.isScanning, isFalse);
+  test(
+    'startScan populates scanResults and sets isScanning during scan',
+    () async {
+      final manager = container.read(connectionManagerProvider.notifier);
+      final before = state();
+      expect(before.isScanning, isFalse);
 
-    await manager.startScan();
-    final after = state();
-    expect(after.scanResults, hasLength(2));
-    expect(after.scanResults.first.id, anyOf('L1', 'R1'));
-  });
+      await manager.startScan();
+      final after = state();
+      expect(after.scanResults, hasLength(2));
+      expect(after.scanResults.first.id, anyOf('L1', 'R1'));
+    },
+  );
 
   test('connect assigns device to the correct side by wheel_id', () async {
     final manager = container.read(connectionManagerProvider.notifier);
@@ -101,22 +103,27 @@ void main() {
     expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.connected);
   });
 
-  test('connect with wrong wheel_id for requested side sets error and rolls back',
-      () async {
-    // Seed an R device only; user requests connect to it but it reports as R
-    // while the manager auto-assigns by wheel_id, so it lands on Right, not Left.
-    final manager = container.read(connectionManagerProvider.notifier);
-    await manager.connect('R1');
-    final s = state();
-    expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.connected);
-    expect(s.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
-  });
+  test(
+    'connect with wrong wheel_id for requested side sets error and rolls back',
+    () async {
+      // Seed an R device only; user requests connect to it but it reports as R
+      // while the manager auto-assigns by wheel_id, so it lands on Right, not Left.
+      final manager = container.read(connectionManagerProvider.notifier);
+      await manager.connect('R1');
+      final s = state();
+      expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.connected);
+      expect(s.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
+    },
+  );
 
   test('disconnect on an already-disconnected side is a no-op', () async {
     final manager = container.read(connectionManagerProvider.notifier);
     // No device connected on either side — should not throw.
     await manager.disconnect(WheelSide.left);
-    expect(state().bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
+    expect(
+      state().bySide[WheelSide.left]!.status,
+      ConnectionStatus.disconnected,
+    );
   });
 
   test('connect on a device with no seeded Info sets an error', () async {
@@ -124,10 +131,7 @@ void main() {
       devices: [const FakeDevice(id: 'X1', name: 'WheelAthlete-?', rssi: -40)],
     );
     final c = ProviderContainer(
-      overrides: [
-        bleRepositoryProvider.overrideWith((ref) => bleNoInfo),
-        rssiPollIntervalProvider.overrideWith((ref) => null),
-      ],
+      overrides: [bleRepositoryProvider.overrideWith((ref) => bleNoInfo)],
     );
     addTearDown(c.dispose);
     final manager = c.read(connectionManagerProvider.notifier);
@@ -182,13 +186,15 @@ void main() {
     expect(s.error, isNull);
   });
 
-  test('bleRepositoryProvider builds FlutterBluePlusBleRepository by default',
-      () {
-    final c = ProviderContainer();
-    addTearDown(c.dispose);
-    final repo = c.read(bleRepositoryProvider);
-    expect(repo, isA<FlutterBluePlusBleRepository>());
-  });
+  test(
+    'bleRepositoryProvider builds FlutterBluePlusBleRepository by default',
+    () {
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final repo = c.read(bleRepositoryProvider);
+      expect(repo, isA<FlutterBluePlusBleRepository>());
+    },
+  );
 
   test('startScan sets error when repository throws', () async {
     final bleThrow = _ThrowingBleRepository();
@@ -247,8 +253,7 @@ class _ThrowingBleRepository implements BleRepository {
   Future<int> readRssi(String deviceId) async => 0;
 
   @override
-  Stream<List<int>> imuData(String deviceId) =>
-      const Stream<List<int>>.empty();
+  Stream<List<int>> imuData(String deviceId) => const Stream<List<int>>.empty();
 
   @override
   Stream<List<int>> syncData(String deviceId) =>
@@ -297,8 +302,7 @@ class _ErrorScanBleRepository implements BleRepository {
   Future<int> readRssi(String deviceId) async => 0;
 
   @override
-  Stream<List<int>> imuData(String deviceId) =>
-      const Stream<List<int>>.empty();
+  Stream<List<int>> imuData(String deviceId) => const Stream<List<int>>.empty();
 
   @override
   Stream<List<int>> syncData(String deviceId) =>

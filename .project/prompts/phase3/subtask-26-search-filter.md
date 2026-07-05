@@ -33,8 +33,8 @@ Notes:
 - Debounce not needed — lists are small (in-memory filter is instant)
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§7 Search/filter on Browse)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§7 Search/filter on Browse)
 3. อ่าน .project/context.md D21 สำหรับเหตุผล
 4. อ่าน app/lib/ui/browse_page.dart ก่อน — ดู _TopicListView + _SessionListView structure
 5. เขียน test ก่อน (TDD)

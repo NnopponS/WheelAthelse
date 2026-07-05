@@ -31,8 +31,8 @@ Notes:
 - No UI in this subtask — pure model + storage + providers
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§1 Protocol Template system)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§1 Protocol Template system)
 3. อ่าน .project/context.md D18 สำหรับเหตุผล
 4. อ่าน app/lib/records/storage_repository.dart ก่อน — ทำตาม pattern เดียวกัน (abstract + PathProvider + InMemory)
 5. เขียน test ก่อน (TDD) — model serialization, InMemory CRUD, provider state changes

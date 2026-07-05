@@ -25,8 +25,12 @@ constexpr size_t   FIFO_SAMPLE_BYTES = 12;
 // MPU6886 FIFO capacity in bytes
 constexpr size_t   FIFO_CAPACITY_BYTES = 512;
 
-// FreeRTOS queue depth — enough for ~0.3 s at 200 Hz
-constexpr size_t   SAMPLE_QUEUE_LEN = 64;
+// FreeRTOS queue depth — enough for ~1.28 s at 200 Hz.
+// Increased from 64 → 128 → 256 to absorb loop stalls / task scheduling
+// jitter / BLE notify backpressure without dropping samples. At 200 Hz the
+// IMU timer produces 1 sample every 5 ms; a 256-deep queue gives 1.28 s of
+// headroom, which is enough for occasional Android BLE scheduling hiccups.
+constexpr size_t   SAMPLE_QUEUE_LEN = 256;
 
 // Supported sample rates (Hz) — only these three are valid
 constexpr uint16_t MIN_SAMPLE_RATE_HZ = 50;

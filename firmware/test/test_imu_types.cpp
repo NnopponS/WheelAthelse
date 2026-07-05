@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cmath>
 #include "../src/imu_types.h"
+#include "../src/ble_types.h"
 
 using namespace WheelAthlete;
 
@@ -100,8 +101,8 @@ void test_rate_divisor_invalid_returns_sentinel(void) {
 
 void test_fifo_not_overflowed_under_capacity(void) {
     TEST_ASSERT_FALSE(fifoOverflowed(0));
-    TEST_ASSERT_FALSE(fifoOverflowed(120));    // 10 samples
-    TEST_ASSERT_FALSE(fifoOverflowed(504));    // 42 samples
+    TEST_ASSERT_FALSE(fifoOverflowed(140));    // 10 samples
+    TEST_ASSERT_FALSE(fifoOverflowed(504));    // 36 samples
     TEST_ASSERT_FALSE(fifoOverflowed(511));    // just under
 }
 
@@ -110,13 +111,35 @@ void test_fifo_overflowed_at_capacity(void) {
     TEST_ASSERT_TRUE(fifoOverflowed(1024));    // way over
 }
 
+void test_fifo_sample_count_uses_complete_samples(void) {
+    TEST_ASSERT_EQUAL_UINT16(0, fifoSampleCount(0));
+    TEST_ASSERT_EQUAL_UINT16(1, fifoSampleCount(14));
+    TEST_ASSERT_EQUAL_UINT16(10, fifoSampleCount(140));
+    TEST_ASSERT_EQUAL_UINT16(36, fifoSampleCount(511));
+}
+
+void test_fifo_remainder_bytes_detects_misalignment(void) {
+    TEST_ASSERT_EQUAL_UINT16(0, fifoRemainderBytes(0));
+    TEST_ASSERT_EQUAL_UINT16(0, fifoRemainderBytes(140));
+    TEST_ASSERT_EQUAL_UINT16(1, fifoRemainderBytes(141));
+    TEST_ASSERT_EQUAL_UINT16(7, fifoRemainderBytes(511));
+}
+
+void test_estimated_dropped_samples_from_fifo_bytes(void) {
+    TEST_ASSERT_EQUAL_UINT32(1, estimatedDroppedSamplesFromFifoBytes(0));
+    TEST_ASSERT_EQUAL_UINT32(1, estimatedDroppedSamplesFromFifoBytes(13));
+    TEST_ASSERT_EQUAL_UINT32(10, estimatedDroppedSamplesFromFifoBytes(140));
+    TEST_ASSERT_EQUAL_UINT32(36, estimatedDroppedSamplesFromFifoBytes(511));
+}
+
 // ── 5. FIFO byte parsing (big-endian int16) ──────────────────────────────────
 
 void test_parse_fifo_sample_positive_values(void) {
-    uint8_t raw[12] = {
+    uint8_t raw[14] = {
         0x00, 0x64,   // ax = 100
         0x00, 0xC8,   // ay = 200
         0x01, 0x2C,   // az = 300
+        0x12, 0x34,   // temp ignored
         0x00, 0x0A,   // gx = 10
         0x00, 0x14,   // gy = 20
         0x00, 0x1E,   // gz = 30
@@ -132,10 +155,11 @@ void test_parse_fifo_sample_positive_values(void) {
 }
 
 void test_parse_fifo_sample_negative_values(void) {
-    uint8_t raw[12] = {
+    uint8_t raw[14] = {
         0xFF, 0x9C,   // ax = -100
         0xFF, 0x38,   // ay = -200
         0xFE, 0xD4,   // az = -300
+        0x12, 0x34,   // temp ignored
         0xFF, 0xF6,   // gx = -10
         0xFF, 0xEC,   // gy = -20
         0xFF, 0xE2,   // gz = -30
@@ -151,10 +175,11 @@ void test_parse_fifo_sample_negative_values(void) {
 }
 
 void test_parse_fifo_sample_max_min(void) {
-    uint8_t raw[12] = {
+    uint8_t raw[14] = {
         0x7F, 0xFF,   // ax = 32767 (max int16)
         0x80, 0x00,   // ay = -32768 (min int16)
         0x00, 0x00,   // az = 0
+        0x12, 0x34,   // temp ignored
         0x7F, 0xFF,   // gx = 32767
         0x80, 0x00,   // gy = -32768
         0x00, 0x00,   // gz = 0
@@ -237,6 +262,32 @@ void test_interpolate_timestamps_spacing_matches_rate(void) {
     TEST_ASSERT_EQUAL(10000u, t1 - t0);   // 1/100 Hz = 10000 us
 }
 
+// 7. BLE batch pacing
+
+void test_target_batch_count_100hz_mtu_247(void) {
+    TEST_ASSERT_EQUAL_UINT8(5, targetBatchCount(247, 100));
+}
+
+void test_target_batch_count_200hz_mtu_247(void) {
+    TEST_ASSERT_EQUAL_UINT8(10, targetBatchCount(247, 200));
+}
+
+void test_target_batch_count_50hz_mtu_247(void) {
+    TEST_ASSERT_EQUAL_UINT8(3, targetBatchCount(247, 50));
+}
+
+void test_target_batch_count_clamps_to_mtu_capacity(void) {
+    TEST_ASSERT_EQUAL_UINT8(9, targetBatchCount(185, 200));
+}
+
+void test_target_batch_count_default_mtu_fits_no_sample(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, targetBatchCount(23, 100));
+}
+
+void test_target_batch_count_invalid_rate_uses_default(void) {
+    TEST_ASSERT_EQUAL_UINT8(5, targetBatchCount(247, 75));
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 int main() {
@@ -265,6 +316,9 @@ int main() {
     // 4. FIFO overflow
     RUN_TEST(test_fifo_not_overflowed_under_capacity);
     RUN_TEST(test_fifo_overflowed_at_capacity);
+    RUN_TEST(test_fifo_sample_count_uses_complete_samples);
+    RUN_TEST(test_fifo_remainder_bytes_detects_misalignment);
+    RUN_TEST(test_estimated_dropped_samples_from_fifo_bytes);
 
     // 5. FIFO parsing
     RUN_TEST(test_parse_fifo_sample_positive_values);
@@ -280,6 +334,14 @@ int main() {
     RUN_TEST(test_interpolate_timestamp_50hz_interval);
     RUN_TEST(test_interpolate_timestamps_are_distinct);
     RUN_TEST(test_interpolate_timestamps_spacing_matches_rate);
+
+    // 7. BLE batch pacing
+    RUN_TEST(test_target_batch_count_100hz_mtu_247);
+    RUN_TEST(test_target_batch_count_200hz_mtu_247);
+    RUN_TEST(test_target_batch_count_50hz_mtu_247);
+    RUN_TEST(test_target_batch_count_clamps_to_mtu_capacity);
+    RUN_TEST(test_target_batch_count_default_mtu_fits_no_sample);
+    RUN_TEST(test_target_batch_count_invalid_rate_uses_default);
 
     return UNITY_END();
 }

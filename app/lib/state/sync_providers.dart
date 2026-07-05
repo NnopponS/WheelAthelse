@@ -93,10 +93,22 @@ class WheelSyncState {
   static const Object _unset = Object();
 }
 
-/// A ping sent but not yet answered. Holds T1 (phone send time in ms).
+/// A ping sent but not yet answered. Holds T1 in both ms (for protocol
+/// matching — the device echoes back ms) and µs (for sub-ms offset
+/// computation).
 class PendingPing {
-  const PendingPing({required this.t1AppMs, required this.sentAt});
+  const PendingPing({
+    required this.t1AppMs,
+    required this.t1AppUs,
+    required this.sentAt,
+  });
+
+  /// Phone time in ms sent to the device (protocol field is uint32 ms).
   final int t1AppMs;
+
+  /// Phone time in µs since epoch — used for sub-ms offset computation.
+  final int t1AppUs;
+
   final DateTime sentAt;
 }
 
@@ -136,10 +148,17 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
   /// so they fit in the protocol's uint32 field (§4.1).
   int? _tAppRefMs;
 
+  /// Reference phone timestamp (µs since epoch) captured on the first ping.
+  /// Used for sub-ms offset computation. Kept in sync with [_tAppRefMs].
+  int? _tAppRefUs;
+
   /// Exposes the reference phone timestamp so other providers (e.g. the
   /// countdown notifier) can convert absolute phone ms to the same relative
   /// timeline the sync engine uses. Returns null if no ping has been sent.
   int? get tAppRefMs => _tAppRefMs;
+
+  /// Exposes the reference phone timestamp in µs for sub-ms computations.
+  int? get tAppRefUs => _tAppRefUs;
 
   @override
   SyncEngineState build() {
@@ -178,13 +197,23 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
     // Use a relative timestamp so it fits in the protocol's uint32 t_app_ms
     // field (§4.1). Absolute Unix epoch ms in 2026 (~1.78e12) overflows
     // uint32 (max ~4.29e9). Relative ms since first ping fits for ~49 days.
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    //
+    // We capture both ms (for the protocol field) and µs (for sub-ms offset
+    // computation) at the same instant.
+    final nowUs = DateTime.now().microsecondsSinceEpoch;
+    final nowMs = nowUs ~/ 1000;
     _tAppRefMs ??= nowMs;
+    _tAppRefUs ??= nowUs;
     final t1AppMs = nowMs - _tAppRefMs!;
+    final t1AppUs = nowUs - _tAppRefUs!;
     state = state.copyWithSide(
       side,
       state.bySide[side]!.copyWith(
-        pendingPing: PendingPing(t1AppMs: t1AppMs, sentAt: DateTime.now()),
+        pendingPing: PendingPing(
+          t1AppMs: t1AppMs,
+          t1AppUs: t1AppUs,
+          sentAt: DateTime.now(),
+        ),
         error: null,
       ),
     );
@@ -255,16 +284,18 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
           // Stale or unmatched response — ignore.
           break;
         }
-        // Use the same relative reference as sendPing for t3.
-        final t3AppMs = DateTime.now().millisecondsSinceEpoch - (_tAppRefMs ?? 0);
-        final estimate =
-            OffsetEstimate.compute(
-              t1AppMs: pending.t1AppMs,
-              t2DeviceUs: tDeviceUs,
-              t3AppMs: t3AppMs,
-            );
+        // Capture T3 in µs for sub-ms offset precision. The protocol sends
+        // T1 in ms (uint32 constraint), but we compute the offset using
+        // µs-precision T1 and T3 to avoid 1ms quantization error.
+        final t3AppUs =
+            DateTime.now().microsecondsSinceEpoch - (_tAppRefUs ?? 0);
+        final estimate = OffsetEstimate.compute(
+          t1AppUs: pending.t1AppUs,
+          t2DeviceUs: tDeviceUs,
+          t3AppUs: t3AppUs,
+        );
         _trackers[side]!.add(estimate);
-        _points[side]!.add(SyncPoint(tDeviceUs: tDeviceUs, tAppMs: t3AppMs));
+        _points[side]!.add(SyncPoint(tDeviceUs: tDeviceUs, tAppUs: t3AppUs));
         final driftFit =
             _points[side]!.length >= 2 ? DriftFit.fit(_points[side]!) : null;
         state = state.copyWithSide(

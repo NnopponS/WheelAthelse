@@ -35,8 +35,8 @@ Notes:
 - Tag chips should use small, subtle styling (not loud) — use theme colorScheme.secondaryContainer
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§2 Session tags)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§2 Session tags)
 3. อ่าน .project/context.md D20 สำหรับเหตุผล
 4. อ่าน app/lib/records/session_model.dart ก่อน — ดู toJson/fromJson pattern
 5. อ่าน app/lib/records/storage_repository.dart — ดู updateSessionMeta pattern

@@ -84,6 +84,10 @@ void main() {
         bleRepositoryProvider.overrideWith((ref) => ble),
         storageRepositoryProvider.overrideWith((ref) => storage),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
+        // Default: emit every batch (immediate) so existing tests see state
+        // updates synchronously. The throttling test overrides this per-test.
+        recordingEmitIntervalProvider.overrideWith((ref) => Duration.zero),
       ],
     );
     addTearDown(container.dispose);
@@ -298,6 +302,100 @@ void main() {
       expect(state.config, isNull);
       expect(state.sampleCount, 0);
       expect(state.savedSessionId, isNull);
+    });
+
+    test('throttled emit: sampleCount state is not emitted on every batch when '
+        'recordingEmitInterval is non-zero, but buffer accumulates all samples',
+        () async {
+      // Build a separate container with a non-zero emit interval.
+      final storage2 = InMemoryStorageRepository();
+      final ble2 = FakeBleRepository(
+        devices: [
+          const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+          const FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
+        ],
+        infoFor: const {'L1': _leftInfo, 'R1': _rightInfo},
+      );
+      final container2 = ProviderContainer(
+        overrides: [
+          bleRepositoryProvider.overrideWith((ref) => ble2),
+          storageRepositoryProvider.overrideWith((ref) => storage2),
+          rssiPollIntervalProvider.overrideWith((ref) => null),
+          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
+          recordingEmitIntervalProvider
+              .overrideWith((ref) => const Duration(milliseconds: 100)),
+        ],
+      );
+      addTearDown(container2.dispose);
+      await container2.read(connectionManagerProvider.notifier).connect('L1');
+      await container2.read(connectionManagerProvider.notifier).connect('R1');
+
+      await storage2.createTopic('sprint_test');
+      final notifier = container2.read(recordingProvider.notifier);
+      await notifier.startRecording(const SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      ));
+
+      // Emit 3 batches in quick succession (no time advance).
+      final ctrl = ble2.imuController('L1')!;
+      ctrl.add(_batch([_sample(seq: 0, tDeviceUs: 0)]));
+      ctrl.add(_batch([_sample(seq: 1, tDeviceUs: 1000)]));
+      ctrl.add(_batch([_sample(seq: 2, tDeviceUs: 2000)]));
+      await Future<void>.delayed(Duration.zero);
+
+      // The state's sampleCount should NOT reflect all 3 batches yet — it
+      // is throttled. The first batch emits immediately (initial emit), but
+      // subsequent batches within the throttle window are held.
+      final stateAfterBurst = container2.read(recordingProvider);
+      expect(
+        stateAfterBurst.sampleCount,
+        lessThan(3),
+        reason:
+            'sampleCount should be throttled — not all 3 batches emitted yet',
+      );
+
+      // Advance time past the throttle interval and pump microtasks so the
+      // pending emit fires.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final stateAfterDelay = container2.read(recordingProvider);
+      expect(
+        stateAfterDelay.sampleCount,
+        3,
+        reason: 'after the throttle interval, all buffered samples are '
+            'reflected in sampleCount',
+      );
+
+      // The buffer itself always has all samples regardless of throttle.
+      await notifier.stopRecording();
+      final sessionId = notifier.state.savedSessionId!;
+      final samples =
+          await storage2.readSamples('sprint_test', 1, sessionId);
+      expect(samples, hasLength(3));
+    });
+
+    test('zero emit interval: sampleCount updates on every batch (test mode)',
+        () async {
+      await pumpProviders();
+      // The default in pumpProviders is Duration.zero (immediate).
+      await storage.createTopic('sprint_test');
+      final notifier = container.read(recordingProvider.notifier);
+      await notifier.startRecording(const SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      ));
+
+      ble.imuController('L1')!.add(_batch([_sample(seq: 0, tDeviceUs: 0)]));
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(recordingProvider).sampleCount, 1);
+
+      ble.imuController('L1')!.add(_batch([_sample(seq: 1, tDeviceUs: 1000)]));
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(recordingProvider).sampleCount, 2);
+
+      await notifier.stopRecording();
     });
   });
 }

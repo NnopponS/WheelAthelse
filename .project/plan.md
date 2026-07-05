@@ -1,6 +1,6 @@
 # WheelAthlete — Phase 2: Field-Ready App & Firmware Enhancements
 
-> Phase 1 (data collection) is complete — see `.project/plan-phase1.md` and
+> Phase 1 (data collection) is complete — see `.project/phases/phase1/plan.md` and
 > `.project/progress.md` (subtasks #1–#10). This plan covers the 6 enhancements
 > the user requested after field testing, grouped into 3 GitHub issues by layer.
 

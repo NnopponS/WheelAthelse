@@ -14,8 +14,8 @@ Context:
   - app/test/ui/session_preview_page_test.dart — add export tests
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §6 (Export from preview)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §6 (Export from preview)
 3. อ่าน app/lib/ui/session_preview_page.dart (from #33/#34)
 4. อ่าน app/lib/export/export_actions.dart — existing export logic
 5. อ่าน app/lib/export/export_providers.dart — existing providers
@@ -34,4 +34,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #35 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #35 เสร็จแล้ว

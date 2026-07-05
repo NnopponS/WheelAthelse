@@ -1,13 +1,12 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
+import 'package:wheelathlete/export/csv_parser.dart';
 import 'package:wheelathlete/records/session_model.dart';
-import 'package:wheelathlete/theme/theme.dart';
 
-/// One topic/subject folder in the storage hierarchy (§5 of architecture.md).
+/// One topic/subject folder in the storage hierarchy (Â§5 of architecture.md).
 class TopicEntry {
   const TopicEntry({required this.name, this.description, this.createdAt});
   final String name;
@@ -18,11 +17,11 @@ class TopicEntry {
 /// Abstract storage for the WheelAthlete folder hierarchy:
 /// ```
 /// WheelAthleteData/
-/// └── <topic>/
-///     ├── topic_meta.json
-///     └── trial_<NN>/
-///         ├── session_<id>.csv
-///         └── session_<id>_meta.json
+/// â””â”€â”€ <topic>/
+///     â”œâ”€â”€ topic_meta.json
+///     â””â”€â”€ trial_<NN>/
+///         â”œâ”€â”€ session_<id>.csv
+///         â””â”€â”€ session_<id>_meta.json
 /// ```
 ///
 /// The app talks to this interface; the real implementation
@@ -153,16 +152,27 @@ abstract class StorageRepository {
   );
 }
 
-// ── path_provider implementation ──────────────────────────────────────────
+// â”€â”€ path_provider implementation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // coverage:ignore-start
 // This production adapter wraps path_provider + dart:io which requires a real
 // device filesystem. It is a thin I/O translator. The pure logic (folder
 // hierarchy, meta JSON) is tested via InMemoryStorageRepository.
 
 class PathProviderStorageRepository implements StorageRepository {
-  PathProviderStorageRepository();
+  /// Optional [rootDir] for tests. When null, the real
+  /// `getApplicationDocumentsDirectory()` is used at runtime.
+  PathProviderStorageRepository({this.rootDir});
+
+  /// When non-null, overrides the on-disk root directory. Tests pass a temp
+  /// directory here so the full CSV writeâ†’fileâ†’read round-trip is exercised
+  /// against a real filesystem without mocking `path_provider`.
+  final Directory? rootDir;
 
   Future<Directory> _rootDir() async {
+    if (rootDir != null) {
+      if (!rootDir!.existsSync()) rootDir!.createSync(recursive: true);
+      return rootDir!;
+    }
     final docs = await getApplicationDocumentsDirectory();
     final root = Directory('${docs.path}/WheelAthleteData');
     if (!root.existsSync()) root.createSync(recursive: true);
@@ -427,36 +437,11 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, trialNumber);
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     if (!csvFile.existsSync()) return [];
-    // Parse CSV back into BufferedSample list.
-    // New format: two separate tables (L then R) with `#` comment markers
-    // and a `seq,` header before each table. Skip both.
-    final lines = csvFile.readAsLinesSync();
-    final samples = <BufferedSample>[];
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      if (trimmed.startsWith('#')) continue;
-      if (trimmed.startsWith('seq,')) continue;
-      final f = trimmed.split(',');
-      if (f.length < 12) continue;
-      samples.add(BufferedSample(
-        reading: ImuReading(
-          seq: int.parse(f[0]),
-          tDeviceUs: int.parse(f[3]),
-          ax: double.parse(f[5]),
-          ay: double.parse(f[6]),
-          az: double.parse(f[7]),
-          gx: double.parse(f[8]),
-          gy: double.parse(f[9]),
-          gz: double.parse(f[10]),
-        ),
-        wheel: f[1] == 'L' ? WheelSide.left : WheelSide.right,
-        timestampAppMs: int.parse(f[2]),
-        timestampSyncedMs: double.parse(f[4]),
-        marker: f[11] == '1',
-      ));
-    }
-    return samples;
+    // Route through the shared [CsvSampleParser] so the exact same parsing
+    // logic exercised by the test suite runs on real on-device files. The
+    // parser merges the L and R tables back into one chronological list and
+    // tolerates malformed rows without throwing.
+    return CsvSampleParser.parse(csvFile.readAsStringSync());
   }
 
   @override
@@ -477,48 +462,20 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, trialNumber);
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     if (!csvFile.existsSync()) return [];
-    // Parse CSV line by line: skip comments (`#`), headers (`seq,`), and
-    // empty lines. Skip `offset` data lines, then read up to `count`.
-    // Uses a stream so the whole file is not loaded into memory for large
-    // sessions.
-    final samples = <BufferedSample>[];
-    final lineStream =
-        utf8.decoder.bind(csvFile.openRead()).transform(const LineSplitter());
-    var dataIndex = 0;
-    var collected = 0;
-    await for (final line in lineStream) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      if (trimmed.startsWith('#')) continue;
-      if (trimmed.startsWith('seq,')) continue;
-      if (dataIndex < offset) {
-        dataIndex++;
-        continue;
-      }
-      final f = trimmed.split(',');
-      if (f.length >= 12) {
-        samples.add(BufferedSample(
-          reading: ImuReading(
-            seq: int.parse(f[0]),
-            tDeviceUs: int.parse(f[3]),
-            ax: double.parse(f[5]),
-            ay: double.parse(f[6]),
-            az: double.parse(f[7]),
-            gx: double.parse(f[8]),
-            gy: double.parse(f[9]),
-            gz: double.parse(f[10]),
-          ),
-          wheel: f[1] == 'L' ? WheelSide.left : WheelSide.right,
-          timestampAppMs: int.parse(f[2]),
-          timestampSyncedMs: double.parse(f[4]),
-          marker: f[11] == '1',
-        ));
-      }
-      dataIndex++;
-      collected++;
-      if (collected >= count) break;
-    }
-    return samples;
+    // Route through the shared [CsvSampleParser] so chunk offsets have the
+    // same semantics as [readSamples]: index N = the Nth sample in the
+    // chronological, both-wheels-merged timeline. The on-disk format stores
+    // L and R as two separate blocks, so a naive "Nth data line in file
+    // order" would return L samples for low offsets and R samples for high
+    // ones â€” wrong for the preview scrubber, which maps a scrub position
+    // (ms from start) to a flat sample index via `sampleRateHz`.
+    //
+    // Sessions are bounded (~10 min Ã— 100 Hz Ã— 2 wheels â‰ˆ 120k samples,
+    // ~5 MB CSV), so buffering the whole file to merge is acceptable and
+    // keeps the read path identical to [readSamples].
+    final all = CsvSampleParser.parse(csvFile.readAsStringSync());
+    if (offset >= all.length) return [];
+    return all.skip(offset).take(count).toList();
   }
 
   @override
@@ -579,7 +536,7 @@ class PathProviderStorageRepository implements StorageRepository {
 }
 // coverage:ignore-end
 
-// ── In-memory fake for tests ──────────────────────────────────────────────
+// â”€â”€ In-memory fake for tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class InMemoryStorageRepository implements StorageRepository {
   final _topics = <String, TopicEntry>{};

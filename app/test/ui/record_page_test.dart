@@ -66,6 +66,7 @@ void main() {
         storageRepositoryProvider.overrideWith((ref) => storage),
         protocolRepositoryProvider.overrideWith((ref) => protocolRepo),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
         countdownDurationProvider.overrideWith(
           (ref) => const Duration(milliseconds: 200),
         ),
@@ -256,6 +257,26 @@ void main() {
 
       // Initially 0 samples.
       expect(find.text('0 samples'), findsOneWidget);
+    });
+
+    testWidgets('shows live IMU preview panels while recording', (tester) async {
+      await pumpPage(tester);
+      await tester.runAsync(() async {
+        const config = SessionConfig(
+          topic: 'sprint_test',
+          trialNumber: 1,
+          sampleRateHz: 100,
+        );
+        await container.read(recordingProvider.notifier).startRecording(config);
+      });
+      await tester.pumpAndSettle();
+
+      // The new recording preview shows per-wheel panels, not just a Stop button.
+      expect(find.text('Left wheel'), findsOneWidget);
+      expect(find.text('Right wheel'), findsOneWidget);
+      // Panels are streaming but no data has arrived yet → waiting state.
+      expect(find.text('Waiting for data…'), findsWidgets);
+      expect(find.text('Stop Recording'), findsOneWidget);
     });
 
     testWidgets('new record button appears after stop', (tester) async {

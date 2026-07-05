@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,9 +9,11 @@ import 'package:wheelathlete/ble/wheel_id.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/state/sync_engine.dart';
+import 'package:wheelathlete/theme/theme.dart';
 
 /// Builds a START_FIRED Sync notify payload: [0x30][uint32 t_device_us].
 Uint8List _startFiredEvent(int tDeviceUs) {
@@ -57,7 +59,7 @@ void main() {
       );
     });
 
-    test('T_start in the past → utc_start < utc_now', () {
+    test('T_start in the past â†’ utc_start < utc_now', () {
       const utcNow = 1780000000000;
       const nowPhone = 1780000005000;
       const tStart = nowPhone - 2000;
@@ -71,7 +73,7 @@ void main() {
       );
     });
 
-    test('T_start == now → utc_start == utc_now', () {
+    test('T_start == now â†’ utc_start == utc_now', () {
       const utcNow = 1780000000000;
       const nowPhone = 1780000005000;
       expect(
@@ -104,6 +106,7 @@ void main() {
           bleRepositoryProvider.overrideWith((ref) => ble),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
+          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
           // Short countdown so the test completes quickly.
           countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
         ],
@@ -168,6 +171,7 @@ void main() {
           bleRepositoryProvider.overrideWith((ref) => ble),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
+          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
           countdownDurationProvider.overrideWith((ref) => const Duration(seconds: 1)),
         ],
       );
@@ -226,6 +230,53 @@ void main() {
       expect(recState.config?.utcStartMs, isNotNull);
     });
 
+    test(
+        'IMU streaming is armed during counting, before START_FIRED '
+        '(regression: avoid dropping the first samples)', () async {
+      await pumpProviders();
+      final notifier = container.read(recordCountdownProvider.notifier);
+      const config = SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      );
+
+      await notifier.start(config);
+
+      // Still counting down â€” START_FIRED has not been injected yet â€” but
+      // the BLE notify subscription must already be live so no samples are
+      // lost once the firmware begins streaming at the synchronized instant.
+      expect(
+        container.read(recordCountdownProvider).status,
+        RecordCountdownStatus.counting,
+      );
+      final imuState = container.read(imuStreamProvider);
+      expect(imuState.bySide[WheelSide.left]!.streaming, isTrue);
+      expect(imuState.bySide[WheelSide.right]!.streaming, isTrue);
+    });
+
+    test('cancel during counting disarms IMU streaming', () async {
+      await pumpProviders();
+      final notifier = container.read(recordCountdownProvider.notifier);
+      const config = SessionConfig(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sampleRateHz: 100,
+      );
+
+      await notifier.start(config);
+      expect(
+        container.read(imuStreamProvider).bySide[WheelSide.left]!.streaming,
+        isTrue,
+      );
+
+      await notifier.cancel();
+
+      final imuState = container.read(imuStreamProvider);
+      expect(imuState.bySide[WheelSide.left]!.streaming, isFalse);
+      expect(imuState.bySide[WheelSide.right]!.streaming, isFalse);
+    });
+
     test('cancel during counting sends STOP and returns to idle', () async {
       await pumpProviders();
       final notifier = container.read(recordCountdownProvider.notifier);
@@ -269,6 +320,7 @@ void main() {
           bleRepositoryProvider.overrideWith((ref) => ble),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
+          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
           countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
         ],
       );
@@ -289,7 +341,7 @@ void main() {
       final state = container.read(recordCountdownProvider);
       expect(state.status, RecordCountdownStatus.counting);
 
-      // Fire START_FIRED from the left wheel only → recording should begin.
+      // Fire START_FIRED from the left wheel only â†’ recording should begin.
       ble.syncController('L1')?.add(_startFiredEvent(1000000));
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(
@@ -309,6 +361,7 @@ void main() {
           bleRepositoryProvider.overrideWith((ref) => ble),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
+          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
           countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
         ],
       );

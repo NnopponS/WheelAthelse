@@ -85,7 +85,7 @@ void main() {
     });
 
     test('single sample -> mean == peak == that sample magnitude', () {
-      final reading = const ImuReading(
+      const reading = ImuReading(
         seq: 0,
         tDeviceUs: 0,
         ax: 3.0,
@@ -108,12 +108,42 @@ void main() {
       // Accel magnitudes: 5, 10, 13 -> mean = 28/3, peak = 13
       // Gyro magnitudes: 3, 6, 9  -> mean = 6, peak = 9
       final samples = [
-        _sample(const ImuReading(
-            seq: 0, tDeviceUs: 0, ax: 3, ay: 4, az: 0, gx: 1, gy: 2, gz: 2)),
-        _sample(const ImuReading(
-            seq: 1, tDeviceUs: 0, ax: 6, ay: 8, az: 0, gx: 2, gy: 4, gz: 4)),
-        _sample(const ImuReading(
-            seq: 2, tDeviceUs: 0, ax: 12, ay: 5, az: 0, gx: 3, gy: 6, gz: 6)),
+        _sample(
+          const ImuReading(
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 3,
+            ay: 4,
+            az: 0,
+            gx: 1,
+            gy: 2,
+            gz: 2,
+          ),
+        ),
+        _sample(
+          const ImuReading(
+            seq: 1,
+            tDeviceUs: 0,
+            ax: 6,
+            ay: 8,
+            az: 0,
+            gx: 2,
+            gy: 4,
+            gz: 4,
+          ),
+        ),
+        _sample(
+          const ImuReading(
+            seq: 2,
+            tDeviceUs: 0,
+            ax: 12,
+            ay: 5,
+            az: 0,
+            gx: 3,
+            gy: 6,
+            gz: 6,
+          ),
+        ),
       ];
       final stats = SessionStatsCalculator.compute(samples, _meta());
       expect(stats.sampleCount, 3);
@@ -127,12 +157,28 @@ void main() {
       final samples = [
         _sample(
           const ImuReading(
-              seq: 0, tDeviceUs: 0, ax: 3, ay: 4, az: 0, gx: 0, gy: 0, gz: 0),
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 3,
+            ay: 4,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.left,
         ),
         _sample(
           const ImuReading(
-              seq: 1, tDeviceUs: 0, ax: 0, ay: 0, az: 5, gx: 0, gy: 0, gz: 0),
+            seq: 1,
+            tDeviceUs: 0,
+            ax: 0,
+            ay: 0,
+            az: 5,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.right,
         ),
       ];
@@ -172,18 +218,40 @@ void main() {
 
     test('duration from meta', () {
       final samples = [
-        _sample(const ImuReading(
-            seq: 0, tDeviceUs: 0, ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0)),
+        _sample(
+          const ImuReading(
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 0,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
+        ),
       ];
-      final stats =
-          SessionStatsCalculator.compute(samples, _meta(durationMs: 4242));
+      final stats = SessionStatsCalculator.compute(
+        samples,
+        _meta(durationMs: 4242),
+      );
       expect(stats.durationMs, 4242);
     });
 
     test('dropCount is 0 (not computable from meta alone)', () {
       final samples = [
-        _sample(const ImuReading(
-            seq: 0, tDeviceUs: 0, ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0)),
+        _sample(
+          const ImuReading(
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 0,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
+        ),
       ];
       final stats = SessionStatsCalculator.compute(samples, _meta());
       expect(stats.dropCount, 0);
@@ -192,8 +260,7 @@ void main() {
 
   group('SessionStatsCalculator syncQualityMs', () {
     test('null when both drift fields null', () {
-      final stats =
-          SessionStatsCalculator.compute(const [], _meta());
+      final stats = SessionStatsCalculator.compute(const [], _meta());
       expect(stats.syncQualityMs, isNull);
     });
 

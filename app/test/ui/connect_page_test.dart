@@ -33,8 +33,9 @@ void main() {
     );
   }
 
-  testWidgets('shows two ConnectionCards (L and R) initially disconnected',
-      (tester) async {
+  testWidgets('shows two ConnectionCards (L and R) initially disconnected', (
+    tester,
+  ) async {
     final ble = FakeBleRepository(devices: const []);
     await pumpConnectPage(tester, ble);
 
@@ -43,16 +44,18 @@ void main() {
     expect(find.text('Disconnected'), findsNWidgets(2));
   });
 
-  testWidgets('shows empty-state hint when no devices found and not scanning',
-      (tester) async {
+  testWidgets('shows empty-state hint when no devices found and not scanning', (
+    tester,
+  ) async {
     final ble = FakeBleRepository(devices: const []);
     await pumpConnectPage(tester, ble);
 
     expect(find.text('Tap Scan to find WheelAthlete sensors.'), findsOneWidget);
   });
 
-  testWidgets('shows error banner when connect fails (no Info seeded)',
-      (tester) async {
+  testWidgets('shows error banner when connect fails (no Info seeded)', (
+    tester,
+  ) async {
     final ble = FakeBleRepository(
       devices: [const FakeDevice(id: 'X1', name: 'WheelAthlete-?', rssi: -40)],
       // No infoFor entry → connect throws → error banner appears.
@@ -68,7 +71,9 @@ void main() {
     expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
   });
 
-  testWidgets('Scan button triggers scan and lists found devices', (tester) async {
+  testWidgets('Scan button triggers scan and lists found devices', (
+    tester,
+  ) async {
     final ble = FakeBleRepository(
       devices: [
         const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
@@ -106,42 +111,44 @@ void main() {
     expect(find.text('WheelAthlete-R'), findsWidgets);
   });
 
-  testWidgets('tapping a found device connects and updates its ConnectionCard',
-      (tester) async {
-    final ble = FakeBleRepository(
-      devices: [
-        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-      ],
-      infoFor: {
-        'L1': const DeviceInfo(
-          wheelId: WheelId.left,
-          fwMajor: 1,
-          fwMinor: 0,
-          fwPatch: 0,
-          accelRange: 0,
-          gyroRange: 3,
-          accelScale: 6.1e-5,
-          gyroScale: 6.1e-2,
-        ),
-      },
-    );
-    await pumpConnectPage(tester, ble);
+  testWidgets(
+    'tapping a found device connects and updates its ConnectionCard',
+    (tester) async {
+      final ble = FakeBleRepository(
+        devices: [
+          const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+        ],
+        infoFor: {
+          'L1': const DeviceInfo(
+            wheelId: WheelId.left,
+            fwMajor: 1,
+            fwMinor: 0,
+            fwPatch: 0,
+            accelRange: 0,
+            gyroRange: 3,
+            accelScale: 6.1e-5,
+            gyroScale: 6.1e-2,
+          ),
+        },
+      );
+      await pumpConnectPage(tester, ble);
 
-    await tester.tap(find.byKey(ConnectPage.scanButtonKey));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ConnectPage.scanButtonKey));
+      await tester.pumpAndSettle();
 
-    // Tap the connect affordance for the first found device.
-    await tester.tap(find.byKey(ConnectPage.connectKey('L1')));
-    await tester.pumpAndSettle();
+      // Tap the connect affordance for the first found device.
+      await tester.tap(find.byKey(ConnectPage.connectKey('L1')));
+      await tester.pumpAndSettle();
 
-    // The Left ConnectionCard should now read Connected.
-    final leftCard = find.ancestor(
-      of: find.text('Left wheel'),
-      matching: find.byType(Card),
-    );
-    expect(
-      find.descendant(of: leftCard, matching: find.text('Connected')),
-      findsOneWidget,
-    );
-  });
+      // The Left ConnectionCard should now read Connected.
+      final leftCard = find.ancestor(
+        of: find.text('Left wheel'),
+        matching: find.byType(Card),
+      );
+      expect(
+        find.descendant(of: leftCard, matching: find.text('Connected')),
+        findsOneWidget,
+      );
+    },
+  );
 }

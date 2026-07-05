@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/home_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/browse_page.dart';
 import 'package:wheelathlete/ui/connect_page.dart';
@@ -8,9 +9,9 @@ import 'package:wheelathlete/ui/live_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart' show ConnectionStatus;
 
 /// Real app home shell with a [NavigationBar] (Material 3) routing to:
-///   0 – Connect  : BLE scan + connect L/R wheels
-///   1 – Live & Record : realtime IMU display + start/stop recording
-///   2 – Browse   : topic → trial → session hierarchy + CSV share +
+///   0 â€“ Connect  : BLE scan + connect L/R wheels
+///   1 â€“ Live & Record : realtime IMU display + start/stop recording
+///   2 â€“ Browse   : topic â†’ trial â†’ session hierarchy + CSV share +
 ///                  protocol template progress bars
 ///
 /// The Connect tab badge shows how many wheels are currently connected so the
@@ -25,8 +26,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  int _tab = 0;
-
   static const _tabs = [
     _TabSpec(
       icon: Icon(Icons.bluetooth_rounded),
@@ -48,6 +47,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     final connState = ref.watch(connectionManagerProvider);
+    final tab = ref.watch(homeTabIndexProvider);
     final connectedCount =
         connState.bySide.values.where((c) => c.status == ConnectionStatus.connected).length;
 
@@ -55,7 +55,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       appBar: AppBar(
         title: const Text('WheelAthlete'),
         actions: [
-          // Connection summary chip — always visible regardless of active tab.
+          // Connection summary chip â€” always visible regardless of active tab.
           if (connectedCount > 0)
             Padding(
               padding: const EdgeInsets.only(right: AppSpacing.xs),
@@ -66,7 +66,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
       body: IndexedStack(
-        index: _tab,
+        index: tab,
         children: const [
           _ConnectTab(),
           _LiveTab(),
@@ -74,8 +74,8 @@ class _HomePageState extends ConsumerState<HomePage> {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        selectedIndex: tab,
+        onDestinationSelected: (i) => ref.read(homeTabIndexProvider.notifier).setTab(i),
         destinations: [
           NavigationDestination(
             icon: Badge(
@@ -104,7 +104,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-/// The Connect tab body — wraps [ConnectPage] without its own [Scaffold] so the
+/// The Connect tab body â€” wraps [ConnectPage] without its own [Scaffold] so the
 /// shell's AppBar and BottomNavigationBar stay in place.
 ///
 /// [ConnectPage] is a [ConsumerWidget] that uses [Scaffold] internally. To
@@ -112,7 +112,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 /// its Scaffold-less body logic here via delegation. However, because
 /// [ConnectPage] is already a standalone Scaffold widget we use it as a
 /// whole-screen push target from the tab. Instead, we embed it directly inside
-/// [IndexedStack] — Flutter allows nested Scaffolds but the nested one should
+/// [IndexedStack] â€” Flutter allows nested Scaffolds but the nested one should
 /// have [appBar] = null so it doesn't double-render. We set [resizeToAvoidBottomInset]
 /// to false so the keyboard doesn't fight the outer Scaffold.
 class _ConnectTab extends StatelessWidget {
@@ -122,14 +122,14 @@ class _ConnectTab extends StatelessWidget {
   Widget build(BuildContext context) {
     // ConnectPage is a full Scaffold widget. When embedded inside IndexedStack
     // the inner Scaffold's appBar overlaps with the outer Scaffold's AppBar.
-    // Solution: render ConnectPage directly — it handles its own Scaffold.
+    // Solution: render ConnectPage directly â€” it handles its own Scaffold.
     // The outer Scaffold's body is just this widget; Material allows nested
     // Scaffolds and inner one handles its own AppBar slot correctly.
     return const ConnectPage();
   }
 }
 
-/// The Live tab body — wraps [LivePage] (realtime IMU + Start/Stop FAB).
+/// The Live tab body â€” wraps [LivePage] (realtime IMU + Start/Stop FAB).
 /// From here the Record button in [LivePage]'s AppBar pushes [RecordPage].
 class _LiveTab extends StatelessWidget {
   const _LiveTab();
@@ -140,7 +140,7 @@ class _LiveTab extends StatelessWidget {
   }
 }
 
-/// The Browse tab body — wraps [BrowsePage] (topic → trial → session hierarchy).
+/// The Browse tab body â€” wraps [BrowsePage] (topic â†’ trial â†’ session hierarchy).
 class _BrowseTab extends StatelessWidget {
   const _BrowseTab();
 
@@ -150,7 +150,7 @@ class _BrowseTab extends StatelessWidget {
   }
 }
 
-// ─── Internal helpers ────────────────────────────────────────────────────────
+// â”€â”€â”€ Internal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _TabSpec {
   const _TabSpec({

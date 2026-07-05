@@ -52,6 +52,7 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => ble),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
       ],
     );
     addTearDown(container.dispose);
@@ -94,10 +95,10 @@ void main() {
       final notifier = container.read(syncEngineProvider.notifier);
 
       await notifier.sendPing(side);
-      // Simulate firmware response: T2 = T1_us + 4000 (4ms later on device),
-      // T3 will be ~T1 + 8ms. We need to know T1 to compute T2.
+      // Simulate firmware response: T2 = T1_us + 4000 (4ms later on device).
+      // T3 will be ~T1 + 8ms. We use t1AppUs for sub-ms precision.
       final pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
-      final t2DeviceUs = pending.t1AppMs * 1000 + 4000;
+      final t2DeviceUs = pending.t1AppUs + 4000;
       ble.syncController('L1')!.add(_syncResponseEvent(
         tAppMs: pending.t1AppMs,
         tDeviceUs: t2DeviceUs,
@@ -109,10 +110,10 @@ void main() {
       final state = container.read(syncEngineProvider);
       expect(state.bySide[side]!.pendingPing, isNull);
       expect(state.bySide[side]!.offset, isNotNull);
-      // offset = T2 - (T1*1000 + RTT/2). T2 = T1*1000 + 4000.
+      // offset = T2 - (T1_us + RTT_us/2). T2 = T1_us + 4000.
       // RTT varies with async scheduling (0-10 ms), so offset = 4000 - RTT/2
-      // is in range [0, 4000]. Just check it's non-negative and reasonable.
-      expect(state.bySide[side]!.offset!.offsetUs, greaterThanOrEqualTo(0));
+      // is in range [-1000, 4000]. Check it's reasonable.
+      expect(state.bySide[side]!.offset!.offsetUs, greaterThanOrEqualTo(-1000));
       expect(state.bySide[side]!.offset!.offsetUs, lessThanOrEqualTo(4000));
     });
 
@@ -125,7 +126,7 @@ void main() {
       var pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
       ble.syncController('L1')!.add(_syncResponseEvent(
         tAppMs: pending.t1AppMs,
-        tDeviceUs: pending.t1AppMs * 1000 + 10000,
+        tDeviceUs: pending.t1AppUs + 10000,
         seqPing: 1,
       ));
       await Future<void>.delayed(Duration.zero);
@@ -136,7 +137,7 @@ void main() {
       pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
       ble.syncController('L1')!.add(_syncResponseEvent(
         tAppMs: pending.t1AppMs,
-        tDeviceUs: pending.t1AppMs * 1000 + 2000,
+        tDeviceUs: pending.t1AppUs + 2000,
         seqPing: 2,
       ));
       await Future<void>.delayed(Duration.zero);

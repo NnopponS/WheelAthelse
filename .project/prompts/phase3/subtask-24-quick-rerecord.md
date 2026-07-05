@@ -30,8 +30,8 @@ Notes:
 - Layout: Re-record (primary) + New Recording (tonal) side by side or stacked
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§5 Quick re-record)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§5 Quick re-record)
 3. อ่าน .project/context.md D19 สำหรับเหตุผล
 4. อ่าน app/lib/ui/record_page.dart ก่อน — ดู _buildStoppedView + _startRecording
 5. เขียน test ก่อน (TDD)

@@ -23,8 +23,8 @@ Context:
   8. flutter analyze clean
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase3.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase3.md สำหรับ system design (§4 Mark Event removal)
+1. อ่าน .project/phases/phase3/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase3/architecture.md สำหรับ system design (§4 Mark Event removal)
 3. อ่าน .project/context.md D16 สำหรับเหตุผลในการลบ
 4. เขียน test ก่อน (TDD) — update existing record_page tests to remove marker assertions, add test that markEvent() no longer exists
 5. ทำเสร็จ commit ด้วยข้อความ: "feat(app): remove Mark Event from recording UI (#20)"

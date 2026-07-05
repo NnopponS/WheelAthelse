@@ -13,8 +13,8 @@ Context:
   - app/test/records/storage_repository_test.dart — add chunk tests
 
 ก่อนเขียนโค้ด:
-1. อ่าน .project/plan-phase4.md สำหรับ context เต็ม
-2. อ่าน .project/architecture-phase4.md section §1 (Sample chunk reader)
+1. อ่าน .project/phases/phase4/plan.md สำหรับ context เต็ม
+2. อ่าน .project/phases/phase4/architecture.md section §1 (Sample chunk reader)
 3. อ่าน app/lib/records/storage_repository.dart — ดู readSamples() ที่มีอยู่แล้ว
 4. อ่าน app/lib/export/csv_exporter.dart — ดู CSV format
 5. เขียน test ก่อน (TDD)
@@ -32,4 +32,4 @@ Acceptance criteria:
 
 หลังเขียน:
 1. รัน flutter test + flutter analyze
-2. อัปเดต .project/progress-phase4.md ว่า subtask #30 เสร็จแล้ว
+2. อัปเดต .project/phases/phase4/progress.md ว่า subtask #30 เสร็จแล้ว

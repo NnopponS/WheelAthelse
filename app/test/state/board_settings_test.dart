@@ -57,6 +57,7 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => ble),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
       ],
     );
     addTearDown(container.dispose);
@@ -137,6 +138,7 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => bleNoConfig),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
       ],
     );
     addTearDown(c.dispose);

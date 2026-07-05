@@ -94,6 +94,7 @@ public:
     void updateAdvertisedName();
     void doBeep(uint16_t freq_hz, uint16_t duration_ms);
     void flushBatch();
+    void notifyPendingBatch();
 
     // ── State ──
     char       wheel_id_         = 'L';
@@ -115,8 +116,13 @@ public:
     bool       utc_set_          = false;
 
     // ── Batch buffer ──
-    static constexpr size_t MAX_BATCH_BUF = 1 + 12 * IMU_SAMPLE_SIZE;  // max 12 samples
+    static constexpr uint8_t MAX_BATCH_SAMPLES = 12;
+    static constexpr size_t MAX_BATCH_BUF = 1 + MAX_BATCH_SAMPLES * IMU_SAMPLE_SIZE;
+    static constexpr uint32_t BATCH_MAX_LATENCY_MS = 60;
     uint8_t    batch_buf_[MAX_BATCH_BUF] = {};
+    ImuSample  pending_samples_[MAX_BATCH_SAMPLES] = {};
+    uint8_t    pending_count_       = 0;
+    uint32_t   batch_started_ms_    = 0;
 };
 
 // Global singleton

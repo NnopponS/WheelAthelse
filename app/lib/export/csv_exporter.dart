@@ -6,21 +6,26 @@ import 'package:wheelathlete/theme/theme.dart';
 /// Schema (two separate tables — one per wheel):
 /// ```
 /// # Wheel: L
-/// seq,wheel,timestamp_app_ms,timestamp_device_us,timestamp_synced_ms,
+/// seq,wheel,timestamp_app_ms,timestamp_utc_ms,
 /// ax,ay,az,gx,gy,gz,marker
 /// 0,L,...
 /// 1,L,...
 ///
 /// # Wheel: R
-/// seq,wheel,timestamp_app_ms,timestamp_device_us,timestamp_synced_ms,
+/// seq,wheel,timestamp_app_ms,timestamp_utc_ms,
 /// ax,ay,az,gx,gy,gz,marker
 /// 0,R,...
 /// 1,R,...
 /// ```
 ///
 /// - L and R samples are written as **separate tables**, each with its own
-///   header. Within each table, rows are sorted by `timestamp_synced_ms`.
+///   header. Within each table, rows are sorted by `timestamp_utc_ms`.
 /// - `wheel` column is `L` or `R`.
+/// - `timestamp_utc_ms` is the absolute UTC epoch millisecond of the sample
+///   (after clock-sync offset/drift correction). This is the column external
+///   tools — e.g. aligning with an external camera recording — should use;
+///   the raw on-device microsecond counter is not exported since it has no
+///   meaning outside the originating wheel's own clock.
 /// - `marker` is `1` when a Mark Event was active, `0` otherwise.
 /// - Double values are formatted without unnecessary trailing zeros.
 /// - Lines starting with `#` are section comments (skipped by parsers).
@@ -31,8 +36,8 @@ class CsvExporter {
   const CsvExporter._();
 
   static const String header =
-      'seq,wheel,timestamp_app_ms,timestamp_device_us,'
-      'timestamp_synced_ms,ax,ay,az,gx,gy,gz,marker';
+      'seq,wheel,timestamp_app_ms,timestamp_utc_ms,'
+      'ax,ay,az,gx,gy,gz,marker';
 
   /// Section comment prefix for wheel tables.
   static const String commentPrefix = '#';
@@ -80,7 +85,6 @@ class CsvExporter {
       s.reading.seq.toString(),
       wheel,
       s.timestampAppMs.toString(),
-      s.reading.tDeviceUs.toString(),
       _fmtDouble(s.timestampSyncedMs),
       _fmtDouble(s.reading.ax),
       _fmtDouble(s.reading.ay),

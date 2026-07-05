@@ -43,11 +43,12 @@ class ImuSample {
     if (bytes.length < end) {
       throw ArgumentError(
         'IMU sample needs ${BleUuids.imuSampleSize} bytes at offset $offset, '
-        'buffer has ${bytes.length}',
+            'buffer has ${bytes.length}',
         'bytes',
       );
     }
-    final data = ByteData.sublistView(Uint8List.fromList(bytes), offset, end);
+    final payload = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    final data = ByteData.sublistView(payload, offset, end);
     return ImuSample(
       seq: data.getUint32(0, Endian.little),
       tDeviceUs: data.getUint32(4, Endian.little),
@@ -65,15 +66,15 @@ class ImuSample {
   ///
   /// `accel_g = raw * accelScale`, `gyro_dps = raw * gyroScale`.
   ImuReading toReading(DeviceInfo info) => ImuReading(
-        seq: seq,
-        tDeviceUs: tDeviceUs,
-        ax: ax * info.accelScale,
-        ay: ay * info.accelScale,
-        az: az * info.accelScale,
-        gx: gx * info.gyroScale,
-        gy: gy * info.gyroScale,
-        gz: gz * info.gyroScale,
-      );
+    seq: seq,
+    tDeviceUs: tDeviceUs,
+    ax: ax * info.accelScale,
+    ay: ay * info.accelScale,
+    az: az * info.accelScale,
+    gx: gx * info.gyroScale,
+    gy: gy * info.gyroScale,
+    gz: gz * info.gyroScale,
+  );
 }
 
 /// An [ImuSample] converted to physical units (g for accel, dps for gyro).
@@ -173,19 +174,22 @@ class ImuPacketParser {
     }
     final count = bytes[0];
     if (count == 0) {
-      throw const FormatException('IMU batch count is 0 (firmware must send ≥1 sample)');
+      throw const FormatException(
+        'IMU batch count is 0 (firmware must send ≥1 sample)',
+      );
     }
     final expectedLen = 1 + count * BleUuids.imuSampleSize;
     if (bytes.length != expectedLen) {
       throw ArgumentError(
         'IMU batch length mismatch: count=$count expects $expectedLen bytes, '
-        'got ${bytes.length}',
+            'got ${bytes.length}',
         'bytes',
       );
     }
+    final payload = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
     return List.generate(
       count,
-      (i) => ImuSample.parse(bytes, offset: 1 + i * BleUuids.imuSampleSize),
+      (i) => ImuSample.parse(payload, offset: 1 + i * BleUuids.imuSampleSize),
       growable: false,
     );
   }

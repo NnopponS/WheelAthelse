@@ -65,10 +65,11 @@ class RecordCountdownState {
 
 /// Number of SYNC_PING round trips sent to each wheel during the sync burst
 /// before a scheduled start. More pings → better min-RTT offset estimate.
-const int kSyncBurstCount = 5;
+/// Increased from 5 to 10 for tighter sync (±4ms → ±2ms target).
+const int kSyncBurstCount = 10;
 
 /// Interval between SYNC_PINGs in the burst (ms). Short enough to keep the
-/// burst under ~250ms, long enough for the firmware to echo each one.
+/// burst under ~400ms, long enough for the firmware to echo each one.
 const Duration kSyncBurstInterval = Duration(milliseconds: 30);
 
 /// Countdown duration before the scheduled start. The in-app UI shows
@@ -152,13 +153,24 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       return;
     }
 
+    // 0. Pre-arm IMU streaming now, well before the scheduled START command
+    // is sent below. This gives the async BLE "enable notify" round trip
+    // several seconds of margin so no samples are dropped when the firmware
+    // begins streaming at the synchronized start instant (see
+    // RecordingNotifier.armStreaming doc for the race this avoids).
+    await ref.read(recordingProvider.notifier).armStreaming();
+    if (_cancelled || !ref.mounted) return;
+
     // 1. SYNC_PING burst to refresh offset estimates (connected wheels only).
+    // Pings are sent to ALL wheels in PARALLEL so both offset estimates are
+    // measured at the same instant. Sequential pings introduce a timing bias
+    // because the second wheel's offset is measured later than the first's.
     final sync = ref.read(syncEngineProvider.notifier);
     for (var i = 0; i < kSyncBurstCount; i++) {
       if (_cancelled) return;
-      for (final side in connectedSides) {
-        await sync.sendPing(side);
-      }
+      await Future.wait(
+        connectedSides.map((side) => sync.sendPing(side)),
+      );
       if (i < kSyncBurstCount - 1) {
         await Future<void>.delayed(kSyncBurstInterval);
       }
@@ -186,24 +198,28 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     _utcStartMs = utcStartMs;
     _utcOffsetMs = utcStartMs - tStartRelMs;
 
-    // 3. Send SET_UTC to every connected wheel.
-    for (final side in connectedSides) {
+    // 3. Send SET_UTC to every connected wheel in PARALLEL so both boards
+    // receive the UTC epoch at the same instant.
+    await Future.wait(connectedSides.map((side) {
       final deviceId = connState.bySide[side]!.deviceId!;
-      await _ble.writeControl(deviceId, ControlCommand.setUtc(utcEpochNowMs));
-      if (_cancelled || !ref.mounted) return;
-    }
+      return _ble.writeControl(deviceId, ControlCommand.setUtc(utcEpochNowMs));
+    }));
+    if (_cancelled || !ref.mounted) return;
 
-    // 4. Send scheduled START to every connected wheel (firmware beeps 3-2-1).
-    for (final side in connectedSides) {
-      await _sendScheduledStart(side, tStartPhoneMs);
-      if (_cancelled || !ref.mounted) return;
-    }
+    // 4. Send scheduled START to every connected wheel in PARALLEL (firmware
+    // beeps 3-2-1). Both boards must receive the START command at the same
+    // time so their scheduled start instants are aligned.
+    await Future.wait(
+      connectedSides.map((side) => _sendScheduledStart(side, tStartPhoneMs)),
+    );
+    if (_cancelled || !ref.mounted) return;
 
-    // 5. Subscribe to START_FIRED events from every connected wheel.
-    for (final side in connectedSides) {
+    // 5. Subscribe to START_FIRED events from every connected wheel in
+    // parallel.
+    await Future.wait(connectedSides.map((side) {
       final deviceId = connState.bySide[side]!.deviceId!;
-      await _subscribeStartFired(side, deviceId);
-    }
+      return _subscribeStartFired(side, deviceId);
+    }));
 
     // 6. Begin the in-app countdown display.
     state = RecordCountdownState(
@@ -350,6 +366,12 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       await sync.sendStop(WheelSide.right);
     } on Object {
       // Best-effort — the wheels may not have started yet.
+    }
+    // Tear down the IMU streaming armed in step 0 — no recording happened.
+    try {
+      await ref.read(recordingProvider.notifier).disarmStreaming();
+    } on Object {
+      // Best-effort.
     }
     if (!ref.mounted) return;
     _utcStartMs = null;

@@ -20,6 +20,14 @@ final rssiPollIntervalProvider = Provider<Duration?>(
   (ref) => const Duration(seconds: 2),
 );
 
+/// Settle delay inserted after connecting the second of two boards, before
+/// subscribing to notify streams. Gives the Android BLE stack time to
+/// rebalance the connection schedule. Set to [Duration.zero] in tests to
+/// avoid fake-async timeouts.
+final interConnectSettleDelayProvider = Provider<Duration>(
+  (ref) => const Duration(milliseconds: 500),
+);
+
 /// Constructs the production [StorageRepository]. Override in tests with an
 /// [InMemoryStorageRepository] via `storageRepositoryProvider.overrideWith`.
 final storageRepositoryProvider = Provider<StorageRepository>(
@@ -171,13 +179,34 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
 
   /// Connect to [deviceId]. The side (L/R) is decided by the device's
   /// `wheel_id`, not by the caller.
+  ///
+  /// When connecting the second of two boards, a short settle delay is
+  /// inserted after the BLE connection is established. This gives the
+  /// Android BLE stack time to rebalance the connection schedule across
+  /// both peripherals before we start subscribing to notify streams.
+  /// Without this delay, the second board's first notifications often
+  /// arrive while the stack is still re-negotiating intervals, causing
+  /// seq gaps and packet drops on the second board.
   Future<void> connect(String deviceId) async {
     if (!ref.mounted) return;
+    final alreadyConnectedCount = state.bySide.values
+        .where((c) => c.status == ConnectionStatus.connected)
+        .length;
     state = state.copyWith(error: null);
     try {
       final conn = await _ble.connect(deviceId);
       if (!ref.mounted) return;
       final side = conn.info.wheelId.toWheelSide();
+      // If another wheel is already connected, give the BLE stack a moment
+      // to rebalance the connection schedule before we start polling RSSI
+      // and subscribing to battery/IMU notifications on the new device.
+      if (alreadyConnectedCount > 0) {
+        final settleDelay = ref.read(interConnectSettleDelayProvider);
+        if (settleDelay > Duration.zero) {
+          await Future<void>.delayed(settleDelay);
+          if (!ref.mounted) return;
+        }
+      }
       // Read RSSI immediately so the card shows signal strength right away.
       int? initialRssi;
       try {

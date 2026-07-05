@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/export_providers.dart';
@@ -207,7 +207,7 @@ class _TagFilterChips extends ConsumerWidget {
   }
 }
 
-/// Browse screen: topic → trial → session hierarchy.
+/// Browse screen: topic â†’ trial â†’ session hierarchy.
 ///
 /// Three-level navigation:
 /// 1. Topic list (all topic folders)
@@ -441,7 +441,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Colored accent strip — green when complete,
+                              // Colored accent strip â€” green when complete,
                               // amber when in progress, grey when no template.
                               Container(
                                 width: 4,
@@ -1029,12 +1029,12 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                     return SessionListItem(
                       title: meta.sessionId,
                       subtitle:
-                          '${widget.topic} · ${dt.toIso8601String().split('T').first}',
+                          '${widget.topic} Â· ${dt.toIso8601String().split('T').first}',
                       duration: Duration(milliseconds: meta.durationMs),
                       sampleCount: meta.sampleCount,
                       markerCount: meta.markerCount,
                       syncQuality: meta.driftResidualRmsMsLeft != null
-                          ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
+                          ? 'Â±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                           : null,
                       qualityLevel: QualityBadge.fromMeta(meta),
                       tags: meta.tags,
@@ -1107,7 +1107,7 @@ String _formatDate(DateTime date) {
 
 /// Dialog for creating a new protocol template. Fields: name (required),
 /// description (optional), topicName (required), targetTrialCount (required,
-/// dropdown 1–20), sampleRateHz (optional, dropdown 50/100/200, default 100).
+/// dropdown 1â€“20), sampleRateHz (optional, dropdown 50/100/200, default 100).
 ///
 /// On save, calls [ProtocolTemplateNotifier.createTemplate] and refreshes the
 /// topic list via [experimentProgressProvider] invalidation.
@@ -1276,4 +1276,3 @@ class _CreateTemplateDialogState extends ConsumerState<_CreateTemplateDialog> {
     );
   }
 }
-

@@ -69,6 +69,10 @@ void main() {
       overrides: [
         bleRepositoryProvider.overrideWith((ref) => ble),
         rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
+        // Default: emit every batch (immediate) so existing tests see state
+        // updates synchronously. The throttling test overrides this per-test.
+        imuEmitIntervalProvider.overrideWith((ref) => Duration.zero),
       ],
     );
     addTearDown(container.dispose);
@@ -292,5 +296,78 @@ void main() {
     // Restart — buffer should be cleared.
     await notifier.start(WheelSide.left);
     expect(state().bySide[WheelSide.left]!.recent, isEmpty);
+  });
+
+  test('throttled emit: state is not emitted on every batch when '
+      'imuEmitInterval is non-zero', () async {
+    // Build a separate container with a non-zero emit interval.
+    final ble2 = FakeBleRepository(
+      devices: [
+        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+      ],
+      infoFor: const {'L1': _leftInfo},
+    );
+    final container2 = ProviderContainer(
+      overrides: [
+        bleRepositoryProvider.overrideWith((ref) => ble2),
+        rssiPollIntervalProvider.overrideWith((ref) => null),
+        interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
+        imuEmitIntervalProvider
+            .overrideWith((ref) => const Duration(milliseconds: 50)),
+      ],
+    );
+    addTearDown(container2.dispose);
+
+    await container2.read(connectionManagerProvider.notifier).connect('L1');
+    final notifier = container2.read(imuStreamProvider.notifier);
+    await notifier.start(WheelSide.left);
+    final ctrl = ble2.imuController('L1')!;
+
+    // Emit 3 batches in quick succession (no time advance).
+    ctrl.add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
+    ctrl.add(buildBatch([buildSample(seq: 1, tDeviceUs: 1000)]));
+    ctrl.add(buildBatch([buildSample(seq: 2, tDeviceUs: 2000)]));
+    await Future<void>.delayed(Duration.zero);
+
+    // The first batch emits immediately (initial emit), but subsequent
+    // batches within the throttle window are held back.
+    final sAfterBurst = container2.read(imuStreamProvider).bySide[WheelSide.left]!;
+    expect(
+      sAfterBurst.sampleCount,
+      lessThan(3),
+      reason: 'sampleCount should be throttled — not all 3 batches emitted',
+    );
+
+    // Advance time past the throttle interval so the pending emit fires.
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    final sAfterDelay =
+        container2.read(imuStreamProvider).bySide[WheelSide.left]!;
+    expect(
+      sAfterDelay.sampleCount,
+      3,
+      reason: 'after the throttle interval, all accumulated samples are '
+          'reflected in state',
+    );
+    expect(sAfterDelay.latest!.seq, 2);
+  });
+
+  test('zero emit interval: state updates on every batch (test mode)',
+      () async {
+    // Default override is Duration.zero (immediate).
+    await container.read(connectionManagerProvider.notifier).connect('L1');
+    final notifier = container.read(imuStreamProvider.notifier);
+    await notifier.start(WheelSide.left);
+
+    ble.imuController('L1')!.add(buildBatch([
+      buildSample(seq: 0, tDeviceUs: 0),
+    ]));
+    await Future<void>.delayed(Duration.zero);
+    expect(state().bySide[WheelSide.left]!.sampleCount, 1);
+
+    ble.imuController('L1')!.add(buildBatch([
+      buildSample(seq: 1, tDeviceUs: 1000),
+    ]));
+    await Future<void>.delayed(Duration.zero);
+    expect(state().bySide[WheelSide.left]!.sampleCount, 2);
   });
 }

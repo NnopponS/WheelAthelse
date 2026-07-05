@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/protocol_template.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/preview_providers.dart';
 import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
@@ -73,7 +75,10 @@ class _RecordPageState extends ConsumerState<RecordPage> {
 
   @override
   Widget build(BuildContext context) {
-    final rec = ref.watch(recordingProvider);
+    // Watch only the status for the top-level switch — this avoids rebuilding
+    // the entire page on every sampleCount update during recording. Sub-views
+    // select the specific fields they need.
+    final recStatus = ref.watch(recordingProvider.select((s) => s.status));
     final countdown = ref.watch(recordCountdownProvider);
     final theme = Theme.of(context);
 
@@ -91,14 +96,14 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                 _buildSyncingView(context, theme),
               RecordCountdownStatus.counting =>
                 _buildCountingView(context, theme, countdown),
-              RecordCountdownStatus.error when rec.status == RecordingStatus.idle =>
+              RecordCountdownStatus.error when recStatus == RecordingStatus.idle =>
                 _buildCountdownErrorView(context, theme, countdown),
-              _ => switch (rec.status) {
+              _ => switch (recStatus) {
                   RecordingStatus.idle => _buildIdleView(context, theme),
                   RecordingStatus.recording =>
-                    _buildRecordingView(context, theme, rec),
+                    _buildRecordingView(context, theme),
                   RecordingStatus.stopped =>
-                    _buildStoppedView(context, theme, rec),
+                    _buildStoppedView(context, theme),
                 },
             },
           ],
@@ -347,8 +352,14 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   Widget _buildRecordingView(
     BuildContext context,
     ThemeData theme,
-    RecordingState rec,
   ) {
+    // Select only the fields this view uses, so the parent page doesn't
+    // rebuild on every sampleCount tick. sampleCount is already throttled to
+    // ~10 Hz by RecordingNotifier, but selecting here keeps the scope tight.
+    final recConfig = ref.watch(recordingProvider.select((s) => s.config));
+    final recSampleCount =
+        ref.watch(recordingProvider.select((s) => s.sampleCount));
+    final imu = ref.watch(imuStreamProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -359,7 +370,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${rec.config?.topic} · trial_${rec.config?.trialNumber.toString().padLeft(2, '0')}',
+                  '${recConfig?.topic} · trial_${recConfig?.trialNumber.toString().padLeft(2, '0')}',
                   style: theme.textTheme.titleMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -368,11 +379,11 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                   runSpacing: AppSpacing.xs,
                   children: [
                     StatusBadge(
-                      label: '${rec.sampleCount} samples',
+                      label: '$recSampleCount samples',
                       icon: Icons.scatter_plot_rounded,
                     ),
                     StatusBadge(
-                      label: _elapsedLabel(rec),
+                      label: _elapsedLabelFromConfig(recConfig),
                       icon: Icons.timer_outlined,
                     ),
                   ],
@@ -381,6 +392,8 @@ class _RecordPageState extends ConsumerState<RecordPage> {
             ),
           ),
         ),
+        const SizedBox(height: AppSpacing.md),
+        _RecordingPreview(imu: imu),
         const SizedBox(height: AppSpacing.lg),
         PrimaryActionButton(
           label: 'Stop Recording',
@@ -395,8 +408,10 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   Widget _buildStoppedView(
     BuildContext context,
     ThemeData theme,
-    RecordingState rec,
   ) {
+    // The stopped view is not high-frequency — it renders once when recording
+    // ends — so watching the full state here is fine.
+    final rec = ref.watch(recordingProvider);
     // Re-record is only enabled when at least one wheel is connected — the
     // countdown flow requires a connected wheel to send the scheduled START.
     final connState = ref.watch(connectionManagerProvider);
@@ -475,9 +490,9 @@ class _RecordPageState extends ConsumerState<RecordPage> {
     );
   }
 
-  String _elapsedLabel(RecordingState rec) {
-    if (rec.startTime == null) return '0s';
-    final elapsed = DateTime.now().difference(rec.startTime!);
+  String _elapsedLabelFromConfig(SessionConfig? config) {
+    if (config?.startTime == null) return '0s';
+    final elapsed = DateTime.now().difference(config!.startTime!);
     final m = elapsed.inMinutes;
     final s = elapsed.inSeconds % 60;
     return m > 0 ? '${m}m ${s}s' : '${s}s';
@@ -599,6 +614,183 @@ class _RecordPageState extends ConsumerState<RecordPage> {
         SnackBar(content: Text('Failed to create topic: $e')),
       );
     }
+  }
+}
+
+/// Live IMU preview shown during recording. Mirrors the [LivePage] wheel
+/// panels but compact: per-wheel status, latest accel/gyro values, and a
+/// rolling sparkline so the user sees data and time in realtime, not just a
+/// Stop button.
+class _RecordingPreview extends StatelessWidget {
+  const _RecordingPreview({required this.imu});
+
+  final ImuStreamState imu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _RecordingWheelPreview(side: WheelSide.left, imu: imu),
+        const SizedBox(height: AppSpacing.md),
+        _RecordingWheelPreview(side: WheelSide.right, imu: imu),
+      ],
+    );
+  }
+}
+
+class _RecordingWheelPreview extends StatelessWidget {
+  const _RecordingWheelPreview({required this.side, required this.imu});
+
+  final WheelSide side;
+  final ImuStreamState imu;
+
+  @override
+  Widget build(BuildContext context) {
+    final wheelState = imu.bySide[side]!;
+    final wc = context.wheelColors;
+    final role = wc.forWheel(side);
+    final axisColors = [role.solid, wc.success.solid, wc.warning.solid];
+
+    return Card(
+      color: role.container,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                StatusBadge(
+                  label: side == WheelSide.left ? 'L' : 'R',
+                  tone: side == WheelSide.left ? BadgeTone.left : BadgeTone.right,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  side == WheelSide.left ? 'Left wheel' : 'Right wheel',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: role.onContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const Spacer(),
+                if (wheelState.streaming)
+                  Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: Theme.of(context).colorScheme.error,
+                  )
+                else if (wheelState.error != null)
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: wc.danger.solid,
+                    size: 20,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (wheelState.latest == null)
+              Text(
+                wheelState.streaming ? 'Waiting for data…' : 'Not streaming',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else ...[
+              _MetricRow(
+                title: 'Accelerometer (g)',
+                reading: wheelState.latest!,
+                isAccel: true,
+                axisColors: axisColors,
+                side: side,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ImuChart(
+                readings: wheelState.recent,
+                isAccel: true,
+                axisColors: axisColors,
+                height: 96,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _MetricRow(
+                title: 'Gyroscope (°/s)',
+                reading: wheelState.latest!,
+                isAccel: false,
+                axisColors: axisColors,
+                side: side,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ImuChart(
+                readings: wheelState.recent,
+                isAccel: false,
+                axisColors: axisColors,
+                height: 96,
+              ),
+            ],
+            if (wheelState.error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  wheelState.error!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricRow extends StatelessWidget {
+  const _MetricRow({
+    required this.title,
+    required this.reading,
+    required this.isAccel,
+    required this.axisColors,
+    required this.side,
+  });
+
+  final String title;
+  final ImuReading reading;
+  final bool isAccel;
+  final List<Color> axisColors;
+  final WheelSide side;
+
+  @override
+  Widget build(BuildContext context) {
+    final values = isAccel
+        ? [reading.ax, reading.ay, reading.az]
+        : [reading.gx, reading.gy, reading.gz];
+    final labels = ['X', 'Y', 'Z'];
+    final units = isAccel ? 'g' : '°/s';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Row(
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              Expanded(
+                child: LiveMetricTile(
+                  label: labels[i],
+                  value: values[i],
+                  unit: units,
+                  side: i == 0 ? side : null,
+                ),
+              ),
+              if (i < 2) const SizedBox(width: AppSpacing.sm),
+            ],
+          ],
+        ),
+      ],
+    );
   }
 }
 
