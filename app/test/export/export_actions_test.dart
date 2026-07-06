@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
+import 'package:wheelathlete/export/excel_exporter.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
@@ -124,30 +125,30 @@ void main() {
         trialNumber: 1,
         sessionId: 'abc',
         pickDirectory: () async => null,
-        writeFile: (_, _) async {},
+        writeFile: (_, __) async {},
       );
       expect(written, isEmpty);
     });
 
-    test('session level writes one CSV file', () async {
+    test('session level writes one XLSX file', () async {
       final actions = ExportActions(ops, storage);
       final writtenPaths = <String>[];
-      final writtenContent = <String>[];
+      final writtenBytes = <List<int>>[];
       final written = await actions.saveToDevice(
         level: ExportLevel.session,
         topic: 'sprint',
         trialNumber: 1,
         sessionId: 'abc',
         pickDirectory: () async => '/picked/dir',
-        writeFile: (path, content) async {
+        writeFile: (path, bytes) async {
           writtenPaths.add(path);
-          writtenContent.add(content);
+          writtenBytes.add(bytes);
         },
       );
       expect(written.length, 1);
-      expect(writtenPaths, ['/picked/dir/session_abc.csv']);
-      // Content is a valid CSV with the sample.
-      expect(writtenContent.first, CsvExporter.toCsvString(_samples()));
+      expect(writtenPaths, ['/picked/dir/session_abc.xlsx']);
+      // Content is valid XLSX bytes.
+      expect(writtenBytes.first, ExcelExporter.toXlsxBytes(_samples()));
     });
 
     test('trial level writes one file per session in the trial', () async {
@@ -164,8 +165,8 @@ void main() {
       );
       expect(written.length, 2);
       expect(writtenPaths.toSet(), {
-        '/picked/dir/session_abc.csv',
-        '/picked/dir/session_def.csv',
+        '/picked/dir/session_abc.xlsx',
+        '/picked/dir/session_def.xlsx',
       });
     });
 
@@ -176,7 +177,7 @@ void main() {
         level: ExportLevel.topic,
         topic: 'sprint',
         pickDirectory: () async => '/picked/dir',
-        writeFile: (_,_) async {},
+        writeFile: (_, __) async {},
       );
       // 2 sessions in trial 1 + 1 session in trial 2.
       expect(written.length, 3);

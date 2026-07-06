@@ -1,4 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wheelathlete/records/storage_repository.dart';
+import 'package:wheelathlete/records/session_model.dart';
+import 'package:wheelathlete/state/ble_providers.dart';
+
+final topicsProvider = FutureProvider<List<TopicEntry>>((ref) async {
+  final storage = ref.watch(storageRepositoryProvider);
+  return storage.listTopics();
+});
+
+final trialsProvider = FutureProvider.family<List<int>, String>((ref, topic) async {
+  final storage = ref.watch(storageRepositoryProvider);
+  return storage.listTrials(topic);
+});
+
+// arg is formatted as "topic:trialNumber"
+final sessionsProvider = FutureProvider.family<List<SessionMeta>, String>((ref, arg) async {
+  final parts = arg.split(':');
+  final topic = parts[0];
+  final trial = int.parse(parts[1]);
+  final storage = ref.watch(storageRepositoryProvider);
+  return storage.listSessions(topic, trial);
+});
 
 /// Search query for the Browse page (Phase 3, §7 Search/filter on Browse).
 ///
@@ -72,3 +94,13 @@ final selectedTopicProvider =
     NotifierProvider<SelectedTopicNotifier, String?>(
   SelectedTopicNotifier.new,
 );
+
+void invalidateBrowseStorage(WidgetRef ref, {String? topic, int? trialNumber}) {
+  ref.invalidate(topicsProvider);
+  if (topic != null) {
+    ref.invalidate(trialsProvider(topic));
+    if (trialNumber != null) {
+      ref.invalidate(sessionsProvider('$topic:$trialNumber'));
+    }
+  }
+}

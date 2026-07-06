@@ -84,7 +84,7 @@ struct BoardConfig {
 class ConfigStore {
 public:
     // Load config from NVS (or use defaults if not set). Call before ble().begin().
-    void begin();
+    void begin(char default_wheel);
 
     // Save config to NVS (rate cached in RAM, persist on stop/disconnect).
     void save();

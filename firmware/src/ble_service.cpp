@@ -6,6 +6,7 @@
 #include "ble_service.h"
 #include "ble_types.h"
 #include "imu_reader.h"
+#include "display.h"
 
 #include <Arduino.h>
 #include <M5Unified.h>
@@ -387,6 +388,7 @@ void BleService::handleStart(uint32_t target_start_us) {
 }
 
 void BleService::handleStop() {
+    display().clearCountdown();
     if (imu().running()) {
         imu().stop();
         flushBatch();   // send remaining samples
@@ -477,8 +479,22 @@ void BleService::handleSetWheel(uint8_t wheel_id) {
     }
     configStore().setWheel(wheel_id);
     wheel_id_ = static_cast<char>(wheel_id);
+
+    // If current name is the default name format (WheelAthlete-L or WheelAthlete-R),
+    // update the name to match the new wheel ID.
+    if (std::strcmp(configStore().name(), "WheelAthlete-L") == 0 ||
+        std::strcmp(configStore().name(), "WheelAthlete-R") == 0) {
+        if (wheel_id == 0x52) {
+            configStore().setName("WheelAthlete-R");
+        } else {
+            configStore().setName("WheelAthlete-L");
+        }
+    }
+
     updateInfoCharacteristic();
     updateConfigCharacteristic();
+    // Save to NVS
+    configStore().save();
     // Note: advertised name is updated on disconnect (before re-advertising).
     Serial.printf("[BLE] SET_WHEEL: %c\n", wheel_id_);
 }
@@ -550,7 +566,7 @@ void BleService::sendCmdNack(uint8_t cmd) {
 
 void BleService::doBeep(uint16_t freq_hz, uint16_t duration_ms) {
     // M5StickCPlus2 built-in buzzer via M5Unified Speaker
-    M5.Speaker.setVolume(64);   // moderate volume (0-128)
+    M5.Speaker.setVolume(255);   // maximum volume (0-255)
     M5.Speaker.tone(freq_hz, duration_ms);
 }
 
@@ -560,6 +576,13 @@ void BleService::tick() {
     // Handle countdown beeps + scheduled start
     if (pending_start_) {
         const uint32_t now = micros();
+
+        // Calculate remaining seconds to display
+        const int32_t remaining_ms = static_cast<int32_t>(target_start_us_ - now) / 1000;
+        const int8_t seconds = static_cast<int8_t>((remaining_ms + 999) / 1000);
+        if (seconds >= 0 && seconds <= 5) {
+            display().showCountdown(seconds);
+        }
 
         // Check for beep
         const int8_t beep_idx = checkBeepSchedule(target_start_us_, now, last_beep_fired_);
@@ -573,6 +596,7 @@ void BleService::tick() {
 
         // Check if it's time to start
         if (shouldStartNow(target_start_us_, now)) {
+            display().clearCountdown(); // Clear countdown overlay
             imu().start();
             pending_start_ = false;
             state_ = BleState::Recording;

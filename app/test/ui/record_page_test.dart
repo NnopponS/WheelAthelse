@@ -447,7 +447,10 @@ void main() {
             await tester.tap(find.text('Re-record'));
             // Wait for the async nextTrialNumber lookup + sync burst + countdown
             // start to complete.
-            await Future<void>.delayed(const Duration(milliseconds: 300));
+            while (container.read(recordCountdownProvider).status !=
+                RecordCountdownStatus.counting) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
             // Inject START_FIRED from both wheels to trigger recording.
             ble.syncController('L1')?.add(_startFiredEvent(1000000));
             ble.syncController('R1')?.add(_startFiredEvent(1000500));
@@ -489,7 +492,10 @@ void main() {
 
           await tester.runAsync(() async {
             await tester.tap(find.text('Re-record'));
-            await Future<void>.delayed(const Duration(milliseconds: 300));
+            while (container.read(recordCountdownProvider).status !=
+                RecordCountdownStatus.counting) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
             ble.syncController('L1')?.add(_startFiredEvent(1000000));
             ble.syncController('R1')?.add(_startFiredEvent(1000500));
             await Future<void>.delayed(const Duration(milliseconds: 50));

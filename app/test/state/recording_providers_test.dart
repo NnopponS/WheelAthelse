@@ -272,7 +272,7 @@ void main() {
       final sessionId = notifier.state.savedSessionId!;
       final samples = await storage.readSamples('sprint_test', 1, sessionId);
       expect(samples, isNotEmpty);
-      expect(samples.first.timestampSyncedMs, utcOffsetMs + 5.0);
+      expect(samples.first.timestampSyncedMs, startUtcMs.toDouble());
 
       final meta = await storage.readSessionMeta('sprint_test', 1, sessionId);
       expect(meta!.utcStartMs, startUtcMs);

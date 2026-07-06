@@ -5,6 +5,7 @@ import 'package:wheelathlete/records/protocol_template.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/browse_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/preview_providers.dart';
 import 'package:wheelathlete/state/protocol_providers.dart';
@@ -49,20 +50,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   }
 
   Future<void> _refreshTopics() async {
-    final storage = ref.read(storageRepositoryProvider);
-    final topics = await storage.listTopics();
-    if (!mounted) return;
-    setState(() {
-      if (topics.isNotEmpty && _selectedTopic == null) {
-        _selectedTopic = topics.first.name;
-        _refreshTrialNumber();
-      } else if (_selectedTopic != null &&
-          !topics.any((t) => t.name == _selectedTopic)) {
-        _selectedTopic = topics.isNotEmpty ? topics.first.name : null;
-        _refreshTrialNumber();
-      }
-      _loadingTopics = false;
-    });
+    ref.invalidate(topicsProvider);
   }
 
   Future<void> _refreshTrialNumber() async {
@@ -75,6 +63,28 @@ class _RecordPageState extends ConsumerState<RecordPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<TopicEntry>>>(topicsProvider, (prev, next) {
+      if (next is AsyncData) {
+        setState(() {
+          _loadingTopics = false;
+        });
+      }
+      next.whenData((topics) {
+        if (topics.isNotEmpty && _selectedTopic == null) {
+          setState(() {
+            _selectedTopic = topics.first.name;
+          });
+          _refreshTrialNumber();
+        } else if (_selectedTopic != null &&
+            !topics.any((t) => t.name == _selectedTopic)) {
+          setState(() {
+            _selectedTopic = topics.isNotEmpty ? topics.first.name : null;
+          });
+          _refreshTrialNumber();
+        }
+      });
+    });
+
     // Watch only the status for the top-level switch — this avoids rebuilding
     // the entire page on every sampleCount update during recording. Sub-views
     // select the specific fields they need.
@@ -794,7 +804,7 @@ class _MetricRow extends StatelessWidget {
   }
 }
 
-class _TopicDropdown extends ConsumerStatefulWidget {
+class _TopicDropdown extends ConsumerWidget {
   const _TopicDropdown({
     required this.selectedTopic,
     required this.onChanged,
@@ -803,36 +813,23 @@ class _TopicDropdown extends ConsumerStatefulWidget {
 
   final String? selectedTopic;
   final ValueChanged<String?> onChanged;
-  final Future<void> Function() onRefresh;
+  final VoidCallback onRefresh;
 
   @override
-  ConsumerState<_TopicDropdown> createState() => _TopicDropdownState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final topicsAsync = ref.watch(topicsProvider);
+    return topicsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => const Center(child: Text('Error loading topics')),
+      data: (topics) {
+        final isValidSelected = topics.any((t) => t.name == selectedTopic);
+        final value = isValidSelected ? selectedTopic : null;
 
-class _TopicDropdownState extends ConsumerState<_TopicDropdown> {
-  Future<List<TopicEntry>>? _topicsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTopics();
-  }
-
-  void _loadTopics() {
-    _topicsFuture = ref.read(storageRepositoryProvider).listTopics();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<TopicEntry>>(
-      future: _topicsFuture,
-      builder: (context, snapshot) {
-        final topics = snapshot.data ?? [];
         return Row(
           children: [
             Expanded(
               child: DropdownButton<String>(
-                value: widget.selectedTopic,
+                value: value,
                 hint: const Text('Select topic'),
                 isExpanded: true,
                 items: topics
@@ -841,12 +838,19 @@ class _TopicDropdownState extends ConsumerState<_TopicDropdown> {
                           child: Text(t.name),
                         ))
                     .toList(),
-                onChanged: widget.onChanged,
+                onChanged: onChanged,
               ),
             ),
             IconButton(
-              onPressed: () =>
-                  showDialog<void>(context: context, builder: (ctx) => _NewTopicDialog(onCreated: () { Navigator.pop(ctx); widget.onRefresh(); })),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (ctx) => _NewTopicDialog(
+                  onCreated: () {
+                    Navigator.pop(ctx);
+                    onRefresh();
+                  },
+                ),
+              ),
               icon: const Icon(Icons.create_new_folder_rounded),
               tooltip: 'New Topic',
             ),
@@ -897,6 +901,7 @@ class _NewTopicDialogState extends ConsumerState<_NewTopicDialog> {
             if (name.isEmpty) return;
             try {
               await ref.read(storageRepositoryProvider).createTopic(name);
+              ref.invalidate(topicsProvider);
               widget.onCreated();
             } on Object catch (e) {
               if (!context.mounted) return;

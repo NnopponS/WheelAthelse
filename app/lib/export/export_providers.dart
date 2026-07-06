@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
+import 'package:wheelathlete/export/excel_exporter.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/resampler.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
@@ -63,15 +64,15 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
         samples = Resampler.resample(samples, gridIntervalMs: gridIntervalMs);
       }
 
-      // Write CSV to storage (file-based or in-memory).
-      final csvPath = await storage.getSessionCsvPath(topic, trialNumber, sessionId);
-      final csvContent = CsvExporter.toCsvString(samples);
-      await storage.writeSessionCsv(topic, trialNumber, sessionId, csvContent);
+      // Write XLSX to storage (file-based or in-memory).
+      final xlsxPath = await storage.getSessionXlsxPath(topic, trialNumber, sessionId);
+      final xlsxBytes = ExcelExporter.toXlsxBytes(samples);
+      await storage.writeSessionXlsx(topic, trialNumber, sessionId, xlsxBytes);
 
       state = ExportState(
-        lastExportedPaths: [csvPath],
+        lastExportedPaths: [xlsxPath],
       );
-      return csvPath;
+      return xlsxPath;
     } on Object catch (e) {
       state = ExportState(error: 'Export failed: $e');
       rethrow;
@@ -182,16 +183,16 @@ final exportProvider = NotifierProvider<ExportNotifier, ExportState>(
 // coverage:ignore-start
 Future<String?> pickDirectory() async {
   return FilePicker.getDirectoryPath(
-    dialogTitle: 'Choose where to save CSV files',
+    dialogTitle: 'Choose where to save Excel files',
   );
 }
 // coverage:ignore-end
 
-/// Production [FileSink] that writes [content] to the file at [path].
+/// Production [FileSink] that writes [bytes] to the file at [path].
 // coverage:ignore-start
-Future<void> writeCsvFile(String path, String content) async {
+Future<void> writeCsvFile(String path, List<int> bytes) async {
   final file = File(path);
-  await file.writeAsString(content);
+  await file.writeAsBytes(bytes);
 }
 // coverage:ignore-end
 

@@ -13,9 +13,14 @@ namespace WheelAthlete {
 
 static Preferences s_prefs;
 
-void ConfigStore::begin() {
+void ConfigStore::begin(char default_wheel) {
+    uint8_t default_wheel_id = static_cast<uint8_t>(default_wheel);
+    if (!isValidWheel(default_wheel_id)) {
+        default_wheel_id = 0x4C; // default 'L'
+    }
+
     s_prefs.begin(NVS_NAMESPACE, true);   // read-only first
-    config_.wheel_id = s_prefs.getUChar("wheel", 0x4C);   // default 'L'
+    config_.wheel_id = s_prefs.getUChar("wheel", default_wheel_id);
     config_.rate_hz  = s_prefs.getUShort("rate", 100);     // default 100 Hz
 
     // Read name (stored as raw bytes, null-padded)
@@ -31,13 +36,17 @@ void ConfigStore::begin() {
         config_.name[NAME_MAX_LEN] = '\0';
     } else {
         // Default name based on wheel
-        config_.setName("WheelAthlete-L");
+        if (config_.wheel_id == 0x52) {
+            config_.setName("WheelAthlete-R");
+        } else {
+            config_.setName("WheelAthlete-L");
+        }
     }
     s_prefs.end();
 
     // Validate loaded values
     if (!isValidWheel(config_.wheel_id)) {
-        config_.wheel_id = 0x4C;
+        config_.wheel_id = default_wheel_id;
     }
     if (!isValidRate(config_.rate_hz)) {
         config_.rate_hz = 100;

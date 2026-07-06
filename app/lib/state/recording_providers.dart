@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/browse_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/sync_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
@@ -257,18 +258,13 @@ class RecordingNotifier extends Notifier<RecordingState> {
           final result = ImuPacketParser.parseBatchWithGaps(bytes, tracker);
           final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-          final syncState = ref.read(syncEngineProvider);
-          final driftFit = syncState.bySide[side]!.driftFit;
-          final utcOffsetMs = state.config?.utcOffsetMs;
+          final baseUtcMs = state.config?.utcStartMs ?? state.config?.startTime?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
+          final alignedBaseUtcMs = (baseUtcMs ~/ 1000) * 1000;
+          final sampleRate = state.config?.sampleRateHz ?? 100;
 
           for (final sample in result.samples) {
             final reading = sample.toReading(info);
-            final relativeSyncedMs = driftFit != null
-                ? driftFit.toSyncedMs(sample.tDeviceUs)
-                : sample.tDeviceUs / 1000.0;
-            final syncedMs = utcOffsetMs != null
-                ? relativeSyncedMs + utcOffsetMs
-                : relativeSyncedMs;
+            final syncedMs = alignedBaseUtcMs + (sample.seq * 1000.0 / sampleRate);
             _buffer.add(BufferedSample(
               reading: reading,
               wheel: side,
@@ -377,8 +373,14 @@ class RecordingNotifier extends Notifier<RecordingState> {
     );
 
     // Save to storage.
+    // Save to storage.
     final storage = ref.read(storageRepositoryProvider);
     await storage.saveSession(config.topic, meta, _buffer);
+
+    // Invalidate browse storage to refresh the topic/trial/session list.
+    ref.invalidate(topicsProvider);
+    ref.invalidate(trialsProvider(config.topic));
+    ref.invalidate(sessionsProvider('${config.topic}:${config.trialNumber}'));
 
     state = state.copyWith(
       status: RecordingStatus.stopped,

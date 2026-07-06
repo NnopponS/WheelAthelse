@@ -19,8 +19,8 @@ namespace WheelAthlete {
 // MPU6886 I2C address on M5StickCPlus2 internal bus (AD0 = 0)
 constexpr uint8_t  MPU6886_ADDR = 0x68;
 
-// FIFO sample size: 6 bytes accel + 6 bytes gyro = 12 bytes (big-endian int16)
-constexpr size_t   FIFO_SAMPLE_BYTES = 12;
+// FIFO sample size: 6 bytes accel + 2 bytes temp + 6 bytes gyro = 14 bytes (big-endian int16)
+constexpr size_t   FIFO_SAMPLE_BYTES = 14;
 
 // MPU6886 FIFO capacity in bytes
 constexpr size_t   FIFO_CAPACITY_BYTES = 512;
@@ -117,15 +117,32 @@ inline bool fifoOverflowed(uint16_t fifo_bytes) {
     return fifo_bytes >= FIFO_CAPACITY_BYTES;
 }
 
-// Parse one FIFO sample (12 bytes, big-endian int16) into ImuSample fields.
-// Fills ax..gz from the raw bytes. Does NOT set seq or t_device_us.
+// Number of complete samples in FIFO.
+inline uint16_t fifoSampleCount(uint16_t fifo_bytes) {
+    return fifo_bytes / 14;
+}
+
+// Remainder bytes in FIFO (misaligned data).
+inline uint16_t fifoRemainderBytes(uint16_t fifo_bytes) {
+    return fifo_bytes % 14;
+}
+
+// Estimates dropped samples count based on remaining bytes.
+inline uint32_t estimatedDroppedSamplesFromFifoBytes(uint16_t fifo_bytes) {
+    if (fifo_bytes < 14) return 1;
+    return fifo_bytes / 14;
+}
+
+// Parse one FIFO sample (14 bytes, big-endian int16) into ImuSample fields.
+// Fills ax..gz from the raw bytes, skipping the 2 temperature bytes at p[6..7].
 inline void parseFifoSample(const uint8_t* p, ImuSample& out) {
     out.ax = static_cast<int16_t>((static_cast<uint16_t>(p[0]) << 8) | p[1]);
     out.ay = static_cast<int16_t>((static_cast<uint16_t>(p[2]) << 8) | p[3]);
     out.az = static_cast<int16_t>((static_cast<uint16_t>(p[4]) << 8) | p[5]);
-    out.gx = static_cast<int16_t>((static_cast<uint16_t>(p[6]) << 8) | p[7]);
-    out.gy = static_cast<int16_t>((static_cast<uint16_t>(p[8]) << 8) | p[9]);
-    out.gz = static_cast<int16_t>((static_cast<uint16_t>(p[10]) << 8) | p[11]);
+    // p[6..7] is temperature data, skip it.
+    out.gx = static_cast<int16_t>((static_cast<uint16_t>(p[8]) << 8) | p[9]);
+    out.gy = static_cast<int16_t>((static_cast<uint16_t>(p[10]) << 8) | p[11]);
+    out.gz = static_cast<int16_t>((static_cast<uint16_t>(p[12]) << 8) | p[13]);
 }
 
 // Interpolate device timestamp for a sample within a batch.

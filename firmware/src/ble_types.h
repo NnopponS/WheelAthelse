@@ -99,6 +99,17 @@ inline uint8_t maxBatchCount(uint16_t mtu) {
     return static_cast<uint8_t>((payload - 1) / IMU_SAMPLE_SIZE);
 }
 
+// Target batch count based on sample rate, bounded by MTU capacity.
+inline uint8_t targetBatchCount(uint16_t mtu, uint16_t rate_hz) {
+    uint16_t rate = isValidRate(rate_hz) ? rate_hz : 100;
+    uint8_t target = 5;
+    if (rate == 50) target = 3;
+    else if (rate == 200) target = 10;
+    
+    uint8_t max_count = maxBatchCount(mtu);
+    return target < max_count ? target : max_count;
+}
+
 // Pack a Sync Response packet (12 bytes, little-endian).
 // §4.1: [uint32 t_app_ms][uint32 t_device_us][uint32 seq_ping]
 inline void packSyncResponse(uint32_t t_app_ms,

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/export_providers.dart';
@@ -272,17 +272,8 @@ class _TopicListView extends ConsumerStatefulWidget {
 }
 
 class _TopicListViewState extends ConsumerState<_TopicListView> {
-  Future<List<TopicEntry>>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
   void _refresh() {
-    _future = ref.read(storageRepositoryProvider).listTopics();
-    if (mounted) setState(() {});
+    ref.invalidate(topicsProvider);
   }
 
   Future<void> _renameTopic(TopicEntry t) async {
@@ -296,7 +287,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     try {
       await ref.read(storageRepositoryProvider).renameTopic(t.name, newName);
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -319,7 +310,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
           .read(storageRepositoryProvider)
           .updateTopicDescription(t.name, desc);
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -348,7 +339,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     try {
       await repo.deleteTopic(t.name);
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -368,6 +359,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(browseSearchProvider);
     final topicProgress = ref.watch(topicProgressProvider);
+    final topicsAsync = ref.watch(topicsProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Browse')),
       floatingActionButton: FloatingActionButton.extended(
@@ -375,13 +368,10 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Template'),
       ),
-      body: FutureBuilder<List<TopicEntry>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final allTopics = snapshot.data ?? [];
+      body: topicsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+        data: (allTopics) {
           if (allTopics.isEmpty) {
             return Center(
               child: Column(
@@ -441,7 +431,7 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Colored accent strip â€” green when complete,
+                              // Colored accent strip — green when complete,
                               // amber when in progress, grey when no template.
                               Container(
                                 width: 4,
@@ -613,17 +603,8 @@ class _TrialListView extends ConsumerStatefulWidget {
 }
 
 class _TrialListViewState extends ConsumerState<_TrialListView> {
-  Future<List<int>>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
   void _refresh() {
-    _future = ref.read(storageRepositoryProvider).listTrials(widget.topic);
-    if (mounted) setState(() {});
+    ref.invalidate(trialsProvider(widget.topic));
   }
 
   Future<void> _deleteTrial(int trialNumber) async {
@@ -641,7 +622,7 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
     try {
       await repo.deleteTrial(widget.topic, trialNumber);
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: trialNumber);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -709,13 +690,10 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
           ),
         ],
       ),
-      body: FutureBuilder<List<int>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final trials = snapshot.data ?? [];
+      body: ref.watch(trialsProvider(widget.topic)).when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+        data: (trials) {
           if (trials.isEmpty) {
             return Center(
               child: Text('No trials in ${widget.topic}',
@@ -786,19 +764,8 @@ class _SessionListView extends ConsumerStatefulWidget {
 }
 
 class _SessionListViewState extends ConsumerState<_SessionListView> {
-  Future<List<SessionMeta>>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
   void _refresh() {
-    _future = ref
-        .read(storageRepositoryProvider)
-        .listSessions(widget.topic, widget.trialNumber);
-    if (mounted) setState(() {});
+    ref.invalidate(sessionsProvider('${widget.topic}:${widget.trialNumber}'));
   }
 
   Future<void> _editSessionMeta(SessionMeta meta) async {
@@ -827,7 +794,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
             videoFile: video,
           );
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -850,7 +817,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
             updated,
           );
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -874,7 +841,7 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
             meta.sessionId,
           );
       if (!mounted) return;
-      _refresh();
+      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -969,13 +936,10 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
           ),
         ],
       ),
-      body: FutureBuilder<List<SessionMeta>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final allSessions = snapshot.data ?? [];
+      body: ref.watch(sessionsProvider('${widget.topic}:${widget.trialNumber}')).when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text('Error: $err')),
+        data: (allSessions) {
           if (allSessions.isEmpty) {
             return Center(
               child: Text('No sessions in trial ${widget.trialNumber}',

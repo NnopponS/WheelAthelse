@@ -37,6 +37,15 @@ private:
     bool     layout_drawn_     = false;  // fillScreen + header drawn once
     bool     countdown_active_ = false;
     int8_t   countdown_num_    = 0;      // 3, 2, 1, 0(GO)
+    int8_t   last_countdown_num_ = -99;
+
+    // Cache values to prevent flickering
+    bool     last_running_     = false;
+    bool     has_last_running_ = false;
+    uint16_t last_rate_        = 0;
+    uint8_t  last_batt_        = 0;
+    uint32_t last_drop_        = 999999;
+    char     last_wheel_id_    = '\0';
 };
 
 StatusDisplay& display();

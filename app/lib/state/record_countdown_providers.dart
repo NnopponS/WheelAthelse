@@ -185,11 +185,11 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     // scheduled start always lands on a .000 boundary (camera sync).
     final nextWholeSecondMs = ((nowPhoneMs + 999) ~/ 1000) * 1000;
     final tStartPhoneMs = nextWholeSecondMs + countdownMs;
-    final utcStartMs = computeUtcStartMs(
+    final utcStartMs = (computeUtcStartMs(
       utcEpochNowMs: utcEpochNowMs,
       nowPhoneMs: nowPhoneMs,
       tStartPhoneMs: tStartPhoneMs,
-    );
+    ) ~/ 1000) * 1000;
     // The drift-fit timeline uses _tAppRefMs as its origin. utcStartMs is the
     // UTC instant of the scheduled start, so the offset that converts any
     // relative synced ms to absolute UTC is utcStartMs - tStartRelMs.

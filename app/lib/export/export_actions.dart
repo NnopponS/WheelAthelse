@@ -1,4 +1,6 @@
 import 'package:wheelathlete/export/csv_exporter.dart';
+import 'package:wheelathlete/export/excel_exporter.dart';
+import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 
 /// Which level of the folder hierarchy an export/share action targets.
@@ -23,8 +25,8 @@ abstract class ExportOperations {
 /// path, or null if the user cancelled. Abstracted so tests can fake it.
 typedef DirectoryPicker = Future<String?> Function();
 
-/// Writes [content] to the file at [path]. Abstracted so tests can fake it.
-typedef FileSink = Future<void> Function(String path, String content);
+/// Writes [bytes] to the file at [path]. Abstracted so tests can fake it.
+typedef FileSink = Future<void> Function(String path, List<int> bytes);
 
 /// Decides which export/share method to call for a given [ExportLevel] and
 /// implements save-to-device: writes one CSV per session into a user-picked
@@ -81,9 +83,9 @@ class ExportActions {
         // Skip empty sessions (e.g. recorded before the scheduled-start fix).
         return;
       }
-      final csv = CsvExporter.toCsvString(samples);
-      final path = '$dir/session_$sid.csv';
-      await writeFile(path, csv);
+      final xlsxBytes = ExcelExporter.toXlsxBytes(samples);
+      final path = '$dir/session_$sid.xlsx';
+      await writeFile(path, xlsxBytes);
       written.add(path);
     }
 

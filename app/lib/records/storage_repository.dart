@@ -1,9 +1,10 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
 import 'package:wheelathlete/export/csv_parser.dart';
+import 'package:wheelathlete/export/excel_exporter.dart';
 import 'package:wheelathlete/records/session_model.dart';
 
 /// One topic/subject folder in the storage hierarchy (Â§5 of architecture.md).
@@ -133,6 +134,14 @@ abstract class StorageRepository {
     String sessionId,
   );
 
+  /// Returns the absolute file path for a session's XLSX file.
+  /// Used by share_plus to share the file.
+  Future<String> getSessionXlsxPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  );
+
   /// Returns the absolute directory path for a trial folder.
   /// Used by share_plus to share the entire trial.
   Future<String> getTrialDirPath(String topic, int trialNumber);
@@ -149,6 +158,15 @@ abstract class StorageRepository {
     int trialNumber,
     String sessionId,
     String csvContent,
+  );
+
+  /// Writes XLSX bytes to the session's XLSX file. For in-memory storage,
+  /// this is a no-op. For file-based storage, this writes the bytes to disk.
+  Future<void> writeSessionXlsx(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<int> bytes,
   );
 }
 
@@ -316,6 +334,11 @@ class PathProviderStorageRepository implements StorageRepository {
     final buf = StringBuffer();
     CsvExporter.writeToSink(buf, samples);
     csvFile.writeAsStringSync(buf.toString());
+
+    // Write the Excel file!
+    final xlsxFile = File('${trialDir.path}/session_${meta.sessionId}.xlsx');
+    final xlsxBytes = ExcelExporter.toXlsxBytes(samples);
+    xlsxFile.writeAsBytesSync(xlsxBytes);
   }
 
   @override
@@ -509,6 +532,17 @@ class PathProviderStorageRepository implements StorageRepository {
   }
 
   @override
+  Future<String> getSessionXlsxPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    return '${trialDir.path}/session_$sessionId.xlsx';
+  }
+
+  @override
   Future<String> getTrialDirPath(String topic, int trialNumber) async {
     final root = await _rootDir();
     return _trialDir(root, topic, trialNumber).path;
@@ -532,6 +566,20 @@ class PathProviderStorageRepository implements StorageRepository {
     if (!trialDir.existsSync()) trialDir.createSync(recursive: true);
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
     await csvFile.writeAsString(csvContent);
+  }
+
+  @override
+  Future<void> writeSessionXlsx(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<int> bytes,
+  ) async {
+    final root = await _rootDir();
+    final trialDir = _trialDir(root, topic, trialNumber);
+    if (!trialDir.existsSync()) trialDir.createSync(recursive: true);
+    final xlsxFile = File('${trialDir.path}/session_$sessionId.xlsx');
+    await xlsxFile.writeAsBytes(bytes);
   }
 }
 // coverage:ignore-end
@@ -838,6 +886,15 @@ class InMemoryStorageRepository implements StorageRepository {
   }
 
   @override
+  Future<String> getSessionXlsxPath(
+    String topic,
+    int trialNumber,
+    String sessionId,
+  ) async {
+    return 'memory://$topic/trial_${trialNumber.toString().padLeft(2, '0')}/session_$sessionId.xlsx';
+  }
+
+  @override
   Future<String> getTrialDirPath(String topic, int trialNumber) async {
     return 'memory://$topic/trial_${trialNumber.toString().padLeft(2, '0')}';
   }
@@ -856,5 +913,15 @@ class InMemoryStorageRepository implements StorageRepository {
   ) async {
     // In-memory storage doesn't write files. The CSV content is generated
     // on-demand from the stored samples.
+  }
+
+  @override
+  Future<void> writeSessionXlsx(
+    String topic,
+    int trialNumber,
+    String sessionId,
+    List<int> bytes,
+  ) async {
+    // No-op
   }
 }

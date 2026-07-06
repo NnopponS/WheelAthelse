@@ -47,6 +47,7 @@ dependencies:
   # series compatible with share_plus 13.x (win32 ^6). Pinned exactly; the
   # stable 11.x line conflicts on win32 ^5 vs share_plus's win32 ^6.
   file_picker: 12.0.0-beta.7
+  excel: ^4.0.6
 
 dev_dependencies:
   flutter_test:
