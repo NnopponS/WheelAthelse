@@ -8,50 +8,50 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
 SessionMeta _meta({String id = 'abc123', int trial = 1}) => SessionMeta(
-      sessionId: id,
-      topic: 'sprint_test',
-      trialNumber: trial,
-      athleteName: 'athlete_A',
-      sampleRateHz: 100,
-      startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
-      durationMs: 5000,
-      sampleCount: 2,
-      markerCount: 0,
-      notes: 'test session',
-    );
+  sessionId: id,
+  topic: 'sprint_test',
+  trialNumber: trial,
+  athleteName: 'athlete_A',
+  sampleRateHz: 100,
+  startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
+  durationMs: 5000,
+  sampleCount: 2,
+  markerCount: 0,
+  notes: 'test session',
+);
 
 List<BufferedSample> _samples() => [
-      const BufferedSample(
-        reading: ImuReading(
-          seq: 0,
-          tDeviceUs: 0,
-          ax: 1,
-          ay: 0,
-          az: 0,
-          gx: 0,
-          gy: 0,
-          gz: 0,
-        ),
-        wheel: WheelSide.left,
-        timestampAppMs: 1000000,
-        timestampSyncedMs: 0,
-      ),
-      const BufferedSample(
-        reading: ImuReading(
-          seq: 1,
-          tDeviceUs: 10000,
-          ax: 2,
-          ay: 0,
-          az: 0,
-          gx: 0,
-          gy: 0,
-          gz: 0,
-        ),
-        wheel: WheelSide.right,
-        timestampAppMs: 1000010,
-        timestampSyncedMs: 10,
-      ),
-    ];
+  const BufferedSample(
+    reading: ImuReading(
+      seq: 0,
+      tDeviceUs: 0,
+      ax: 1,
+      ay: 0,
+      az: 0,
+      gx: 0,
+      gy: 0,
+      gz: 0,
+    ),
+    wheel: WheelSide.left,
+    timestampAppMs: 1000000,
+    timestampSyncedMs: 0,
+  ),
+  const BufferedSample(
+    reading: ImuReading(
+      seq: 1,
+      tDeviceUs: 10000,
+      ax: 2,
+      ay: 0,
+      az: 0,
+      gx: 0,
+      gy: 0,
+      gz: 0,
+    ),
+    wheel: WheelSide.right,
+    timestampAppMs: 1000010,
+    timestampSyncedMs: 10,
+  ),
+];
 
 void main() {
   late InMemoryStorageRepository storage;
@@ -60,9 +60,7 @@ void main() {
   setUp(() async {
     storage = InMemoryStorageRepository();
     container = ProviderContainer(
-      overrides: [
-        storageRepositoryProvider.overrideWith((ref) => storage),
-      ],
+      overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
     );
     addTearDown(container.dispose);
     // Seed a session.
@@ -71,6 +69,17 @@ void main() {
   });
 
   group('ExportNotifier', () {
+    test('exportSession returns a named topic CSV for sharing', () async {
+      final notifier = container.read(exportProvider.notifier);
+      final path = await notifier.exportSession(
+        topic: 'sprint_test',
+        trialNumber: 1,
+        sessionId: 'abc123',
+      );
+      expect(path, endsWith('sprint_test_trial_01_1970-01-01.csv'));
+      expect(path, isNot(contains('session_')));
+    });
+
     test('exportSession reads samples + writes CSV to storage', () async {
       final notifier = container.read(exportProvider.notifier);
       final path = await notifier.exportSession(
@@ -80,11 +89,7 @@ void main() {
       );
       expect(path, isNotEmpty);
       // The CSV should be readable from storage.
-      final samples = await storage.readSamples(
-        'sprint_test',
-        1,
-        'abc123',
-      );
+      final samples = await storage.readSamples('sprint_test', 1, 'abc123');
       expect(samples.length, 2);
     });
 
@@ -98,11 +103,7 @@ void main() {
         gridIntervalMs: 10,
       );
       // Resampled should still be readable.
-      final samples = await storage.readSamples(
-        'sprint_test',
-        1,
-        'abc123',
-      );
+      final samples = await storage.readSamples('sprint_test', 1, 'abc123');
       // Original had 2 samples at 0 and 10. Resampling at 10ms grid
       // should produce 2 points (one per wheel at each grid point
       // where data exists).
@@ -123,11 +124,7 @@ void main() {
 
     test('exportTrial exports all sessions in a trial', () async {
       // Add a second session.
-      await storage.saveSession(
-        'sprint_test',
-        _meta(id: 'def456'),
-        _samples(),
-      );
+      await storage.saveSession('sprint_test', _meta(id: 'def456'), _samples());
       final notifier = container.read(exportProvider.notifier);
       final paths = await notifier.exportTrial(
         topic: 'sprint_test',
