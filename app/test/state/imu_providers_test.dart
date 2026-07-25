@@ -60,9 +60,7 @@ void main() {
 
   setUp(() {
     ble = FakeBleRepository(
-      devices: [
-        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-      ],
+      devices: [const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42)],
       infoFor: const {'L1': _leftInfo},
     );
     container = ProviderContainer(
@@ -98,14 +96,17 @@ void main() {
     expect(state().bySide[WheelSide.left]!.streaming, isTrue);
   });
 
-  test('start without a connected device sets error, does not stream', () async {
-    final notifier = container.read(imuStreamProvider.notifier);
-    await notifier.start(WheelSide.left);
+  test(
+    'start without a connected device sets error, does not stream',
+    () async {
+      final notifier = container.read(imuStreamProvider.notifier);
+      await notifier.start(WheelSide.left);
 
-    final s = state().bySide[WheelSide.left]!;
-    expect(s.streaming, isFalse);
-    expect(s.error, isNotNull);
-  });
+      final s = state().bySide[WheelSide.left]!;
+      expect(s.streaming, isFalse);
+      expect(s.error, isNotNull);
+    },
+  );
 
   test('IMU notify updates latest reading + sample count', () async {
     await container.read(connectionManagerProvider.notifier).connect('L1');
@@ -113,10 +114,14 @@ void main() {
     await notifier.start(WheelSide.left);
 
     // Emit a 2-sample batch: seq 0,1 with ax=16384 (→ 1.0 g).
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 1000, ax: 16384),
-      buildSample(seq: 1, tDeviceUs: 1100, ax: 16384),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(
+          buildBatch([
+            buildSample(seq: 0, tDeviceUs: 1000, ax: 16384),
+            buildSample(seq: 1, tDeviceUs: 1100, ax: 16384),
+          ]),
+        );
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.streaming, isTrue);
@@ -132,13 +137,13 @@ void main() {
     final notifier = container.read(imuStreamProvider.notifier);
     await notifier.start(WheelSide.left);
 
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 0),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
     // Next batch jumps from seq 0 → seq 5 (gap of 4).
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 5, tDeviceUs: 500),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(buildBatch([buildSample(seq: 5, tDeviceUs: 500)]));
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.sampleCount, 2);
@@ -152,10 +157,12 @@ void main() {
 
     final ctrl = ble.imuController('L1')!;
     ctrl.add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
-    ctrl.add(buildBatch([
-      buildSample(seq: 1, tDeviceUs: 10),
-      buildSample(seq: 2, tDeviceUs: 20),
-    ]));
+    ctrl.add(
+      buildBatch([
+        buildSample(seq: 1, tDeviceUs: 10),
+        buildSample(seq: 2, tDeviceUs: 20),
+      ]),
+    );
     ctrl.add(buildBatch([buildSample(seq: 10, tDeviceUs: 100)])); // gap 7
 
     final s = state().bySide[WheelSide.left]!;
@@ -169,9 +176,9 @@ void main() {
     final notifier = container.read(imuStreamProvider.notifier);
     await notifier.start(WheelSide.left);
 
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0, ax: 16384)]));
     expect(state().bySide[WheelSide.left]!.sampleCount, 1);
 
     await notifier.stop(WheelSide.left);
@@ -215,10 +222,9 @@ void main() {
     await notifier.start(WheelSide.left);
 
     // count=3 but only 1 sample — parseBatch throws ArgumentError.
-    ble.imuController('L1')!.add(Uint8List.fromList([
-      3,
-      ...buildSample(seq: 0, tDeviceUs: 0),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(Uint8List.fromList([3, ...buildSample(seq: 0, tDeviceUs: 0)]));
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.streaming, isFalse);
@@ -243,30 +249,36 @@ void main() {
     expect(ctrl.hasListener, isFalse);
   });
 
-  test('IMU notify accumulates readings into the rolling chart buffer',
-      () async {
-    await container.read(connectionManagerProvider.notifier).connect('L1');
-    final notifier = container.read(imuStreamProvider.notifier);
-    await notifier.start(WheelSide.left);
+  test(
+    'IMU notify accumulates readings into the rolling chart buffer',
+    () async {
+      await container.read(connectionManagerProvider.notifier).connect('L1');
+      final notifier = container.read(imuStreamProvider.notifier);
+      await notifier.start(WheelSide.left);
 
-    // First batch: 2 samples.
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
-      buildSample(seq: 1, tDeviceUs: 10000, ax: 16384),
-    ]));
-    var s = state().bySide[WheelSide.left]!;
-    expect(s.recent.length, 2);
-    expect(s.recent.first.seq, 0);
-    expect(s.recent.last.seq, 1);
+      // First batch: 2 samples.
+      ble
+          .imuController('L1')!
+          .add(
+            buildBatch([
+              buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
+              buildSample(seq: 1, tDeviceUs: 10000, ax: 16384),
+            ]),
+          );
+      var s = state().bySide[WheelSide.left]!;
+      expect(s.recent.length, 2);
+      expect(s.recent.first.seq, 0);
+      expect(s.recent.last.seq, 1);
 
-    // Second batch: 1 more sample → buffer grows to 3.
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 2, tDeviceUs: 20000, ax: 16384),
-    ]));
-    s = state().bySide[WheelSide.left]!;
-    expect(s.recent.length, 3);
-    expect(s.recent.last.seq, 2);
-  });
+      // Second batch: 1 more sample → buffer grows to 3.
+      ble
+          .imuController('L1')!
+          .add(buildBatch([buildSample(seq: 2, tDeviceUs: 20000, ax: 16384)]));
+      s = state().bySide[WheelSide.left]!;
+      expect(s.recent.length, 3);
+      expect(s.recent.last.seq, 2);
+    },
+  );
 
   test('chart buffer is capped at WheelImuState.chartBufferCap', () async {
     await container.read(connectionManagerProvider.notifier).connect('L1');
@@ -288,9 +300,9 @@ void main() {
     await container.read(connectionManagerProvider.notifier).connect('L1');
     final notifier = container.read(imuStreamProvider.notifier);
     await notifier.start(WheelSide.left);
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 0, ax: 16384),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0, ax: 16384)]));
     expect(state().bySide[WheelSide.left]!.recent.length, 1);
 
     // Restart — buffer should be cleared.
@@ -302,9 +314,7 @@ void main() {
       'imuEmitInterval is non-zero', () async {
     // Build a separate container with a non-zero emit interval.
     final ble2 = FakeBleRepository(
-      devices: [
-        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-      ],
+      devices: [const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42)],
       infoFor: const {'L1': _leftInfo},
     );
     final container2 = ProviderContainer(
@@ -312,8 +322,9 @@ void main() {
         bleRepositoryProvider.overrideWith((ref) => ble2),
         rssiPollIntervalProvider.overrideWith((ref) => null),
         interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
-        imuEmitIntervalProvider
-            .overrideWith((ref) => const Duration(milliseconds: 50)),
+        imuEmitIntervalProvider.overrideWith(
+          (ref) => const Duration(milliseconds: 50),
+        ),
       ],
     );
     addTearDown(container2.dispose);
@@ -331,7 +342,9 @@ void main() {
 
     // The first batch emits immediately (initial emit), but subsequent
     // batches within the throttle window are held back.
-    final sAfterBurst = container2.read(imuStreamProvider).bySide[WheelSide.left]!;
+    final sAfterBurst = container2
+        .read(imuStreamProvider)
+        .bySide[WheelSide.left]!;
     expect(
       sAfterBurst.sampleCount,
       lessThan(3),
@@ -340,34 +353,38 @@ void main() {
 
     // Advance time past the throttle interval so the pending emit fires.
     await Future<void>.delayed(const Duration(milliseconds: 60));
-    final sAfterDelay =
-        container2.read(imuStreamProvider).bySide[WheelSide.left]!;
+    final sAfterDelay = container2
+        .read(imuStreamProvider)
+        .bySide[WheelSide.left]!;
     expect(
       sAfterDelay.sampleCount,
       3,
-      reason: 'after the throttle interval, all accumulated samples are '
+      reason:
+          'after the throttle interval, all accumulated samples are '
           'reflected in state',
     );
     expect(sAfterDelay.latest!.seq, 2);
   });
 
-  test('zero emit interval: state updates on every batch (test mode)',
-      () async {
-    // Default override is Duration.zero (immediate).
-    await container.read(connectionManagerProvider.notifier).connect('L1');
-    final notifier = container.read(imuStreamProvider.notifier);
-    await notifier.start(WheelSide.left);
+  test(
+    'zero emit interval: state updates on every batch (test mode)',
+    () async {
+      // Default override is Duration.zero (immediate).
+      await container.read(connectionManagerProvider.notifier).connect('L1');
+      final notifier = container.read(imuStreamProvider.notifier);
+      await notifier.start(WheelSide.left);
 
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 0, tDeviceUs: 0),
-    ]));
-    await Future<void>.delayed(Duration.zero);
-    expect(state().bySide[WheelSide.left]!.sampleCount, 1);
+      ble
+          .imuController('L1')!
+          .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
+      await Future<void>.delayed(Duration.zero);
+      expect(state().bySide[WheelSide.left]!.sampleCount, 1);
 
-    ble.imuController('L1')!.add(buildBatch([
-      buildSample(seq: 1, tDeviceUs: 1000),
-    ]));
-    await Future<void>.delayed(Duration.zero);
-    expect(state().bySide[WheelSide.left]!.sampleCount, 2);
-  });
+      ble
+          .imuController('L1')!
+          .add(buildBatch([buildSample(seq: 1, tDeviceUs: 1000)]));
+      await Future<void>.delayed(Duration.zero);
+      expect(state().bySide[WheelSide.left]!.sampleCount, 2);
+    },
+  );
 }

@@ -60,8 +60,11 @@ Future<bool> showDeleteConfirmDialog(
   final result = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      icon: const Icon(Icons.warning_amber_rounded,
-          color: Colors.red, size: 40),
+      icon: const Icon(
+        Icons.warning_amber_rounded,
+        color: Colors.red,
+        size: 40,
+      ),
       title: Text(title),
       content: Text(message),
       actions: [
@@ -70,9 +73,7 @@ Future<bool> showDeleteConfirmDialog(
           child: const Text('Cancel'),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.red,
-          ),
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () => Navigator.pop(ctx, true),
           child: const Text('Delete'),
         ),
@@ -91,14 +92,18 @@ class _NoResultsState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off_rounded,
-              size: 48, color: Theme.of(context).disabledColor),
+          Icon(
+            Icons.search_off_rounded,
+            size: 48,
+            color: Theme.of(context).disabledColor,
+          ),
           const SizedBox(height: AppSpacing.md),
-          Text('No results',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text('No results', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AppSpacing.xs),
-          Text('Try a different search or clear the filter.',
-              style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            'Try a different search or clear the filter.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ],
       ),
     );
@@ -125,9 +130,7 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
-      text: ref.read(browseSearchProvider),
-    );
+    _controller = TextEditingController(text: ref.read(browseSearchProvider));
   }
 
   @override
@@ -191,7 +194,7 @@ class _TagFilterChips extends ConsumerWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         itemCount: tags.length,
-        separatorBuilder: (_,_) => const SizedBox(width: AppSpacing.xs),
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
         itemBuilder: (context, i) {
           final tag = tags[i];
           return FilterChip(
@@ -272,6 +275,7 @@ class _TopicListView extends ConsumerStatefulWidget {
 }
 
 class _TopicListViewState extends ConsumerState<_TopicListView> {
+  // ignore: unused_element
   void _refresh() {
     ref.invalidate(topicsProvider);
   }
@@ -290,9 +294,9 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
       invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rename failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Rename failed: $e')));
     }
   }
 
@@ -313,9 +317,9 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
       invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
     }
   }
 
@@ -330,7 +334,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     final confirmed = await showDeleteConfirmDialog(
       context,
       title: "Delete topic '${t.name}'?",
-      message: 'This will remove ${trials.length} '
+      message:
+          'This will remove ${trials.length} '
           '${trials.length == 1 ? 'trial' : 'trials'} and '
           '$sessionCount ${sessionCount == 1 ? 'session' : 'sessions'}. '
           'This cannot be undone.',
@@ -342,9 +347,9 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
       invalidateBrowseStorage(ref, topic: t.name);
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
   }
 
@@ -355,6 +360,22 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     );
   }
 
+  Future<void> _exportAllData() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await ref
+          .read(exportActionsProvider)
+          .exportAllZip(pickDirectory: pickDirectory, writeFile: writeCsvFile);
+      if (!mounted || path == null) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Exported all data to $path')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Export failed: $error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(browseSearchProvider);
@@ -362,7 +383,16 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
     final topicsAsync = ref.watch(topicsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Browse')),
+      appBar: AppBar(
+        title: const Text('Browse'),
+        actions: [
+          IconButton(
+            onPressed: _exportAllData,
+            icon: const Icon(Icons.folder_zip_rounded),
+            tooltip: 'Export all data as ZIP',
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateTemplateDialog(context, ref),
         icon: const Icon(Icons.add_rounded),
@@ -377,14 +407,21 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.folder_off_rounded,
-                      size: 48, color: Theme.of(context).disabledColor),
+                  Icon(
+                    Icons.folder_off_rounded,
+                    size: 48,
+                    color: Theme.of(context).disabledColor,
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('No topics yet',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'No topics yet',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text('Record a session to create your first topic.',
-                      style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                    'Record a session to create your first topic.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ],
               ),
             );
@@ -394,8 +431,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
           final topics = q.isEmpty
               ? allTopics
               : allTopics
-                  .where((t) => t.name.toLowerCase().contains(q))
-                  .toList();
+                    .where((t) => t.name.toLowerCase().contains(q))
+                    .toList();
           if (topics.isEmpty) {
             return Column(
               children: [
@@ -410,9 +447,13 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                    AppSpacing.md,
+                    0,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                  ),
                   itemCount: topics.length,
-                  separatorBuilder: (_,_) =>
+                  separatorBuilder: (_, _) =>
                       const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (context, i) {
                     final t = topics[i];
@@ -436,13 +477,18 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                               Container(
                                 width: 4,
                                 height: progress != null ? 56 : 40,
-                                margin: const EdgeInsets.only(right: AppSpacing.sm),
+                                margin: const EdgeInsets.only(
+                                  right: AppSpacing.sm,
+                                ),
                                 decoration: BoxDecoration(
                                   color: progress == null
                                       ? Theme.of(context).disabledColor
                                       : (progress.isComplete
-                                          ? context.wheelColors.success.solid
-                                          : context.wheelColors.warning.solid),
+                                            ? context.wheelColors.success.solid
+                                            : context
+                                                  .wheelColors
+                                                  .warning
+                                                  .solid),
                                   borderRadius: AppRadius.brSm,
                                 ),
                               ),
@@ -452,14 +498,17 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(Icons.folder_rounded, size: 20),
+                                        const Icon(
+                                          Icons.folder_rounded,
+                                          size: 20,
+                                        ),
                                         const SizedBox(width: AppSpacing.xs),
                                         Expanded(
                                           child: Text(
                                             t.name,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleMedium,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -467,7 +516,8 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                         PopupMenuButton<String>(
                                           tooltip: 'Edit topic',
                                           icon: const Icon(
-                                              Icons.more_vert_rounded),
+                                            Icons.more_vert_rounded,
+                                          ),
                                           onSelected: (value) {
                                             if (value == 'rename') {
                                               _renameTopic(t);
@@ -481,8 +531,10 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                             const PopupMenuItem(
                                               value: 'rename',
                                               child: ListTile(
-                                                leading: Icon(Icons
-                                                    .drive_file_rename_outline_rounded),
+                                                leading: Icon(
+                                                  Icons
+                                                      .drive_file_rename_outline_rounded,
+                                                ),
                                                 title: Text('Rename'),
                                                 contentPadding: EdgeInsets.zero,
                                                 dense: true,
@@ -491,8 +543,9 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                             const PopupMenuItem(
                                               value: 'description',
                                               child: ListTile(
-                                                leading:
-                                                    Icon(Icons.edit_note_rounded),
+                                                leading: Icon(
+                                                  Icons.edit_note_rounded,
+                                                ),
                                                 title: Text('Edit description'),
                                                 contentPadding: EdgeInsets.zero,
                                                 dense: true,
@@ -502,11 +555,15 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                               value: 'delete',
                                               child: ListTile(
                                                 leading: Icon(
-                                                    Icons.delete_outline_rounded,
-                                                    color: Colors.red),
-                                                title: Text('Delete',
-                                                    style: TextStyle(
-                                                        color: Colors.red)),
+                                                  Icons.delete_outline_rounded,
+                                                  color: Colors.red,
+                                                ),
+                                                title: Text(
+                                                  'Delete',
+                                                  style: TextStyle(
+                                                    color: Colors.red,
+                                                  ),
+                                                ),
                                                 contentPadding: EdgeInsets.zero,
                                                 dense: true,
                                               ),
@@ -519,9 +576,9 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                       const SizedBox(height: AppSpacing.xxs),
                                       Text(
                                         t.description!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -532,10 +589,11 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                         value: progress.progress,
                                         minHeight: 6,
                                         borderRadius: const BorderRadius.all(
-                                            Radius.circular(AppRadius.pill)),
-                                        backgroundColor: Theme.of(context)
-                                            .colorScheme
-                                            .surfaceContainerHigh,
+                                          Radius.circular(AppRadius.pill),
+                                        ),
+                                        backgroundColor: Theme.of(
+                                          context,
+                                        ).colorScheme.surfaceContainerHigh,
                                         color: progress.isComplete
                                             ? context.wheelColors.success.solid
                                             : context.wheelColors.warning.solid,
@@ -551,8 +609,14 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                                 .labelMedium
                                                 ?.copyWith(
                                                   color: progress.isComplete
-                                                      ? context.wheelColors.success.solid
-                                                      : context.wheelColors.warning.solid,
+                                                      ? context
+                                                            .wheelColors
+                                                            .success
+                                                            .solid
+                                                      : context
+                                                            .wheelColors
+                                                            .warning
+                                                            .solid,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                           ),
@@ -560,10 +624,11 @@ class _TopicListViewState extends ConsumerState<_TopicListView> {
                                           if (progress.lastSessionDate != null)
                                             Text(
                                               _formatDate(
-                                                  progress.lastSessionDate!),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall,
+                                                progress.lastSessionDate!,
+                                              ),
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.labelSmall,
                                             ),
                                         ],
                                       ),
@@ -603,6 +668,7 @@ class _TrialListView extends ConsumerStatefulWidget {
 }
 
 class _TrialListViewState extends ConsumerState<_TrialListView> {
+  // ignore: unused_element
   void _refresh() {
     ref.invalidate(trialsProvider(widget.topic));
   }
@@ -614,7 +680,8 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
     final confirmed = await showDeleteConfirmDialog(
       context,
       title: 'Delete trial_${trialNumber.toString().padLeft(2, '0')}?',
-      message: 'This will remove ${sessions.length} '
+      message:
+          'This will remove ${sessions.length} '
           '${sessions.length == 1 ? 'session' : 'sessions'}. '
           'This cannot be undone.',
     );
@@ -622,12 +689,16 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
     try {
       await repo.deleteTrial(widget.topic, trialNumber);
       if (!mounted) return;
-      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: trialNumber);
+      invalidateBrowseStorage(
+        ref,
+        topic: widget.topic,
+        trialNumber: trialNumber,
+      );
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
   }
 
@@ -646,17 +717,26 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
     final actions = ref.read(exportActionsProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final written = await actions.saveToDevice(
-        level: ExportLevel.topic,
+      final result = await actions.exportTopicFolder(
         topic: widget.topic,
         pickDirectory: pickDirectory,
         writeFile: writeCsvFile,
       );
       if (!mounted) return;
-      if (written.isEmpty) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Saved ${written.length} file(s) to device')),
-      );
+      switch (result) {
+        case TopicExportSuccess(:final directory, :final files):
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Saved ${files.length} files to $directory'),
+            ),
+          );
+        case TopicExportCancelled():
+          break;
+        case TopicExportFailure(:final error):
+          messenger.showSnackBar(
+            SnackBar(content: Text('Save failed: $error')),
+          );
+      }
     } on Object catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
@@ -690,61 +770,70 @@ class _TrialListViewState extends ConsumerState<_TrialListView> {
           ),
         ],
       ),
-      body: ref.watch(trialsProvider(widget.topic)).when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-        data: (trials) {
-          if (trials.isEmpty) {
-            return Center(
-              child: Text('No trials in ${widget.topic}',
-                  style: Theme.of(context).textTheme.bodyMedium),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: trials.length,
-            separatorBuilder: (_,_) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, i) {
-              final trial = trials[i];
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.layers_rounded),
-                  title: Text('trial_${trial.toString().padLeft(2, '0')}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PopupMenuButton<String>(
-                        tooltip: 'Trial actions',
-                        icon: const Icon(Icons.more_vert_rounded),
-                        onSelected: (value) {
-                          if (value == 'delete') {
-                            _deleteTrial(trial);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: ListTile(
-                              leading: Icon(Icons.delete_outline_rounded,
-                                  color: Colors.red),
-                              title: Text('Delete',
-                                  style: TextStyle(color: Colors.red)),
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                            ),
+      body: ref
+          .watch(trialsProvider(widget.topic))
+          .when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, stack) => Center(child: Text('Error: $err')),
+            data: (trials) {
+              if (trials.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No trials in ${widget.topic}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                itemCount: trials.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.sm),
+                itemBuilder: (context, i) {
+                  final trial = trials[i];
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.layers_rounded),
+                      title: Text('trial_${trial.toString().padLeft(2, '0')}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PopupMenuButton<String>(
+                            tooltip: 'Trial actions',
+                            icon: const Icon(Icons.more_vert_rounded),
+                            onSelected: (value) {
+                              if (value == 'delete') {
+                                _deleteTrial(trial);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.red,
+                                  ),
+                                  title: Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                  contentPadding: EdgeInsets.zero,
+                                  dense: true,
+                                ),
+                              ),
+                            ],
                           ),
+                          const Icon(Icons.chevron_right_rounded),
                         ],
                       ),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
-                  ),
-                  onTap: () => widget.onTrialTap(trial),
-                ),
+                      onTap: () => widget.onTrialTap(trial),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
-      ),
+          ),
     );
   }
 }
@@ -764,6 +853,7 @@ class _SessionListView extends ConsumerStatefulWidget {
 }
 
 class _SessionListViewState extends ConsumerState<_SessionListView> {
+  // ignore: unused_element
   void _refresh() {
     ref.invalidate(sessionsProvider('${widget.topic}:${widget.trialNumber}'));
   }
@@ -786,7 +876,9 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     );
     if (!mounted) return;
     try {
-      await ref.read(storageRepositoryProvider).updateSessionMeta(
+      await ref
+          .read(storageRepositoryProvider)
+          .updateSessionMeta(
             widget.topic,
             widget.trialNumber,
             meta.sessionId,
@@ -794,35 +886,42 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
             videoFile: video,
           );
       if (!mounted) return;
-      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
+      invalidateBrowseStorage(
+        ref,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+      );
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
     }
   }
 
   Future<void> _editTags(SessionMeta meta) async {
-    final updated = await showTagEditorDialog(
-      context,
-      initialTags: meta.tags,
-    );
+    final updated = await showTagEditorDialog(context, initialTags: meta.tags);
     if (updated == null || !mounted) return;
     try {
-      await ref.read(storageRepositoryProvider).updateSessionTags(
+      await ref
+          .read(storageRepositoryProvider)
+          .updateSessionTags(
             widget.topic,
             widget.trialNumber,
             meta.sessionId,
             updated,
           );
       if (!mounted) return;
-      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
+      invalidateBrowseStorage(
+        ref,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+      );
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
     }
   }
 
@@ -830,23 +929,26 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
     final confirmed = await showDeleteConfirmDialog(
       context,
       title: "Delete session '${meta.sessionId}'?",
-      message: 'This will permanently remove the session and its CSV data. '
+      message:
+          'This will permanently remove the session and its CSV data. '
           'This cannot be undone.',
     );
     if (!confirmed || !mounted) return;
     try {
-      await ref.read(storageRepositoryProvider).deleteSession(
-            widget.topic,
-            widget.trialNumber,
-            meta.sessionId,
-          );
+      await ref
+          .read(storageRepositoryProvider)
+          .deleteSession(widget.topic, widget.trialNumber, meta.sessionId);
       if (!mounted) return;
-      invalidateBrowseStorage(ref, topic: widget.topic, trialNumber: widget.trialNumber);
+      invalidateBrowseStorage(
+        ref,
+        topic: widget.topic,
+        trialNumber: widget.trialNumber,
+      );
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
   }
 
@@ -936,90 +1038,103 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
           ),
         ],
       ),
-      body: ref.watch(sessionsProvider('${widget.topic}:${widget.trialNumber}')).when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
-        data: (allSessions) {
-          if (allSessions.isEmpty) {
-            return Center(
-              child: Text('No sessions in trial ${widget.trialNumber}',
-                  style: Theme.of(context).textTheme.bodyMedium),
-            );
-          }
-          // Collect unique tags across the current (unfiltered) session list.
-          final allTags = <String>{};
-          for (final s in allSessions) {
-            allTags.addAll(s.tags);
-          }
-          final sortedTags = allTags.toList()..sort();
+      body: ref
+          .watch(sessionsProvider('${widget.topic}:${widget.trialNumber}'))
+          .when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, stack) => Center(child: Text('Error: $err')),
+            data: (allSessions) {
+              if (allSessions.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No sessions in trial ${widget.trialNumber}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                );
+              }
+              // Collect unique tags across the current (unfiltered) session list.
+              final allTags = <String>{};
+              for (final s in allSessions) {
+                allTags.addAll(s.tags);
+              }
+              final sortedTags = allTags.toList()..sort();
 
-          // In-memory filter: search (ID, notes, date ISO, tags) AND tag filter.
-          final q = searchQuery.toLowerCase();
-          final sessions = allSessions.where((meta) {
-            final matchesSearch = q.isEmpty ||
-                meta.sessionId.toLowerCase().contains(q) ||
-                (meta.notes?.toLowerCase().contains(q) ?? false) ||
-                meta.startTime.toIso8601String().toLowerCase().contains(q) ||
-                meta.tags.any((t) => t.toLowerCase().contains(q));
-            final matchesTag =
-                tagFilter == null || meta.tags.contains(tagFilter);
-            return matchesSearch && matchesTag;
-          }).toList();
+              // In-memory filter: search (ID, notes, date ISO, tags) AND tag filter.
+              final q = searchQuery.toLowerCase();
+              final sessions = allSessions.where((meta) {
+                final matchesSearch =
+                    q.isEmpty ||
+                    meta.sessionId.toLowerCase().contains(q) ||
+                    (meta.notes?.toLowerCase().contains(q) ?? false) ||
+                    meta.startTime.toIso8601String().toLowerCase().contains(
+                      q,
+                    ) ||
+                    meta.tags.any((t) => t.toLowerCase().contains(q));
+                final matchesTag =
+                    tagFilter == null || meta.tags.contains(tagFilter);
+                return matchesSearch && matchesTag;
+              }).toList();
 
-          if (sessions.isEmpty) {
-            return Column(
-              children: [
-                const _SearchBar(hintText: 'Search sessions'),
-                if (sortedTags.isNotEmpty) _TagFilterChips(tags: sortedTags),
-                Expanded(child: _NoResultsState()),
-              ],
-            );
-          }
-          return Column(
-            children: [
-              const _SearchBar(hintText: 'Search sessions'),
-              if (sortedTags.isNotEmpty) _TagFilterChips(tags: sortedTags),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
-                  itemCount: sessions.length,
-                  separatorBuilder: (_,_) =>
-                      const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (context, i) {
-                    final meta = sessions[i];
-                    final dt = DateTime.fromMillisecondsSinceEpoch(
-                        meta.startTime.millisecondsSinceEpoch);
-                    return SessionListItem(
-                      title: meta.sessionId,
-                      subtitle:
-                          '${widget.topic} Â· ${dt.toIso8601String().split('T').first}',
-                      duration: Duration(milliseconds: meta.durationMs),
-                      sampleCount: meta.sampleCount,
-                      markerCount: meta.markerCount,
-                      syncQuality: meta.driftResidualRmsMsLeft != null
-                          ? 'Â±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
-                          : null,
-                      qualityLevel: QualityBadge.fromMeta(meta),
-                      tags: meta.tags,
-                      onTap: () => _openPreview(meta),
-                      onShare: exportState.isExporting
-                          ? null
-                          : () => _shareSession(meta),
-                      onSave: exportState.isExporting
-                          ? null
-                          : () => _saveSessionToDevice(meta),
-                      onEdit: () => _editSessionMeta(meta),
-                      onEditTags: () => _editTags(meta),
-                      onDelete: () => _deleteSession(meta),
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+              if (sessions.isEmpty) {
+                return Column(
+                  children: [
+                    const _SearchBar(hintText: 'Search sessions'),
+                    if (sortedTags.isNotEmpty)
+                      _TagFilterChips(tags: sortedTags),
+                    Expanded(child: _NoResultsState()),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  const _SearchBar(hintText: 'Search sessions'),
+                  if (sortedTags.isNotEmpty) _TagFilterChips(tags: sortedTags),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        AppSpacing.md,
+                      ),
+                      itemCount: sessions.length,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: AppSpacing.sm),
+                      itemBuilder: (context, i) {
+                        final meta = sessions[i];
+                        final dt = DateTime.fromMillisecondsSinceEpoch(
+                          meta.startTime.millisecondsSinceEpoch,
+                        );
+                        return SessionListItem(
+                          title: meta.sessionId,
+                          subtitle:
+                              '${widget.topic} Â· ${dt.toIso8601String().split('T').first}',
+                          duration: Duration(milliseconds: meta.durationMs),
+                          sampleCount: meta.sampleCount,
+                          markerCount: meta.markerCount,
+                          syncQuality: meta.driftResidualRmsMsLeft != null
+                              ? 'Â±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
+                              : null,
+                          qualityLevel: QualityBadge.fromMeta(meta),
+                          tags: meta.tags,
+                          onTap: () => _openPreview(meta),
+                          onShare: exportState.isExporting
+                              ? null
+                              : () => _shareSession(meta),
+                          onSave: exportState.isExporting
+                              ? null
+                              : () => _saveSessionToDevice(meta),
+                          onEdit: () => _editSessionMeta(meta),
+                          onEditTags: () => _editTags(meta),
+                          onDelete: () => _deleteSession(meta),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
     );
   }
 
@@ -1203,8 +1318,7 @@ class _CreateTemplateDialogState extends ConsumerState<_CreateTemplateDialog> {
                       DropdownMenuItem(value: 100, child: Text('100')),
                       DropdownMenuItem(value: 200, child: Text('200')),
                     ],
-                    onChanged: (v) =>
-                        setState(() => _sampleRateHz = v ?? 100),
+                    onChanged: (v) => setState(() => _sampleRateHz = v ?? 100),
                   ),
                 ),
               ],

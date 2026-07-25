@@ -28,11 +28,11 @@ class ColorRole {
   final Color onContainer;
 
   ColorRole lerp(ColorRole other, double t) => ColorRole(
-        solid: Color.lerp(solid, other.solid, t)!,
-        on: Color.lerp(on, other.on, t)!,
-        container: Color.lerp(container, other.container, t)!,
-        onContainer: Color.lerp(onContainer, other.onContainer, t)!,
-      );
+    solid: Color.lerp(solid, other.solid, t)!,
+    on: Color.lerp(on, other.on, t)!,
+    container: Color.lerp(container, other.container, t)!,
+    onContainer: Color.lerp(onContainer, other.onContainer, t)!,
+  );
 }
 
 /// WheelAthlete-specific colors that don't fit Material's [ColorScheme]:
@@ -60,8 +60,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
   final Color chartGrid;
 
   /// Returns the color role for a given wheel.
-  ColorRole forWheel(WheelSide side) =>
-      side == WheelSide.left ? left : right;
+  ColorRole forWheel(WheelSide side) => side == WheelSide.left ? left : right;
 
   static const WheelAthleteColors light = WheelAthleteColors(
     left: ColorRole(

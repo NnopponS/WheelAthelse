@@ -4,10 +4,7 @@ import 'package:wheelathlete/ble/ble_uuids.dart';
 void main() {
   group('BleUuids', () {
     test('service UUID matches protocol §1 (a1b2 base)', () {
-      expect(
-        BleUuids.service,
-        '0000a1b2-0000-1000-8000-00805f9b34fb',
-      );
+      expect(BleUuids.service, '0000a1b2-0000-1000-8000-00805f9b34fb');
     });
 
     test('characteristic UUIDs match protocol §1.1', () {
@@ -21,6 +18,7 @@ void main() {
       expect(BleUuids.imuSampleSize, 20);
       expect(BleUuids.syncResponseSize, 12);
       expect(BleUuids.infoSize, 16);
+      expect(BleUuids.configSize, 31);
     });
 
     test('default MTU request value is 247 (protocol §1 note)', () {

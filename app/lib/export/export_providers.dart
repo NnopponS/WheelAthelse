@@ -1,12 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
-import 'package:wheelathlete/export/excel_exporter.dart';
 import 'package:wheelathlete/export/export_actions.dart';
 import 'package:wheelathlete/export/resampler.dart';
+import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 
 /// Export state surfaced to the UI.
@@ -32,8 +33,8 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
   @override
   ExportState build() => const ExportState();
 
-  /// Exports a single session to CSV. If [resample] is true, samples are
-  /// resampled to [gridIntervalMs] before writing. Returns the file path.
+  /// Exports a single session to a named CSV. If [resample] is true, samples
+  /// are resampled to [gridIntervalMs] before writing. Returns the file path.
   ///
   /// Throws [StateError] if the session has no samples (empty recording).
   Future<String> exportSession({
@@ -49,7 +50,9 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
       final storage = ref.read(storageRepositoryProvider);
       final meta = await storage.readSessionMeta(topic, trialNumber, sessionId);
       if (meta == null) {
-        throw StateError('Session not found: $topic/trial_$trialNumber/$sessionId');
+        throw StateError(
+          'Session not found: $topic/trial_$trialNumber/$sessionId',
+        );
       }
 
       var samples = await storage.readSamples(topic, trialNumber, sessionId);
@@ -64,15 +67,15 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
         samples = Resampler.resample(samples, gridIntervalMs: gridIntervalMs);
       }
 
-      // Write XLSX to storage (file-based or in-memory).
-      final xlsxPath = await storage.getSessionXlsxPath(topic, trialNumber, sessionId);
-      final xlsxBytes = ExcelExporter.toXlsxBytes(samples);
-      await storage.writeSessionXlsx(topic, trialNumber, sessionId, xlsxBytes);
-
-      state = ExportState(
-        lastExportedPaths: [xlsxPath],
+      final path = await _writeNamedCsv(
+        topic: topic,
+        trialNumber: trialNumber,
+        date: meta.startTime,
+        sampleRateHz: meta.sampleRateHz,
+        samples: samples,
       );
-      return xlsxPath;
+      state = ExportState(lastExportedPaths: [path]);
+      return path;
     } on Object catch (e) {
       state = ExportState(error: 'Export failed: $e');
       rethrow;
@@ -88,18 +91,32 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
   }) async {
     final storage = ref.read(storageRepositoryProvider);
     final sessions = await storage.listSessions(topic, trialNumber);
-    final paths = <String>[];
+    if (sessions.isEmpty) return const [];
+    final samples = <BufferedSample>[];
     for (final meta in sessions) {
-      final path = await exportSession(
-        topic: topic,
-        trialNumber: trialNumber,
-        sessionId: meta.sessionId,
-        resample: resample,
+      samples.addAll(
+        await storage.readSamples(topic, trialNumber, meta.sessionId),
+      );
+    }
+    if (resample) {
+      final resampled = Resampler.resample(
+        samples,
         gridIntervalMs: gridIntervalMs,
       );
-      paths.add(path);
+      samples
+        ..clear()
+        ..addAll(resampled);
     }
-    return paths;
+    sessions.sort((a, b) => a.startTime.compareTo(b.startTime));
+    return [
+      await _writeNamedCsv(
+        topic: topic,
+        trialNumber: trialNumber,
+        date: sessions.first.startTime,
+        sampleRateHz: sessions.first.sampleRateHz,
+        samples: samples,
+      ),
+    ];
   }
 
   /// Exports all sessions in all trials of a topic.
@@ -136,7 +153,10 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
       sessionId: sessionId,
     );
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(path)], text: 'WheelAthlete session $sessionId'),
+      ShareParams(
+        files: [XFile(path)],
+        text: 'WheelAthlete session $sessionId',
+      ),
     );
   }
 
@@ -169,6 +189,58 @@ class ExportNotifier extends Notifier<ExportState> implements ExportOperations {
     );
   }
 
+  Future<String> _writeNamedCsv({
+    required String topic,
+    required int trialNumber,
+    required DateTime date,
+    required int sampleRateHz,
+    required List<BufferedSample> samples,
+  }) async {
+    final storage = ref.read(storageRepositoryProvider);
+    final trialDir = await storage.getTrialDirPath(topic, trialNumber);
+    final safeTopic = _safeFilePart(topic).isEmpty
+        ? 'topic'
+        : _safeFilePart(topic);
+    final day = date.toLocal().toIso8601String().substring(0, 10);
+    final requested =
+        '$trialDir/${safeTopic}_trial_${trialNumber.toString().padLeft(2, '0')}_training_$day.csv';
+    final path = _availableExportPath(requested);
+    final bytes = utf8.encode(
+      CsvExporter.toAlignedTrainingCsvString(
+        samples,
+        gridIntervalUs: 1000000 ~/ sampleRateHz,
+      ),
+    );
+    if (!path.startsWith('memory://')) {
+      final file = File(path);
+      await file.parent.create(recursive: true);
+      final temp = File('$path.tmp');
+      await temp.writeAsBytes(bytes, flush: true);
+      await temp.rename(path);
+    }
+    return path;
+  }
+
+  static String _safeFilePart(String value) => value
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+
+  static String _availableExportPath(String requested) {
+    if (requested.startsWith('memory://') || !File(requested).existsSync()) {
+      return requested;
+    }
+    final dot = requested.lastIndexOf('.');
+    final stem = requested.substring(0, dot);
+    final extension = requested.substring(dot);
+    var suffix = 2;
+    while (File('${stem}_$suffix$extension').existsSync()) {
+      suffix++;
+    }
+    return '${stem}_$suffix$extension';
+  }
+
   /// Clears the export state.
   void clearError() {
     state = const ExportState();
@@ -182,9 +254,7 @@ final exportProvider = NotifierProvider<ExportNotifier, ExportState>(
 /// Production [DirectoryPicker] backed by file_picker's `getDirectoryPath`.
 // coverage:ignore-start
 Future<String?> pickDirectory() async {
-  return FilePicker.getDirectoryPath(
-    dialogTitle: 'Choose where to save Excel files',
-  );
+  return FilePicker.getDirectoryPath(dialogTitle: 'Choose export folder');
 }
 // coverage:ignore-end
 
@@ -192,7 +262,13 @@ Future<String?> pickDirectory() async {
 // coverage:ignore-start
 Future<void> writeCsvFile(String path, List<int> bytes) async {
   final file = File(path);
-  await file.writeAsBytes(bytes);
+  await file.parent.create(recursive: true);
+  final temporary = File('$path.tmp');
+  await temporary.writeAsBytes(bytes, flush: true);
+  if (file.existsSync()) {
+    throw StateError('Export destination already exists: $path');
+  }
+  await temporary.rename(path);
 }
 // coverage:ignore-end
 

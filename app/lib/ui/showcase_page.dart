@@ -67,8 +67,7 @@ class _ShowcasePageState extends State<ShowcasePage>
           const SizedBox(width: AppSpacing.sm),
           Text(label),
           const Spacer(),
-          if (mode == current)
-            const Icon(Icons.check_rounded, size: 18),
+          if (mode == current) const Icon(Icons.check_rounded, size: 18),
         ],
       ),
     );
@@ -98,12 +97,24 @@ class _ShowcasePageState extends State<ShowcasePage>
             itemBuilder: (context) {
               final current = widget.controller.value;
               return [
-                _modeItem(ThemeMode.system, 'System', current,
-                    Icons.brightness_auto_rounded),
-                _modeItem(ThemeMode.light, 'Light', current,
-                    Icons.light_mode_rounded),
-                _modeItem(ThemeMode.dark, 'Dark', current,
-                    Icons.dark_mode_rounded),
+                _modeItem(
+                  ThemeMode.system,
+                  'System',
+                  current,
+                  Icons.brightness_auto_rounded,
+                ),
+                _modeItem(
+                  ThemeMode.light,
+                  'Light',
+                  current,
+                  Icons.light_mode_rounded,
+                ),
+                _modeItem(
+                  ThemeMode.dark,
+                  'Dark',
+                  current,
+                  Icons.dark_mode_rounded,
+                ),
               ];
             },
           ),
@@ -113,31 +124,47 @@ class _ShowcasePageState extends State<ShowcasePage>
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppSizing.maxContentWidth),
+          constraints: const BoxConstraints(
+            maxWidth: AppSizing.maxContentWidth,
+          ),
           child: ListView(
             padding: AppSpacing.pagePadding,
             children: [
-              _Section(
-                title: 'Color roles',
-                child: _ColorRolesPreview(),
-              ),
-              _Section(
-                title: 'Typography',
-                child: _TypographyPreview(),
-              ),
+              _Section(title: 'Color roles', child: _ColorRolesPreview()),
+              _Section(title: 'Typography', child: _TypographyPreview()),
               const _Section(
                 title: 'Status badges',
                 child: Wrap(
                   spacing: AppSpacing.xs,
                   runSpacing: AppSpacing.xs,
                   children: [
-                    StatusBadge(label: 'Connected', tone: BadgeTone.success, icon: Icons.check_circle_rounded),
-                    StatusBadge(label: 'Connecting', tone: BadgeTone.warning, icon: Icons.sync_rounded),
-                    StatusBadge(label: 'Disconnected', tone: BadgeTone.neutral, icon: Icons.cloud_off_rounded),
-                    StatusBadge(label: 'Error', tone: BadgeTone.danger, icon: Icons.error_rounded),
+                    StatusBadge(
+                      label: 'Connected',
+                      tone: BadgeTone.success,
+                      icon: Icons.check_circle_rounded,
+                    ),
+                    StatusBadge(
+                      label: 'Connecting',
+                      tone: BadgeTone.warning,
+                      icon: Icons.sync_rounded,
+                    ),
+                    StatusBadge(
+                      label: 'Disconnected',
+                      tone: BadgeTone.neutral,
+                      icon: Icons.cloud_off_rounded,
+                    ),
+                    StatusBadge(
+                      label: 'Error',
+                      tone: BadgeTone.danger,
+                      icon: Icons.error_rounded,
+                    ),
                     StatusBadge(label: 'L', tone: BadgeTone.left),
                     StatusBadge(label: 'R', tone: BadgeTone.right),
-                    StatusBadge(label: 'Recording', tone: BadgeTone.info, icon: Icons.fiber_manual_record_rounded),
+                    StatusBadge(
+                      label: 'Recording',
+                      tone: BadgeTone.info,
+                      icon: Icons.fiber_manual_record_rounded,
+                    ),
                   ],
                 ),
               ),
@@ -180,12 +207,45 @@ class _ShowcasePageState extends State<ShowcasePage>
                   crossAxisSpacing: AppSpacing.xs,
                   childAspectRatio: 1.6,
                   children: [
-                    LiveMetricTile(label: 'ax', value: _wave(0, 1.2), unit: 'g', side: WheelSide.left),
-                    LiveMetricTile(label: 'ay', value: _wave(1, 1.2), unit: 'g', side: WheelSide.left),
-                    LiveMetricTile(label: 'az', value: 1 + _wave(2, 0.3), unit: 'g', side: WheelSide.left),
-                    LiveMetricTile(label: 'gx', value: _wave(0, 240), unit: '°/s', side: WheelSide.right, fractionDigits: 1),
-                    LiveMetricTile(label: 'gy', value: _wave(1, 240), unit: '°/s', side: WheelSide.right, fractionDigits: 1),
-                    LiveMetricTile(label: 'gz', value: _wave(2, 240), unit: '°/s', side: WheelSide.right, fractionDigits: 1),
+                    LiveMetricTile(
+                      label: 'ax',
+                      value: _wave(0, 1.2),
+                      unit: 'g',
+                      side: WheelSide.left,
+                    ),
+                    LiveMetricTile(
+                      label: 'ay',
+                      value: _wave(1, 1.2),
+                      unit: 'g',
+                      side: WheelSide.left,
+                    ),
+                    LiveMetricTile(
+                      label: 'az',
+                      value: 1 + _wave(2, 0.3),
+                      unit: 'g',
+                      side: WheelSide.left,
+                    ),
+                    LiveMetricTile(
+                      label: 'gx',
+                      value: _wave(0, 240),
+                      unit: '°/s',
+                      side: WheelSide.right,
+                      fractionDigits: 1,
+                    ),
+                    LiveMetricTile(
+                      label: 'gy',
+                      value: _wave(1, 240),
+                      unit: '°/s',
+                      side: WheelSide.right,
+                      fractionDigits: 1,
+                    ),
+                    LiveMetricTile(
+                      label: 'gz',
+                      value: _wave(2, 240),
+                      unit: '°/s',
+                      side: WheelSide.right,
+                      fractionDigits: 1,
+                    ),
                   ],
                 ),
               ),
@@ -195,8 +255,12 @@ class _ShowcasePageState extends State<ShowcasePage>
                   children: [
                     PrimaryActionButton(
                       label: _recording ? 'Stop recording' : 'Start recording',
-                      icon: _recording ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                      intent: _recording ? ActionIntent.stop : ActionIntent.start,
+                      icon: _recording
+                          ? Icons.stop_rounded
+                          : Icons.play_arrow_rounded,
+                      intent: _recording
+                          ? ActionIntent.stop
+                          : ActionIntent.start,
                       onPressed: () => setState(() => _recording = !_recording),
                     ),
                     const SizedBox(height: AppSpacing.sm),
@@ -247,27 +311,35 @@ class _ShowcasePageState extends State<ShowcasePage>
               ),
               _Section(
                 title: 'Empty state',
-                child: _Framed(child: EmptyState(
-                  title: 'No sessions yet',
-                  message: 'Connect both wheels and start recording to capture your first trial.',
-                  icon: Icons.sensors_rounded,
-                  actionLabel: 'Scan for devices',
-                  onAction: () {},
-                )),
+                child: _Framed(
+                  child: EmptyState(
+                    title: 'No sessions yet',
+                    message:
+                        'Connect both wheels and start recording to capture your first trial.',
+                    icon: Icons.sensors_rounded,
+                    actionLabel: 'Scan for devices',
+                    onAction: () {},
+                  ),
+                ),
               ),
               const _Section(
                 title: 'Loading state',
                 child: _Framed(
-                  child: LoadingState(message: 'Scanning for WheelAthlete devices…'),
+                  child: LoadingState(
+                    message: 'Scanning for WheelAthlete devices…',
+                  ),
                 ),
               ),
               _Section(
                 title: 'Error state',
-                child: _Framed(child: ErrorState(
-                  title: 'Lost connection',
-                  message: 'The right wheel dropped off. Move closer and retry.',
-                  onRetry: () {},
-                )),
+                child: _Framed(
+                  child: ErrorState(
+                    title: 'Lost connection',
+                    message:
+                        'The right wheel dropped off. Move closer and retry.',
+                    onRetry: () {},
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.xxl),
             ],
@@ -363,9 +435,9 @@ class _ColorRolesPreview extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
                   name,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: role.onContainer,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: role.onContainer),
                 ),
               ],
             ),

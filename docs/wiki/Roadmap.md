@@ -66,24 +66,27 @@
 
 ## Versioning
 
-This project uses a modified semantic versioning scheme:
+This project uses Semantic Versioning for the coordinated app, firmware, and
+BLE contract:
 
 | Version | Meaning |
 |---------|---------|
 | `0.x.y` | Pre-release — feature incomplete, breaking changes possible |
-| `1.0.0` | First stable release — data collection + ML pipeline complete |
-| `1.x.y` | Backward-compatible feature additions |
+| `1.0.0` | First stable data-collection release |
+| `1.x.y` | Backward-compatible features and reliability improvements |
 | `2.0.0` | Breaking changes (data format, BLE protocol, etc.) |
 
-**v0.1.0** = first usable pre-release (data collection only, no ML).
+Machine-learning milestones are tracked as product capabilities and do not
+control the stability version of the data-collection stack.
 
 Independent version tracks:
-- **App:** `1.0.0+1` (Flutter convention: `version+buildNumber`)
-- **Firmware:** `0.2.0` (separate from app; flashed independently)
-- **BLE Protocol:** `1.1.0` (independent of app/firmware; bump on contract changes)
+- **App:** `1.7.0+8` (Flutter convention: `version+buildNumber`)
+- **Firmware:** `1.7.0` (shared by both hardware targets)
+- **BLE Protocol:** `1.7.0` (independent of app/firmware; bump on contract changes)
 
 ## Release history
 
 | Tag | Date | Summary |
 |-----|------|---------|
+| `v1.7.0` | 2026-07-25 | Stable dual-wheel reliability release — firmware 1.7.0, app 1.7.0+8, BLE 1.7.0 |
 | `v0.1.0` | 2026-07-06 | Data Collection MVP (pre-release) — firmware 0.2.0, app 1.0.0+1, BLE 1.1.0 |

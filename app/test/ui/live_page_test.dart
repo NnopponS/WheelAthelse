@@ -101,11 +101,13 @@ void main() {
         const FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
       ],
       infoFor: const {'L1': _leftInfo, 'R1': _rightInfo},
+      autoAcknowledgeControls: true,
     );
   });
 
-  testWidgets('shows both wheel panels with "not connected" when idle',
-      (tester) async {
+  testWidgets('shows both wheel panels with "not connected" when idle', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
 
     expect(find.text('Live IMU'), findsOneWidget);
@@ -113,20 +115,19 @@ void main() {
     expect(find.text('Not connected'), findsNWidgets(2));
   });
 
-  testWidgets('shows Start button disabled when neither wheel is connected',
-      (tester) async {
+  testWidgets('shows Start button disabled when neither wheel is connected', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
 
     final startBtn = find.byKey(LivePage.startButtonKey);
     expect(startBtn, findsOneWidget);
-    expect(
-      tester.widget<FloatingActionButton>(startBtn).onPressed,
-      isNull,
-    );
+    expect(tester.widget<FloatingActionButton>(startBtn).onPressed, isNull);
   });
 
-  testWidgets('Start button enables when at least one wheel is connected',
-      (tester) async {
+  testWidgets('Start button enables when at least one wheel is connected', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
     await container.read(connectionManagerProvider.notifier).connect('L1');
     await tester.pumpAndSettle();
@@ -135,19 +136,22 @@ void main() {
     expect(tester.widget<FloatingActionButton>(startBtn).onPressed, isNotNull);
   });
 
-  testWidgets('tapping Start begins streaming and shows live values for L',
-      (tester) async {
+  testWidgets('tapping Start begins streaming and shows live values for L', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
     await container.read(connectionManagerProvider.notifier).connect('L1');
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(LivePage.startButtonKey));
     await tester.pumpAndSettle();
+    expect(ble.allControlWrites('L1').first.first, 0x01);
 
     // Emit a batch: seq 0, ax=16384 (→ 1.0 g), gx=164 (→ 10 dps).
-    ble.imuController('L1')!.add(_batch([
-      _sample(seq: 0, tDeviceUs: 1000, ax: 16384, gx: 164),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(_batch([_sample(seq: 0, tDeviceUs: 1000, ax: 16384, gx: 164)]));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     // The Left panel should show the ax value (+1.00) and gx value (+10.00).
@@ -157,17 +161,19 @@ void main() {
     expect(find.textContaining('1 sample'), findsWidgets);
   });
 
-  testWidgets('tapping Stop stops streaming and keeps last value visible',
-      (tester) async {
+  testWidgets('tapping Stop stops streaming and keeps last value visible', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
     await container.read(connectionManagerProvider.notifier).connect('L1');
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(LivePage.startButtonKey));
     await tester.pumpAndSettle();
-    ble.imuController('L1')!.add(_batch([
-      _sample(seq: 0, tDeviceUs: 0, ax: 16384),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(_batch([_sample(seq: 0, tDeviceUs: 0, ax: 16384)]));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     expect(find.text('+1.00'), findsWidgets);
 
@@ -179,7 +185,9 @@ void main() {
     expect(find.text('+1.00'), findsWidgets);
   });
 
-  testWidgets('shows drop count badge when seq gap is detected', (tester) async {
+  testWidgets('shows drop count badge when seq gap is detected', (
+    tester,
+  ) async {
     await pumpLivePage(tester);
     await container.read(connectionManagerProvider.notifier).connect('L1');
     await tester.pumpAndSettle();
@@ -190,6 +198,7 @@ void main() {
     ble.imuController('L1')!.add(_batch([_sample(seq: 0, tDeviceUs: 0)]));
     await tester.pumpAndSettle();
     ble.imuController('L1')!.add(_batch([_sample(seq: 5, tDeviceUs: 50)]));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     // Gap of 4 should be surfaced somewhere in the Left panel.
@@ -219,13 +228,14 @@ void main() {
     await tester.tap(find.byKey(LivePage.startButtonKey));
     await tester.pumpAndSettle();
 
-    ble.imuController('L1')!.add(_batch([
-      _sample(seq: 0, tDeviceUs: 0, ax: 16384),
-    ]));
+    ble
+        .imuController('L1')!
+        .add(_batch([_sample(seq: 0, tDeviceUs: 0, ax: 16384)]));
     await tester.pump();
-    ble.imuController('R1')!.add(_batch([
-      _sample(seq: 0, tDeviceUs: 0, az: 16384),
-    ]));
+    ble
+        .imuController('R1')!
+        .add(_batch([_sample(seq: 0, tDeviceUs: 0, az: 16384)]));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     // Both ax (L) and az (R) should show +1.00 — exactly 2 occurrences.

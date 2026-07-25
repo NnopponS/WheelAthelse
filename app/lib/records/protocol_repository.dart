@@ -62,9 +62,9 @@ class PathProviderProtocolRepository implements ProtocolRepository {
 
   Future<void> _write(List<ProtocolTemplate> templates) async {
     final file = await _file();
-    file.writeAsStringSync(jsonEncode({
-      'templates': templates.map((t) => t.toJson()).toList(),
-    }));
+    file.writeAsStringSync(
+      jsonEncode({'templates': templates.map((t) => t.toJson()).toList()}),
+    );
   }
 
   @override

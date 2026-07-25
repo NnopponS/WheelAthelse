@@ -1,6 +1,6 @@
 # WheelAthlete Wiki
 
-**v0.1.0** (pre-release)
+**v1.7.0** (stable data collection)
 
 ## Pages
 
@@ -20,10 +20,10 @@
 - [README (EN)](../README.md)
 - [README (TH)](../README.th.md)
 - [BLE protocol spec](../ble-protocol.md)
-- [Release v0.1.0](https://github.com/NnopponS/WheelAthelse/releases/tag/v0.1.0)
+- [Release v1.7.0](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.7.0)
 
 ## Versions
 
-- App: `1.0.0+1`
-- Firmware: `0.2.0`
-- BLE: `1.1.0`
+- App: `1.7.0+8`
+- Firmware: `1.7.0`
+- BLE: `1.7.0`

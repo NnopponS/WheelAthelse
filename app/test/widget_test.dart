@@ -20,7 +20,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),
@@ -33,12 +35,15 @@ void main() {
     expect(find.text('WheelAthlete UI'), findsNothing);
   });
 
-  testWidgets('NavigationBar has Connect / Live / Browse destinations',
-      (tester) async {
+  testWidgets('NavigationBar has Connect / Live / Browse destinations', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),
@@ -54,7 +59,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),
@@ -71,7 +78,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),
@@ -86,12 +95,15 @@ void main() {
     expect(find.text('Browse'), findsWidgets);
   });
 
-  testWidgets('theme toggle popup opens with System/Light/Dark options',
-      (tester) async {
+  testWidgets('theme toggle popup opens with System/Light/Dark options', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),
@@ -106,7 +118,9 @@ void main() {
     expect(find.text('Dark'), findsWidgets);
   });
 
-  testWidgets('main() entry: WheelAthleteApp renders real home', (tester) async {
+  testWidgets('main() entry: WheelAthleteApp renders real home', (
+    tester,
+  ) async {
     // Verify the WheelAthleteApp widget (the app root) renders the real home,
     // without calling main() directly (runApp in test context causes an
     // AnimationController assertion when the scheduler's fake clock interacts
@@ -114,7 +128,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          bleRepositoryProvider.overrideWith((_) => FakeBleRepository(devices: const [])),
+          bleRepositoryProvider.overrideWith(
+            (_) => FakeBleRepository(devices: const []),
+          ),
         ],
         child: const app_entry.WheelAthleteApp(),
       ),

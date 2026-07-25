@@ -44,6 +44,13 @@ Uint8List _startFiredEvent(int tDeviceUs) {
   return Uint8List.fromList([0x30, ...inner.buffer.asUint8List()]);
 }
 
+Uint8List _imuBatch({required int seq, required int tDeviceUs}) {
+  final sample = ByteData(20)
+    ..setUint32(0, seq, Endian.little)
+    ..setUint32(4, tDeviceUs, Endian.little);
+  return Uint8List.fromList([1, ...sample.buffer.asUint8List()]);
+}
+
 void main() {
   late FakeBleRepository ble;
   late InMemoryStorageRepository storage;
@@ -94,6 +101,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  void emitBothSamples({int seq = 0}) {
+    ble
+        .imuController('L1')
+        ?.add(_imuBatch(seq: seq, tDeviceUs: 1010000 + seq * 10000));
+    ble
+        .imuController('R1')
+        ?.add(_imuBatch(seq: seq, tDeviceUs: 1010500 + seq * 10000));
+  }
+
   group('RecordPage', () {
     testWidgets('shows topic picker + start button when idle', (tester) async {
       await pumpPage(tester);
@@ -108,8 +124,9 @@ void main() {
       expect(find.text('trial_01'), findsOneWidget);
     });
 
-    testWidgets('shows new topic button + dialog to create topic',
-        (tester) async {
+    testWidgets('shows new topic button + dialog to create topic', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.byIcon(Icons.create_new_folder_rounded));
       await tester.pumpAndSettle();
@@ -148,8 +165,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('countdown transitions to recording on START_FIRED',
-        (tester) async {
+    testWidgets('countdown transitions to recording on START_FIRED', (
+      tester,
+    ) async {
       await pumpPage(tester);
       // Drive the countdown + START_FIRED inside runAsync (real event loop).
       await tester.runAsync(() async {
@@ -162,6 +180,7 @@ void main() {
         // Inject START_FIRED from both wheels to trigger recording.
         ble.syncController('L1')?.add(_startFiredEvent(1000000));
         ble.syncController('R1')?.add(_startFiredEvent(1000500));
+        emitBothSamples();
         // Allow the stream listeners + recording start to process.
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
@@ -200,8 +219,9 @@ void main() {
     // The following tests exercise the recording-state UI by driving the
     // RecordingNotifier directly (bypassing the countdown) so the UI under
     // test is stable without real timers.
-    testWidgets('shows stop button while recording (no MARK button)',
-        (tester) async {
+    testWidgets('shows stop button while recording (no MARK button)', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.runAsync(() async {
         const config = SessionConfig(
@@ -210,6 +230,7 @@ void main() {
           sampleRateHz: 100,
         );
         await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
       });
       await tester.pumpAndSettle();
 
@@ -219,8 +240,9 @@ void main() {
       expect(find.byIcon(Icons.flag_rounded), findsNothing);
     });
 
-    testWidgets('tapping stop button stops recording + shows saved message',
-        (tester) async {
+    testWidgets('stop button is fixed outside the scrolling recording body', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.runAsync(() async {
         const config = SessionConfig(
@@ -229,6 +251,30 @@ void main() {
           sampleRateHz: 100,
         );
         await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
+      });
+      await tester.pumpAndSettle();
+
+      final stop = find.text('Stop Recording');
+      expect(stop, findsOneWidget);
+      expect(
+        find.ancestor(of: stop, matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+      );
+    });
+
+    testWidgets('tapping stop button stops recording + shows saved message', (
+      tester,
+    ) async {
+      await pumpPage(tester);
+      await tester.runAsync(() async {
+        const config = SessionConfig(
+          topic: 'sprint_test',
+          trialNumber: 1,
+          sampleRateHz: 100,
+        );
+        await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
       });
       await tester.pumpAndSettle();
 
@@ -252,6 +298,7 @@ void main() {
           sampleRateHz: 100,
         );
         await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
       });
       await tester.pumpAndSettle();
 
@@ -259,7 +306,9 @@ void main() {
       expect(find.text('0 samples'), findsOneWidget);
     });
 
-    testWidgets('shows live IMU preview panels while recording', (tester) async {
+    testWidgets('shows live IMU preview panels while recording', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.runAsync(() async {
         const config = SessionConfig(
@@ -288,6 +337,7 @@ void main() {
           sampleRateHz: 100,
         );
         await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
       });
       await tester.pumpAndSettle();
       await tester.runAsync(
@@ -307,6 +357,7 @@ void main() {
           sampleRateHz: 100,
         );
         await container.read(recordingProvider.notifier).startRecording(config);
+        emitBothSamples();
       });
       await tester.pumpAndSettle();
       await tester.runAsync(
@@ -322,8 +373,9 @@ void main() {
 
     // ── Protocol template picker (Phase 3, subtask #23) ────────────────────
     group('template picker', () {
-      testWidgets('idle view shows Custom chip + template chips',
-          (tester) async {
+      testWidgets('idle view shows Custom chip + template chips', (
+        tester,
+      ) async {
         await protocolRepo.createTemplate(
           name: 'Sprint Test',
           topicName: 'sprint_test',
@@ -338,19 +390,22 @@ void main() {
         expect(find.text('Sprint Test'), findsOneWidget);
       });
 
-      testWidgets('Custom chip is selected by default and shows topic dropdown',
-          (tester) async {
-        await pumpPage(tester);
-        // Custom is selected → topic dropdown ("Select topic" hint or the
-        // seeded topic) is visible.
-        expect(find.text('Custom'), findsOneWidget);
-        expect(find.text('sprint_test'), findsWidgets);
-        // Topic label is shown in Custom mode.
-        expect(find.text('Topic'), findsOneWidget);
-      });
+      testWidgets(
+        'Custom chip is selected by default and shows topic dropdown',
+        (tester) async {
+          await pumpPage(tester);
+          // Custom is selected → topic dropdown ("Select topic" hint or the
+          // seeded topic) is visible.
+          expect(find.text('Custom'), findsOneWidget);
+          expect(find.text('sprint_test'), findsWidgets);
+          // Topic label is shown in Custom mode.
+          expect(find.text('Topic'), findsOneWidget);
+        },
+      );
 
-      testWidgets('tapping a template chip selects it + fills topic + trial',
-          (tester) async {
+      testWidgets('tapping a template chip selects it + fills topic + trial', (
+        tester,
+      ) async {
         await protocolRepo.createTemplate(
           name: 'Balance Test',
           topicName: 'balance_test',
@@ -375,8 +430,9 @@ void main() {
         expect(topics.any((t) => t.name == 'balance_test'), isTrue);
       });
 
-      testWidgets('tapping Custom after a template restores topic dropdown',
-          (tester) async {
+      testWidgets('tapping Custom after a template restores topic dropdown', (
+        tester,
+      ) async {
         await protocolRepo.createTemplate(
           name: 'Balance Test',
           topicName: 'balance_test',
@@ -410,6 +466,7 @@ void main() {
             await container
                 .read(recordingProvider.notifier)
                 .startRecording(config);
+            emitBothSamples();
           });
           await tester.pumpAndSettle();
           await tester.runAsync(
@@ -427,8 +484,9 @@ void main() {
           expect(find.text('Preview'), findsOneWidget);
         });
 
-        testWidgets('tapping Preview opens the session preview page',
-            (tester) async {
+        testWidgets('tapping Preview opens the session preview page', (
+          tester,
+        ) async {
           await pumpStopped(tester);
           await tester.tap(find.text('Preview'));
           await tester.pumpAndSettle();
@@ -438,8 +496,9 @@ void main() {
           expect(find.text('Accelerometer (g)'), findsOneWidget);
         });
 
-        testWidgets('tapping Re-record starts countdown with next trial number',
-            (tester) async {
+        testWidgets('tapping Re-record starts countdown with next trial number', (
+          tester,
+        ) async {
           await pumpStopped(tester);
           // After stopping trial 1, next trial number is 2. Tap Re-record and
           // drive the countdown to completion by injecting START_FIRED events.
@@ -454,6 +513,7 @@ void main() {
             // Inject START_FIRED from both wheels to trigger recording.
             ble.syncController('L1')?.add(_startFiredEvent(1000000));
             ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            emitBothSamples();
             await Future<void>.delayed(const Duration(milliseconds: 50));
           });
           await tester.pumpAndSettle();
@@ -472,8 +532,9 @@ void main() {
           await tester.pumpAndSettle();
         });
 
-        testWidgets('Re-record carries over protocolTemplateId',
-            (tester) async {
+        testWidgets('Re-record carries over protocolTemplateId', (
+          tester,
+        ) async {
           final template = await protocolRepo.createTemplate(
             name: 'Sprint Test',
             topicName: 'sprint_test',
@@ -498,6 +559,7 @@ void main() {
             }
             ble.syncController('L1')?.add(_startFiredEvent(1000000));
             ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            emitBothSamples();
             await Future<void>.delayed(const Duration(milliseconds: 50));
           });
           await tester.pumpAndSettle();
@@ -513,59 +575,67 @@ void main() {
           await tester.pumpAndSettle();
         });
 
-        testWidgets('Re-record is disabled when no wheels are connected',
-            (tester) async {
-          // Disconnect both wheels.
+        testWidgets('Re-record is disabled when no wheels are connected', (
+          tester,
+        ) async {
+          await pumpStopped(tester);
+          // Disconnect both wheels after producing the saved session.
           await container
               .read(connectionManagerProvider.notifier)
               .disconnect(WheelSide.left);
           await container
               .read(connectionManagerProvider.notifier)
               .disconnect(WheelSide.right);
-          await pumpStopped(tester);
+          await tester.pumpAndSettle();
 
           // The Re-record button (a PrimaryActionButton / FilledButton) should
           // be disabled — find it by label and check its onPressed is null.
           final button = tester.widget<FilledButton>(
-            find.ancestor(
-              of: find.text('Re-record'),
-              matching: find.byType(FilledButton),
-            ).first,
+            find
+                .ancestor(
+                  of: find.text('Re-record'),
+                  matching: find.byType(FilledButton),
+                )
+                .first,
           );
           expect(button.onPressed, isNull);
         });
       });
 
-      testWidgets('SessionConfig carries protocolTemplateId when template used',
-          (tester) async {
-        final template = await protocolRepo.createTemplate(
-          name: 'Sprint Test',
-          topicName: 'sprint_test',
-          targetTrialCount: 5,
-          sampleRateHz: 200,
-        );
-        await pumpPage(tester);
+      testWidgets(
+        'SessionConfig carries protocolTemplateId when template used',
+        (tester) async {
+          final template = await protocolRepo.createTemplate(
+            name: 'Sprint Test',
+            topicName: 'sprint_test',
+            targetTrialCount: 5,
+            sampleRateHz: 200,
+          );
+          await pumpPage(tester);
 
-        // Tap the template chip then start recording.
-        await tester.tap(find.text('Sprint Test'));
-        await tester.pumpAndSettle();
-        await tester.runAsync(() async {
-          await container.read(recordingProvider.notifier).startRecording(
-                    SessionConfig(
-                      topic: 'sprint_test',
-                      trialNumber: 1,
-                      sampleRateHz: 200,
-                      protocolTemplateId: template.id,
-                    ),
-                  );
-        });
-        await tester.pumpAndSettle();
+          // Tap the template chip then start recording.
+          await tester.tap(find.text('Sprint Test'));
+          await tester.pumpAndSettle();
+          await tester.runAsync(() async {
+            await container
+                .read(recordingProvider.notifier)
+                .startRecording(
+                  SessionConfig(
+                    topic: 'sprint_test',
+                    trialNumber: 1,
+                    sampleRateHz: 200,
+                    protocolTemplateId: template.id,
+                  ),
+                );
+          });
+          await tester.pumpAndSettle();
 
-        final state = container.read(recordingProvider);
-        expect(state.status, RecordingStatus.recording);
-        expect(state.config?.protocolTemplateId, template.id);
-        expect(state.config?.sampleRateHz, 200);
-      });
+          final state = container.read(recordingProvider);
+          expect(state.status, RecordingStatus.recording);
+          expect(state.config?.protocolTemplateId, template.id);
+          expect(state.config?.sampleRateHz, 200);
+        },
+      );
     });
   });
 }

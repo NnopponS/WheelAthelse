@@ -5,22 +5,20 @@ import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/imu_chart.dart';
 
 ImuReading _r(int seq, int tUs, {double ax = 0}) => ImuReading(
-      seq: seq,
-      tDeviceUs: tUs,
-      ax: ax,
-      ay: 0,
-      az: 0,
-      gx: 0,
-      gy: 0,
-      gz: 0,
-    );
+  seq: seq,
+  tDeviceUs: tUs,
+  ax: ax,
+  ay: 0,
+  az: 0,
+  gx: 0,
+  gy: 0,
+  gz: 0,
+);
 
 void main() {
   group('ImuChartBuffer.cap', () {
     test('keeps the last N readings when over the cap', () {
-      final readings = [
-        for (var i = 0; i < 10; i++) _r(i, i * 1000),
-      ];
+      final readings = [for (var i = 0; i < 10; i++) _r(i, i * 1000)];
       final capped = ImuChartBuffer.cap(readings, 5);
       expect(capped.length, 5);
       expect(capped.first.seq, 5);
@@ -56,11 +54,7 @@ void main() {
     });
 
     test('keeps all readings when all within the window', () {
-      final readings = [
-        _r(0, 0),
-        _r(1, 1000000),
-        _r(2, 2000000),
-      ];
+      final readings = [_r(0, 0), _r(1, 1000000), _r(2, 2000000)];
       final trimmed = ImuChartBuffer.trimToWindowMs(readings, 5000000);
       expect(trimmed.length, 3);
     });
@@ -90,9 +84,7 @@ void main() {
     });
 
     test('always includes the last reading', () {
-      final readings = [
-        for (var i = 0; i < 50; i++) _r(i, i * 1000),
-      ];
+      final readings = [for (var i = 0; i < 50; i++) _r(i, i * 1000)];
       final out = ImuChartBuffer.decimate(readings, 10);
       expect(out.last.seq, 49);
     });
@@ -119,16 +111,29 @@ void main() {
 
   group('ImuChartBuffer.toGyroSpots', () {
     test('maps readings to FlSpot(x=relativeMs, y=gx)', () {
-      final readings = [
-        _r(0, 0),
-        _r(1, 20000),
-      ];
+      final readings = [_r(0, 0), _r(1, 20000)];
       // Override gyroscope via a custom reading.
       final r = [
         const ImuReading(
-            seq: 0, tDeviceUs: 0, ax: 0, ay: 0, az: 0, gx: 5, gy: 0, gz: 0),
+          seq: 0,
+          tDeviceUs: 0,
+          ax: 0,
+          ay: 0,
+          az: 0,
+          gx: 5,
+          gy: 0,
+          gz: 0,
+        ),
         const ImuReading(
-            seq: 1, tDeviceUs: 20000, ax: 0, ay: 0, az: 0, gx: 7, gy: 0, gz: 0),
+          seq: 1,
+          tDeviceUs: 20000,
+          ax: 0,
+          ay: 0,
+          az: 0,
+          gx: 7,
+          gy: 0,
+          gz: 0,
+        ),
       ];
       final spots = ImuChartBuffer.toGyroSpots(r);
       expect(spots.length, 2);
@@ -141,8 +146,9 @@ void main() {
   });
 
   group('ImuChart widget', () {
-    testWidgets('renders with mock data without pumpAndSettle timeout',
-        (tester) async {
+    testWidgets('renders with mock data without pumpAndSettle timeout', (
+      tester,
+    ) async {
       final readings = [
         for (var i = 0; i < 60; i++)
           ImuReading(
@@ -178,8 +184,9 @@ void main() {
       // No exception thrown → renders with mock data.
     });
 
-    testWidgets('renders gyro chart with empty readings without crashing',
-        (tester) async {
+    testWidgets('renders gyro chart with empty readings without crashing', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),

@@ -39,11 +39,7 @@ void main() {
     });
 
     test('trial folder name is zero-padded to 2 digits', () {
-      const cfg1 = SessionConfig(
-        topic: 'x',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      );
+      const cfg1 = SessionConfig(topic: 'x', trialNumber: 1, sampleRateHz: 100);
       expect(cfg1.trialFolderName, 'trial_01');
 
       const cfg10 = SessionConfig(
@@ -55,11 +51,7 @@ void main() {
     });
 
     test('session id is timestamp-based and unique-ish', () {
-      const cfg = SessionConfig(
-        topic: 'x',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      );
+      const cfg = SessionConfig(topic: 'x', trialNumber: 1, sampleRateHz: 100);
       final id = cfg.sessionId;
       expect(id, isNotEmpty);
       // Should be a hex timestamp or similar — just check it's a valid string.
@@ -68,6 +60,37 @@ void main() {
   });
 
   group('SessionMeta', () {
+    test('reliability metadata roundtrips', () {
+      final meta = SessionMeta(
+        sessionId: 'v12',
+        topic: 'sprint',
+        trialNumber: 1,
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 7, 11),
+        durationMs: 1000,
+        sampleCount: 10,
+        markerCount: 0,
+        recordedSides: const ['L', 'R'],
+        boardModels: const {'L': 'M5', 'R': 'XIAO'},
+        firmwareVersions: const {'L': '1.2.0', 'R': '1.2.0'},
+        sequenceGaps: const {'L': 0, 'R': 2},
+        dropCounts: const {'L': 0, 'R': 1},
+        sampleQueueDrops: const {'L': 0, 'R': 1},
+        imuFifoFaults: const {'L': 0, 'R': 2},
+        imuFifoDroppedSamples: const {'L': 0, 'R': 3},
+        schemaVersion: 2,
+        protocolVersion: '1.2.0',
+        startDeltaUs: 500,
+      );
+      final restored = SessionMeta.fromJson(meta.toJson());
+      expect(restored.recordedSides, ['L', 'R']);
+      expect(restored.boardModels['R'], 'XIAO');
+      expect(restored.protocolVersion, '1.2.0');
+      expect(restored.startDeltaUs, 500);
+      expect(restored.sampleQueueDrops['R'], 1);
+      expect(restored.imuFifoFaults['R'], 2);
+      expect(restored.imuFifoDroppedSamples['R'], 3);
+    });
     test('serializes to JSON with all fields', () {
       final meta = SessionMeta(
         sessionId: 'abc123',
@@ -138,7 +161,10 @@ void main() {
       expect(restored.offsetUsLeft, original.offsetUsLeft);
       expect(restored.offsetUsRight, original.offsetUsRight);
       expect(restored.driftResidualRmsMsLeft, original.driftResidualRmsMsLeft);
-      expect(restored.driftResidualRmsMsRight, original.driftResidualRmsMsRight);
+      expect(
+        restored.driftResidualRmsMsRight,
+        original.driftResidualRmsMsRight,
+      );
       expect(restored.notes, original.notes);
       expect(restored.videoFileName, original.videoFileName);
     });
@@ -231,21 +257,23 @@ void main() {
       expect(restored.protocolTemplateId, 'tpl-1');
     });
 
-    test('old session JSON without tags/protocolTemplateId defaults correctly',
-        () {
-      final meta = SessionMeta.fromJson({
-        'session_id': 's1',
-        'topic': 't',
-        'trial_number': 1,
-        'sample_rate_hz': 100,
-        'start_time': '2026-06-29T10:30:00.000Z',
-        'duration_ms': 0,
-        'sample_count': 0,
-        'marker_count': 0,
-      });
-      expect(meta.tags, isEmpty);
-      expect(meta.protocolTemplateId, isNull);
-    });
+    test(
+      'old session JSON without tags/protocolTemplateId defaults correctly',
+      () {
+        final meta = SessionMeta.fromJson({
+          'session_id': 's1',
+          'topic': 't',
+          'trial_number': 1,
+          'sample_rate_hz': 100,
+          'start_time': '2026-06-29T10:30:00.000Z',
+          'duration_ms': 0,
+          'sample_count': 0,
+          'marker_count': 0,
+        });
+        expect(meta.tags, isEmpty);
+        expect(meta.protocolTemplateId, isNull);
+      },
+    );
   });
 
   group('BufferedSample', () {

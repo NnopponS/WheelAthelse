@@ -38,9 +38,9 @@ class PrimaryActionButton extends StatelessWidget {
       ActionIntent.start => (wc.success.solid, wc.success.on),
       ActionIntent.stop => (wc.danger.solid, wc.danger.on),
       ActionIntent.neutral => (
-          theme.colorScheme.primary,
-          theme.colorScheme.onPrimary,
-        ),
+        theme.colorScheme.primary,
+        theme.colorScheme.onPrimary,
+      ),
     };
 
     return SizedBox(

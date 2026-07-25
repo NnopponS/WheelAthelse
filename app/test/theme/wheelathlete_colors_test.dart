@@ -7,18 +7,24 @@ import 'package:wheelathlete/theme/WheelAthlete_colors.dart';
 void main() {
   group('WheelAthleteColors.forWheel', () {
     test('returns the left role for the left wheel', () {
-      expect(WheelAthleteColors.light.forWheel(WheelSide.left),
-          same(WheelAthleteColors.light.left));
+      expect(
+        WheelAthleteColors.light.forWheel(WheelSide.left),
+        same(WheelAthleteColors.light.left),
+      );
     });
 
     test('returns the right role for the right wheel', () {
-      expect(WheelAthleteColors.light.forWheel(WheelSide.right),
-          same(WheelAthleteColors.light.right));
+      expect(
+        WheelAthleteColors.light.forWheel(WheelSide.right),
+        same(WheelAthleteColors.light.right),
+      );
     });
 
     test('left and right solids are visibly distinct', () {
-      expect(WheelAthleteColors.light.left.solid,
-          isNot(equals(WheelAthleteColors.light.right.solid)));
+      expect(
+        WheelAthleteColors.light.left.solid,
+        isNot(equals(WheelAthleteColors.light.right.solid)),
+      );
     });
   });
 
@@ -36,7 +42,10 @@ void main() {
     });
 
     test('returns this when other is not a WheelAthleteColors', () {
-      expect(WheelAthleteColors.light.lerp(null, 0.5), WheelAthleteColors.light);
+      expect(
+        WheelAthleteColors.light.lerp(null, 0.5),
+        WheelAthleteColors.light,
+      );
     });
   });
 

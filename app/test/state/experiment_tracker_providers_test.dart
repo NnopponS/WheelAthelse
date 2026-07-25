@@ -14,32 +14,30 @@ void main() {
     required int trial,
     required DateTime start,
     String? templateId,
-  }) =>
-      SessionMeta(
-        sessionId: '${topic}_${start.millisecondsSinceEpoch.toRadixString(16)}',
-        topic: topic,
-        trialNumber: trial,
-        sampleRateHz: 100,
-        startTime: start,
-        durationMs: 1000,
-        sampleCount: 100,
-        markerCount: 0,
-        protocolTemplateId: templateId,
-      );
+  }) => SessionMeta(
+    sessionId: '${topic}_${start.millisecondsSinceEpoch.toRadixString(16)}',
+    topic: topic,
+    trialNumber: trial,
+    sampleRateHz: 100,
+    startTime: start,
+    durationMs: 1000,
+    sampleCount: 100,
+    markerCount: 0,
+    protocolTemplateId: templateId,
+  );
 
   ProtocolTemplate makeTemplate({
     required String id,
     required String name,
     required String topic,
     required int target,
-  }) =>
-      ProtocolTemplate(
-        id: id,
-        name: name,
-        topicName: topic,
-        targetTrialCount: target,
-        createdAt: DateTime(2026, 1, 1),
-      );
+  }) => ProtocolTemplate(
+    id: id,
+    name: name,
+    topicName: topic,
+    targetTrialCount: target,
+    createdAt: DateTime(2026, 1, 1),
+  );
 
   group('computeExperimentProgress', () {
     test('empty when no templates', () {
@@ -48,7 +46,12 @@ void main() {
     });
 
     test('template with no sessions has zero count and null date', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 5,
+      );
       final result = computeExperimentProgress([t], []);
       expect(result.length, 1);
       expect(result.first.template.id, 't1');
@@ -59,58 +62,81 @@ void main() {
     });
 
     test('counts sessions per template by protocolTemplateId', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 5,
+      );
       final sessions = [
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 1),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 1),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 2),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 2),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'other',
-            trial: 1,
-            start: DateTime(2026, 6, 3),
-            templateId: 't2'),
+          topic: 'other',
+          trial: 1,
+          start: DateTime(2026, 6, 3),
+          templateId: 't2',
+        ),
       ];
       final result = computeExperimentProgress([t], sessions);
       expect(result.first.sessionCount, 2);
     });
 
-    test('falls back to topicName matching when protocolTemplateId is null',
-        () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
-      final sessions = [
-        makeMeta(topic: 'sprint', trial: 1, start: DateTime(2026, 6, 1)),
-        makeMeta(topic: 'sprint', trial: 2, start: DateTime(2026, 6, 2)),
-        makeMeta(topic: 'other', trial: 1, start: DateTime(2026, 6, 3)),
-      ];
-      final result = computeExperimentProgress([t], sessions);
-      expect(result.first.sessionCount, 2);
-    });
+    test(
+      'falls back to topicName matching when protocolTemplateId is null',
+      () {
+        final t = makeTemplate(
+          id: 't1',
+          name: 'Sprint',
+          topic: 'sprint',
+          target: 5,
+        );
+        final sessions = [
+          makeMeta(topic: 'sprint', trial: 1, start: DateTime(2026, 6, 1)),
+          makeMeta(topic: 'sprint', trial: 2, start: DateTime(2026, 6, 2)),
+          makeMeta(topic: 'other', trial: 1, start: DateTime(2026, 6, 3)),
+        ];
+        final result = computeExperimentProgress([t], sessions);
+        expect(result.first.sessionCount, 2);
+      },
+    );
 
     test('computes progress fraction clamped to 1.0', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 5,
+      );
       final sessions = [
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 1),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 1),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 2,
-            start: DateTime(2026, 6, 2),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 2,
+          start: DateTime(2026, 6, 2),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 3,
-            start: DateTime(2026, 6, 3),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 3,
+          start: DateTime(2026, 6, 3),
+          templateId: 't1',
+        ),
       ];
       final result = computeExperimentProgress([t], sessions);
       // 3/5 = 0.6
@@ -119,23 +145,31 @@ void main() {
     });
 
     test('clamps progress to 1.0 when sessions exceed target', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 2);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 2,
+      );
       final sessions = [
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 1),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 1),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 2,
-            start: DateTime(2026, 6, 2),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 2,
+          start: DateTime(2026, 6, 2),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 3,
-            start: DateTime(2026, 6, 3),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 3,
+          start: DateTime(2026, 6, 3),
+          templateId: 't1',
+        ),
       ];
       final result = computeExperimentProgress([t], sessions);
       expect(result.first.progress, 1.0);
@@ -143,23 +177,31 @@ void main() {
     });
 
     test('lastSessionDate is the most recent session start', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 5,
+      );
       final sessions = [
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 3),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 3),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 2,
-            start: DateTime(2026, 6, 1),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 2,
+          start: DateTime(2026, 6, 1),
+          templateId: 't1',
+        ),
         makeMeta(
-            topic: 'sprint',
-            trial: 3,
-            start: DateTime(2026, 6, 2),
-            templateId: 't1'),
+          topic: 'sprint',
+          trial: 3,
+          start: DateTime(2026, 6, 2),
+          templateId: 't1',
+        ),
       ];
       final result = computeExperimentProgress([t], sessions);
       expect(result.first.lastSessionDate, DateTime(2026, 6, 3));
@@ -173,13 +215,19 @@ void main() {
     });
 
     test('sessions with unknown template id are ignored', () {
-      final t = makeTemplate(id: 't1', name: 'Sprint', topic: 'sprint', target: 5);
+      final t = makeTemplate(
+        id: 't1',
+        name: 'Sprint',
+        topic: 'sprint',
+        target: 5,
+      );
       final sessions = [
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 1),
-            templateId: 'unknown'),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 1),
+          templateId: 'unknown',
+        ),
       ];
       final result = computeExperimentProgress([t], sessions);
       expect(result.first.sessionCount, 0);
@@ -194,10 +242,12 @@ void main() {
     setUp(() {
       protocolRepo = InMemoryProtocolRepository();
       storageRepo = InMemoryStorageRepository();
-      container = ProviderContainer(overrides: [
-        protocolRepositoryProvider.overrideWith((ref) => protocolRepo),
-        storageRepositoryProvider.overrideWith((ref) => storageRepo),
-      ]);
+      container = ProviderContainer(
+        overrides: [
+          protocolRepositoryProvider.overrideWith((ref) => protocolRepo),
+          storageRepositoryProvider.overrideWith((ref) => storageRepo),
+        ],
+      );
       addTearDown(container.dispose);
     });
 
@@ -215,19 +265,21 @@ void main() {
       await storageRepo.saveSession(
         'sprint',
         makeMeta(
-            topic: 'sprint',
-            trial: 1,
-            start: DateTime(2026, 6, 1),
-            templateId: t.id),
+          topic: 'sprint',
+          trial: 1,
+          start: DateTime(2026, 6, 1),
+          templateId: t.id,
+        ),
         const [],
       );
       await storageRepo.saveSession(
         'sprint',
         makeMeta(
-            topic: 'sprint',
-            trial: 2,
-            start: DateTime(2026, 6, 2),
-            templateId: t.id),
+          topic: 'sprint',
+          trial: 2,
+          start: DateTime(2026, 6, 2),
+          templateId: t.id,
+        ),
         const [],
       );
       final result = await container.read(experimentProgressProvider.future);

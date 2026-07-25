@@ -62,95 +62,95 @@ class ConnectionCard extends StatelessWidget {
         onTap: onTap,
         child: IntrinsicHeight(
           child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Wheel-identity accent rail.
-            Container(width: 6, color: role.solid),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _WheelGlyph(side: side, role: role),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${side.label} wheel',
-                                style: theme.textTheme.titleMedium,
-                              ),
-                              Text(
-                                deviceName ?? 'No device',
-                                style: theme.textTheme.bodySmall,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        _StatusBadge(status: status),
-                        if (connected && onSettings != null) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          IconButton(
-                            tooltip: 'Board settings',
-                            iconSize: 20,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Wheel-identity accent rail.
+              Container(width: 6, color: role.solid),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _WheelGlyph(side: side, role: role),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${side.label} wheel',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                Text(
+                                  deviceName ?? 'No device',
+                                  style: theme.textTheme.bodySmall,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            onPressed: onSettings,
-                            icon: const Icon(Icons.settings_rounded),
+                          ),
+                          _StatusBadge(status: status),
+                          if (connected && onSettings != null) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            IconButton(
+                              tooltip: 'Board settings',
+                              iconSize: 20,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              onPressed: onSettings,
+                              icon: const Icon(Icons.settings_rounded),
+                            ),
+                          ],
+                          if (connected && onDisconnect != null) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            IconButton(
+                              tooltip: 'Disconnect',
+                              iconSize: 20,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              onPressed: onDisconnect,
+                              icon: const Icon(Icons.link_off_rounded),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          _Telemetry(
+                            icon: _batteryIcon(batteryPercent),
+                            value: batteryPercent == null
+                                ? '--'
+                                : '$batteryPercent%',
+                            color: _batteryColor(context, batteryPercent),
+                            enabled: connected && batteryPercent != null,
+                          ),
+                          const SizedBox(width: AppSpacing.lg),
+                          _Telemetry(
+                            icon: Icons.wifi_tethering_rounded,
+                            value: rssi == null ? '--' : '$rssi dBm',
+                            color: scheme.onSurfaceVariant,
+                            enabled: connected && rssi != null,
                           ),
                         ],
-                        if (connected && onDisconnect != null) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          IconButton(
-                            tooltip: 'Disconnect',
-                            iconSize: 20,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
-                            ),
-                            onPressed: onDisconnect,
-                            icon: const Icon(Icons.link_off_rounded),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        _Telemetry(
-                          icon: _batteryIcon(batteryPercent),
-                          value: batteryPercent == null
-                              ? '--'
-                              : '$batteryPercent%',
-                          color: _batteryColor(context, batteryPercent),
-                          enabled: connected && batteryPercent != null,
-                        ),
-                        const SizedBox(width: AppSpacing.lg),
-                        _Telemetry(
-                          icon: Icons.wifi_tethering_rounded,
-                          value: rssi == null ? '--' : '$rssi dBm',
-                          color: scheme.onSurfaceVariant,
-                          enabled: connected && rssi != null,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
           ),
         ),
       ),
@@ -194,9 +194,9 @@ class _WheelGlyph extends StatelessWidget {
       child: Text(
         side.shortLabel,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: role.onContainer,
-              fontWeight: FontWeight.w800,
-            ),
+          color: role.onContainer,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -210,9 +210,15 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (tone, icon) = switch (status) {
-      ConnectionStatus.connected => (BadgeTone.success, Icons.check_circle_rounded),
+      ConnectionStatus.connected => (
+        BadgeTone.success,
+        Icons.check_circle_rounded,
+      ),
       ConnectionStatus.connecting => (BadgeTone.warning, Icons.sync_rounded),
-      ConnectionStatus.disconnected => (BadgeTone.neutral, Icons.cloud_off_rounded),
+      ConnectionStatus.disconnected => (
+        BadgeTone.neutral,
+        Icons.cloud_off_rounded,
+      ),
     };
     return StatusBadge(label: status.label, tone: tone, icon: icon);
   }

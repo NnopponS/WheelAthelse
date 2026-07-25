@@ -33,6 +33,31 @@ void main() {
       return bytes;
     }
 
+    List<int> v16ConfigBytes({
+      String name = 'WheelAthlete-L',
+      int wheelByte = 0x4C,
+      int rateHz = 100,
+      int fwMajor = 1,
+      int fwMinor = 6,
+      int fwPatch = 0,
+      bool beepEnabled = true,
+    }) {
+      final bytes = List<int>.filled(31, 0);
+      final nameBytes = name.codeUnits;
+      for (var i = 0; i < nameBytes.length && i < 24; i++) {
+        bytes[i] = nameBytes[i] & 0xFF;
+      }
+      bytes[24] = wheelByte;
+      final b = ByteData(2)..setUint16(0, rateHz, Endian.little);
+      bytes[25] = b.getUint8(0);
+      bytes[26] = b.getUint8(1);
+      bytes[27] = fwMajor;
+      bytes[28] = fwMinor;
+      bytes[29] = fwPatch;
+      bytes[30] = beepEnabled ? 1 : 0;
+      return bytes;
+    }
+
     test('parses a valid 22-byte Config payload', () {
       final config = BoardConfig.parse(configBytes());
       expect(config.name, 'WheelAthlete-L');
@@ -42,14 +67,31 @@ void main() {
       expect(config.fwMinor, 1);
       expect(config.fwPatch, 0);
       expect(config.fwVersion, '1.1.0');
+      expect(config.beepEnabled, isTrue);
+    });
+
+    test('parses v1.6 31-byte Config countdown sound field', () {
+      final config = BoardConfig.parse(v16ConfigBytes(beepEnabled: false));
+      expect(config.name, 'WheelAthlete-L');
+      expect(config.fwVersion, '1.6.0');
+      expect(config.beepEnabled, isFalse);
+    });
+
+    test('legacy 30-byte Config defaults countdown sound to enabled', () {
+      final bytes = v16ConfigBytes().sublist(0, 30);
+      final config = BoardConfig.parse(bytes);
+      expect(config.beepEnabled, isTrue);
+    });
+
+    test('rejects invalid countdown sound byte', () {
+      final bytes = v16ConfigBytes()..[30] = 2;
+      expect(() => BoardConfig.parse(bytes), throwsFormatException);
     });
 
     test('parses right wheel with 200 Hz', () {
-      final config = BoardConfig.parse(configBytes(
-        name: 'Board-R',
-        wheelByte: 0x52,
-        rateHz: 200,
-      ));
+      final config = BoardConfig.parse(
+        configBytes(name: 'Board-R', wheelByte: 0x52, rateHz: 200),
+      );
       expect(config.name, 'Board-R');
       expect(config.wheelId, WheelId.right);
       expect(config.rateHz, 200);

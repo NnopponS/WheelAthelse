@@ -49,7 +49,8 @@ class ExperimentTrackerPage extends ConsumerWidget {
               96, // leave room for the FAB
             ),
             itemCount: progressList.length,
-            separatorBuilder: (context, _) => const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (context, _) =>
+                const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, i) {
               final p = progressList[i];
               return ProtocolTemplateCard(
@@ -84,16 +85,9 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.science_outlined,
-              size: 64,
-              color: theme.disabledColor,
-            ),
+            Icon(Icons.science_outlined, size: 64, color: theme.disabledColor),
             const SizedBox(height: AppSpacing.md),
-            Text(
-              'No experiments yet',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('No experiments yet', style: theme.textTheme.titleMedium),
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Create a protocol template to start tracking experiments',
@@ -243,8 +237,7 @@ class _CreateTemplateDialogState extends ConsumerState<_CreateTemplateDialog> {
                       DropdownMenuItem(value: 100, child: Text('100')),
                       DropdownMenuItem(value: 200, child: Text('200')),
                     ],
-                    onChanged: (v) =>
-                        setState(() => _sampleRateHz = v ?? 100),
+                    onChanged: (v) => setState(() => _sampleRateHz = v ?? 100),
                   ),
                 ),
               ],

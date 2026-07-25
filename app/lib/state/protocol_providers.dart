@@ -10,8 +10,9 @@ final protocolRepositoryProvider = Provider<ProtocolRepository>(
 
 /// Loads all protocol templates (sorted by name). Refreshed by
 /// [protocolTemplateNotifierProvider] after any CRUD mutation.
-final protocolTemplatesProvider =
-    FutureProvider<List<ProtocolTemplate>>((ref) async {
+final protocolTemplatesProvider = FutureProvider<List<ProtocolTemplate>>((
+  ref,
+) async {
   final repo = ref.watch(protocolRepositoryProvider);
   return repo.listTemplates();
 });
@@ -32,12 +33,11 @@ class ProtocolTemplateNotifierState {
     List<ProtocolTemplate>? templates,
     bool? loading,
     Object? error = _unset,
-  }) =>
-      ProtocolTemplateNotifierState(
-        templates: templates ?? this.templates,
-        loading: loading ?? this.loading,
-        error: identical(error, _unset) ? this.error : error as String?,
-      );
+  }) => ProtocolTemplateNotifierState(
+    templates: templates ?? this.templates,
+    loading: loading ?? this.loading,
+    error: identical(error, _unset) ? this.error : error as String?,
+  );
 
   static const Object _unset = Object();
 }
@@ -45,8 +45,7 @@ class ProtocolTemplateNotifierState {
 /// Notifier for protocol template CRUD operations. Each mutation reloads the
 /// full list from the repository and keeps [protocolTemplatesProvider] in sync
 /// via [ref.invalidateSelf].
-class ProtocolTemplateNotifier
-    extends Notifier<ProtocolTemplateNotifierState> {
+class ProtocolTemplateNotifier extends Notifier<ProtocolTemplateNotifierState> {
   @override
   ProtocolTemplateNotifierState build() {
     // Kick off the initial load.
@@ -110,5 +109,5 @@ class ProtocolTemplateNotifier
 
 final protocolTemplateNotifierProvider =
     NotifierProvider<ProtocolTemplateNotifier, ProtocolTemplateNotifierState>(
-  ProtocolTemplateNotifier.new,
-);
+      ProtocolTemplateNotifier.new,
+    );

@@ -19,7 +19,11 @@ enum BleConnectionState { disconnected, connecting, connected, disconnecting }
 
 /// A device discovered during a scan.
 class ScannedDevice {
-  const ScannedDevice({required this.id, required this.name, required this.rssi});
+  const ScannedDevice({
+    required this.id,
+    required this.name,
+    required this.rssi,
+  });
 
   /// Platform remote id (stable across scans for the same physical device).
   final String id;
@@ -42,6 +46,23 @@ class ConnectedDevice {
   final String id;
   final String name;
   final DeviceInfo info;
+}
+
+/// One owned BLE notification subscription.
+///
+/// The native listener is attached before notifications are enabled. [ready]
+/// completes only after the CCCD write succeeds, allowing command writers to
+/// wait without losing an immediate response. [close] releases the owner.
+class BleNotificationChannel<T> {
+  const BleNotificationChannel({
+    required this.stream,
+    required this.ready,
+    required this.close,
+  });
+
+  final Stream<T> stream;
+  final Future<void> ready;
+  final Future<void> Function() close;
 }
 
 /// Abstract BLE access for the WheelAthlete app.
@@ -71,6 +92,10 @@ abstract class BleRepository {
   /// Throws if the device is not found or Info cannot be read.
   Future<ConnectedDevice> connect(String deviceId);
 
+  /// Reasserts the platform's high-throughput BLE connection mode immediately
+  /// before a recording. Platforms without configurable priority may no-op.
+  Future<void> prepareForStreaming(String deviceId) async {}
+
   /// Live connection-state stream for [deviceId].
   Stream<BleConnectionState> connectionState(String deviceId);
 
@@ -89,12 +114,26 @@ abstract class BleRepository {
   /// not connected.
   Stream<List<int>> imuData(String deviceId);
 
+  BleNotificationChannel<List<int>> imuNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: imuData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
+
   /// Live Sync characteristic notify stream for [deviceId] (§4).
   ///
   /// Each event is the raw bytes of one Sync notification
   /// (`[uint8 event_id][payload...]`). The caller parses via
   /// `SyncEvent.parse`. Throws if [deviceId] is not connected.
   Stream<List<int>> syncData(String deviceId);
+
+  BleNotificationChannel<List<int>> syncNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: syncData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
 
   /// Writes [bytes] to the Control characteristic of [deviceId] (§3).
   ///
@@ -144,6 +183,17 @@ class FlutterBluePlusBleRepository implements BleRepository {
   final StreamController<List<ScannedDevice>> _scanController =
       StreamController<List<ScannedDevice>>.broadcast();
   bool _scanning = false;
+  final _imuChannels = <String, BleNotificationChannel<List<int>>>{};
+  final _syncChannels = <String, BleNotificationChannel<List<int>>>{};
+  final _batteryStreams = <String, Stream<int>>{};
+  Future<void> _gattTail = Future<void>.value();
+
+  // Samsung's Android BLE host can return status 17 when two BluetoothGatt
+  // instances issue operations in the same scheduling window. One global
+  // queue plus a short quiet period keeps dual-board CCCD/control operations
+  // away from that resource boundary. Scheduled recording START remains
+  // aligned because each board receives an absolute device target time.
+  static const _gattInterOperationDelay = Duration(milliseconds: 50);
 
   @override
   Stream<List<ScannedDevice>> get scanResults => _scanController.stream;
@@ -157,33 +207,58 @@ class FlutterBluePlusBleRepository implements BleRepository {
       throw StateError('BLE scan already in progress');
     }
     _scanning = true;
-    _scanSub = fbp.FlutterBluePlus.onScanResults.listen(
-      (results) => _scanController.add(
-        results
-            .where((r) =>
-                r.advertisementData.serviceUuids.contains(_serviceGuid) ||
-                r.advertisementData.advName.startsWith('WheelAthlete'))
-            .map((r) => ScannedDevice(
-                  id: r.device.remoteId.str,
-                  name: r.advertisementData.advName.isNotEmpty
-                      ? r.advertisementData.advName
-                      : r.device.platformName,
-                  rssi: r.rssi,
-                ))
-            .toList(growable: false),
-      ),
+    _scanSub = fbp.FlutterBluePlus.scanResults.listen(
+      (results) => _scanController.add(_mapScanResults(results)),
       onError: _scanController.addError,
     );
     try {
-      await fbp.FlutterBluePlus.startScan(
-        withServices: [_serviceGuid],
-        timeout: timeout,
-      );
+      await fbp.FlutterBluePlus.startScan(timeout: timeout);
+      // startScan() only starts the native scan; it does not await its timeout.
+      // Keep our result subscription alive until FlutterBluePlus reports the
+      // timer-driven stop, otherwise Samsung advertisements race a listener
+      // that is cancelled immediately after the platform method returns.
+      await fbp.FlutterBluePlus.isScanning
+          .where((isScanning) => !isScanning)
+          .first
+          .timeout(
+            timeout + const Duration(seconds: 2),
+            onTimeout: () async {
+              await fbp.FlutterBluePlus.stopScan();
+              return false;
+            },
+          );
+      // Samsung can deliver native advertisements while the Dart event
+      // listener is briefly busy rebuilding the high-density Connect page.
+      // flutter_blue_plus retains the cumulative snapshot for this scan, so
+      // publish it once more before returning instead of losing a board until
+      // the user scans again.
+      final finalResults = _mapScanResults(fbp.FlutterBluePlus.lastScanResults);
+      if (finalResults.isNotEmpty) _scanController.add(finalResults);
     } finally {
       await _scanSub?.cancel();
       _scanning = false;
     }
   }
+
+  List<ScannedDevice> _mapScanResults(Iterable<fbp.ScanResult> results) =>
+      results
+          .where((result) {
+            final advertisedName = result.advertisementData.advName;
+            final platformName = result.device.platformName;
+            return advertisedName.startsWith('WheelAthlete') ||
+                platformName.startsWith('WheelAthlete') ||
+                result.advertisementData.serviceUuids.contains(_serviceGuid);
+          })
+          .map(
+            (result) => ScannedDevice(
+              id: result.device.remoteId.str,
+              name: result.advertisementData.advName.isNotEmpty
+                  ? result.advertisementData.advName
+                  : result.device.platformName,
+              rssi: result.rssi,
+            ),
+          )
+          .toList(growable: false);
 
   @override
   Future<void> stopScan() async {
@@ -194,6 +269,10 @@ class FlutterBluePlusBleRepository implements BleRepository {
 
   @override
   Future<ConnectedDevice> connect(String deviceId) async {
+    // A previous Android connection may have ended without closing the global
+    // flutter_blue_plus event stream. Never reuse its completed `ready`
+    // future or stale CCCD state for a new physical connection.
+    await _invalidateNotificationChannels(deviceId);
     final device = fbp.BluetoothDevice.fromId(deviceId);
     // WheelAthlete is a nonprofit / research project → nonprofit license.
     // `mtu` is auto-requested on Android; iOS negotiates automatically.
@@ -210,16 +289,7 @@ class FlutterBluePlusBleRepository implements BleRepository {
     // massive packet drops on the second board. HIGH priority requests a
     // fast interval (7.5–15ms) for both devices so notifications flow
     // reliably. No-op on iOS (iOS manages this automatically).
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        await device.requestConnectionPriority(
-          connectionPriorityRequest: fbp.ConnectionPriority.high,
-        );
-      } on Object {
-        // Non-fatal: some firmware/stacks reject this. The connection still
-        // works, just potentially at a slower interval.
-      }
-    }
+    await prepareForStreaming(deviceId);
 
     final services = await device.discoverServices();
     final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
@@ -234,13 +304,68 @@ class FlutterBluePlusBleRepository implements BleRepository {
   @override
   Stream<BleConnectionState> connectionState(String deviceId) {
     final device = fbp.BluetoothDevice.fromId(deviceId);
-    return device.connectionState.map(_mapConnectionState);
+    return device.connectionState.map((nativeState) {
+      final mapped = _mapConnectionState(nativeState);
+      if (mapped == BleConnectionState.disconnected) {
+        unawaited(_invalidateNotificationChannels(deviceId));
+      }
+      return mapped;
+    });
   }
 
   @override
   Future<void> disconnect(String deviceId) async {
+    await _invalidateNotificationChannels(deviceId);
+    _batteryStreams.remove(deviceId);
     final device = fbp.BluetoothDevice.fromId(deviceId);
     await device.disconnect();
+  }
+
+  @override
+  Future<void> prepareForStreaming(String deviceId) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    await _serializeGatt(deviceId, () async {
+      final device = fbp.BluetoothDevice.fromId(deviceId);
+
+      // Re-assert the negotiated MTU immediately before acquisition. Android
+      // can leave the second peripheral at the 23-byte default even when the
+      // connect-time auto request was accepted. At that MTU the firmware can
+      // fit only one 20-byte sample in each notification, which is not enough
+      // headroom for reliable dual-wheel 100 Hz streaming.
+      var negotiatedMtu = device.mtuNow;
+      try {
+        negotiatedMtu = await device.requestMtu(
+          BleUuids.defaultMtu,
+          predelay: 0.0,
+        );
+      } on Object {
+        negotiatedMtu = device.mtuNow;
+      }
+      const minimumStreamingMtu = 185;
+      if (negotiatedMtu < minimumStreamingMtu) {
+        throw StateError(
+          'BLE MTU $negotiatedMtu is too small for reliable streaming '
+          '(minimum $minimumStreamingMtu). Reconnect this wheel and retry.',
+        );
+      }
+
+      try {
+        await device.requestConnectionPriority(
+          connectionPriorityRequest: fbp.ConnectionPriority.high,
+        );
+      } on Object {
+        // The peripheral also requests a fast interval and notification
+        // pacing remains safe when Android declines this best-effort request.
+      }
+    });
+  }
+
+  Future<void> _invalidateNotificationChannels(String deviceId) async {
+    final channels = <BleNotificationChannel<List<int>>>[
+      ?_imuChannels.remove(deviceId),
+      ?_syncChannels.remove(deviceId),
+    ];
+    await Future.wait(channels.map((channel) => channel.close()));
   }
 
   @override
@@ -250,115 +375,186 @@ class FlutterBluePlusBleRepository implements BleRepository {
   }
 
   @override
-  Stream<List<int>> imuData(String deviceId) {
-    // flutter_blue_plus 2.x removed servicesStream (deprecated → yields []).
-    // Services discovered in connect() are cached on the device object, so we
-    // resolve the IMU Data characteristic from servicesList and forward its
-    // lastValueStream (notify). We use a broadcast controller so the caller
-    // can listen multiple times; the underlying notify stream is already
-    // broadcast.
+  Stream<List<int>> imuData(String deviceId) =>
+      imuNotifications(deviceId).stream;
+
+  @override
+  BleNotificationChannel<List<int>> imuNotifications(String deviceId) =>
+      _imuChannels.putIfAbsent(
+        deviceId,
+        () => _createNotificationChannel(
+          deviceId: deviceId,
+          characteristicGuid: _imuGuid,
+          forceNotifyReset: true,
+          onClosed: () => _imuChannels.remove(deviceId),
+        ),
+      );
+
+  BleNotificationChannel<List<int>> _createNotificationChannel({
+    required String deviceId,
+    required fbp.Guid characteristicGuid,
+    bool forceNotifyReset = false,
+    required void Function() onClosed,
+  }) {
+    // Keep the native BLE callback short. With `sync: true`, one Android
+    // notification could synchronously run parsing, recording, presentation,
+    // and every downstream listener before flutter_blue_plus was allowed to
+    // deliver the other wheel. An asynchronous controller gives each wheel a
+    // fair event-queue turn and prevents UI work from blocking GATT callbacks.
     final controller = StreamController<List<int>>.broadcast();
+    final ready = Completer<void>();
     final device = fbp.BluetoothDevice.fromId(deviceId);
-    () async {
+    StreamSubscription<List<int>>? subscription;
+    var closed = false;
+
+    Future<void> close() async {
+      if (closed) return;
+      closed = true;
+      onClosed();
+      await subscription?.cancel();
+      if (!controller.isClosed) await controller.close();
+    }
+
+    unawaited(() async {
       try {
-        final services = device.servicesList;
-        final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
-        final imuChar = service.characteristics
-            .firstWhere((c) => c.characteristicUuid == _imuGuid);
-        if (!imuChar.isNotifying) {
-          await imuChar.setNotifyValue(true);
-        }
-        final sub = imuChar.lastValueStream.listen(
-          (bytes) {
-            // flutter_blue_plus emits an empty list on subscribe (before any
-            // notify arrives) and can also deliver empty payloads on reconnect.
-            // Filter them here so the parser never sees an empty batch.
-            if (bytes.isEmpty) return;
-            controller.add(bytes);
-          },
-          onError: controller.addError,
-          onDone: controller.close,
-        );
-        controller.onCancel = () {
-          sub.cancel();
-          // Leave notify enabled — firmware keeps streaming until STOP cmd.
-        };
-      } on Object catch (e, st) {
-        controller.addError(e, st);
-        await controller.close();
+        await _serializeGatt(deviceId, () async {
+          final service = device.servicesList.firstWhere(
+            (s) => s.serviceUuid == _serviceGuid,
+          );
+          final characteristic = service.characteristics.firstWhere(
+            (c) => c.characteristicUuid == characteristicGuid,
+          );
+          // Notifications must never replay the characteristic's cached last
+          // value. Firmware resets IMU sequence numbers on every START; a
+          // cached batch from the previous Live/Record session would seed the
+          // recovery buffer with the old sequence and make every fresh sample
+          // (starting again at zero) look stale. onValueReceived forwards only
+          // new native notifications and also prevents stale START/STOP ACKs
+          // from completing a new lifecycle operation.
+          subscription = characteristic.onValueReceived.listen(
+            (bytes) {
+              if (!closed && bytes.isNotEmpty) controller.add(bytes);
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!closed) controller.addError(error, stackTrace);
+            },
+            onDone: close,
+          );
+          // Android may retain a locally cached `isNotifying=true` after a
+          // failed/reconnected session even though the peripheral CCCD has
+          // reset. IMU is quiescent while arming, so force a clean false/true
+          // CCCD handshake before START. Sync stays continuously subscribed.
+          if (forceNotifyReset && characteristic.isNotifying) {
+            await characteristic.setNotifyValue(false);
+          }
+          if (!characteristic.isNotifying) {
+            await characteristic.setNotifyValue(true);
+          }
+          if (!characteristic.isNotifying) {
+            throw StateError('BLE notification setup was not acknowledged');
+          }
+        });
+        if (!ready.isCompleted) ready.complete();
+      } on Object catch (error, stackTrace) {
+        if (!ready.isCompleted) ready.completeError(error, stackTrace);
+        if (!closed) controller.addError(error, stackTrace);
+        await close();
       }
-    }();
-    return controller.stream;
+    }());
+
+    return BleNotificationChannel<List<int>>(
+      stream: controller.stream,
+      ready: ready.future,
+      close: close,
+    );
   }
 
   @override
-  Stream<List<int>> syncData(String deviceId) {
-    // Same pattern as imuData: resolve the Sync characteristic from the
-    // cached servicesList, enable notify, and forward lastValueStream.
-    final controller = StreamController<List<int>>.broadcast();
-    final device = fbp.BluetoothDevice.fromId(deviceId);
-    () async {
-      try {
-        final services = device.servicesList;
-        final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
-        final syncChar = service.characteristics
-            .firstWhere((c) => c.characteristicUuid == _syncGuid);
-        if (!syncChar.isNotifying) {
-          await syncChar.setNotifyValue(true);
-        }
-        final sub = syncChar.lastValueStream.listen(
-          (bytes) {
-            if (bytes.isEmpty) return;
-            controller.add(bytes);
-          },
-          onError: controller.addError,
-          onDone: controller.close,
-        );
-        controller.onCancel = () => sub.cancel();
-      } on Object catch (e, st) {
-        controller.addError(e, st);
-        await controller.close();
-      }
-    }();
-    return controller.stream;
-  }
+  Stream<List<int>> syncData(String deviceId) =>
+      syncNotifications(deviceId).stream;
+
+  @override
+  BleNotificationChannel<List<int>> syncNotifications(String deviceId) =>
+      _syncChannels.putIfAbsent(
+        deviceId,
+        () => _createNotificationChannel(
+          deviceId: deviceId,
+          characteristicGuid: _syncGuid,
+          onClosed: () => _syncChannels.remove(deviceId),
+        ),
+      );
 
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {
-    final device = fbp.BluetoothDevice.fromId(deviceId);
-    final services = device.servicesList;
-    final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
-    final controlChar = service.characteristics
-        .firstWhere((c) => c.characteristicUuid == _controlGuid);
-    await controlChar.write(bytes.toList(), withoutResponse: false);
+    await _serializeGatt(deviceId, () async {
+      final device = fbp.BluetoothDevice.fromId(deviceId);
+      final services = device.servicesList;
+      final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
+      final controlChar = service.characteristics.firstWhere(
+        (c) => c.characteristicUuid == _controlGuid,
+      );
+      await controlChar.write(bytes.toList(), withoutResponse: false);
+    });
+  }
+
+  Future<T> _serializeGatt<T>(
+    String deviceId,
+    Future<T> Function() operation,
+  ) async {
+    assert(deviceId.isNotEmpty);
+    final previous = _gattTail;
+    final released = Completer<void>();
+    _gattTail = released.future;
+    try {
+      await previous;
+      return await operation();
+    } finally {
+      await Future<void>.delayed(_gattInterOperationDelay);
+      released.complete();
+    }
   }
 
   @override
-  Stream<int> batteryLevel(String deviceId) {
+  Stream<int> batteryLevel(String deviceId) => _batteryStreams.putIfAbsent(
+    deviceId,
+    () => _createBatteryLevel(deviceId),
+  );
+
+  Stream<int> _createBatteryLevel(String deviceId) {
     // Resolve the Battery Service (0x180F) + Battery Level char (0x2A19)
     // from the cached servicesList, enable notify, and forward lastValueStream.
     final controller = StreamController<int>.broadcast();
     final device = fbp.BluetoothDevice.fromId(deviceId);
     () async {
       try {
-        final services = device.servicesList;
-        final batService = services.firstWhere(
-          (s) => s.serviceUuid == _batteryServiceGuid,
-        );
-        final batChar = batService.characteristics
-            .firstWhere((c) => c.characteristicUuid == _batteryLevelGuid);
-        if (!batChar.isNotifying) {
-          await batChar.setNotifyValue(true);
-        }
-        final sub = batChar.lastValueStream.listen(
-          (bytes) {
-            if (bytes.isEmpty) return;
-            controller.add(bytes[0]);
-          },
-          onError: controller.addError,
-          onDone: controller.close,
-        );
-        controller.onCancel = () => sub.cancel();
+        await _serializeGatt(deviceId, () async {
+          final services = device.servicesList;
+          final batService = services.firstWhere(
+            (s) => s.serviceUuid == _batteryServiceGuid,
+          );
+          final batChar = batService.characteristics.firstWhere(
+            (c) => c.characteristicUuid == _batteryLevelGuid,
+          );
+          final sub = batChar.lastValueStream.listen(
+            (bytes) {
+              if (bytes.isEmpty) return;
+              controller.add(bytes[0]);
+            },
+            onError: controller.addError,
+            onDone: controller.close,
+          );
+          if (!batChar.isNotifying) {
+            await batChar.setNotifyValue(true);
+          }
+          // Notifications only report changes. Always read once after the
+          // listener is attached so a stable battery value appears on connect.
+          final initial = await batChar.read();
+          if (initial.isNotEmpty) controller.add(initial[0]);
+          controller.onCancel = () {
+            _batteryStreams.remove(deviceId);
+            sub.cancel();
+          };
+        });
       } on Object catch (e, st) {
         controller.addError(e, st);
         await controller.close();
@@ -370,19 +566,22 @@ class FlutterBluePlusBleRepository implements BleRepository {
   // flutter_blue_plus 2.x BluetoothConnectionState only has disconnected /
   // connected (the old connecting/disconnecting values were removed). We map
   // the two remaining values to our coarser enum.
-  static BleConnectionState _mapConnectionState(fbp.BluetoothConnectionState s) =>
-      switch (s) {
-        fbp.BluetoothConnectionState.disconnected => BleConnectionState.disconnected,
-        fbp.BluetoothConnectionState.connected => BleConnectionState.connected,
-      };
+  static BleConnectionState _mapConnectionState(
+    fbp.BluetoothConnectionState s,
+  ) => switch (s) {
+    fbp.BluetoothConnectionState.disconnected =>
+      BleConnectionState.disconnected,
+    fbp.BluetoothConnectionState.connected => BleConnectionState.connected,
+  };
 
   @override
   Future<BoardConfig> readConfig(String deviceId) async {
     final device = fbp.BluetoothDevice.fromId(deviceId);
     final services = device.servicesList;
     final service = services.firstWhere((s) => s.serviceUuid == _serviceGuid);
-    final configChar = service.characteristics
-        .firstWhere((c) => c.characteristicUuid == _configGuid);
+    final configChar = service.characteristics.firstWhere(
+      (c) => c.characteristicUuid == _configGuid,
+    );
     final bytes = await configChar.read();
     return BoardConfig.parse(bytes);
   }
@@ -409,7 +608,11 @@ class FakeBleRepository implements BleRepository {
     required this.devices,
     this.infoFor = const {},
     this.configFor = const {},
-  });
+    this.autoAcknowledgeControls = false,
+    this.initialBatteryFor = const {},
+    this.notificationReadyDelay = Duration.zero,
+    Map<String, int> stopWriteFailuresFor = const {},
+  }) : _remainingStopWriteFailures = Map.of(stopWriteFailuresFor);
 
   final List<FakeDevice> devices;
   final Map<String, DeviceInfo> infoFor;
@@ -417,6 +620,10 @@ class FakeBleRepository implements BleRepository {
   /// Seeded Config char payloads (22 bytes) per device id. If a device is
   /// not in this map, `readConfig` throws.
   final Map<String, List<int>> configFor;
+  final bool autoAcknowledgeControls;
+  final Map<String, int> initialBatteryFor;
+  final Duration notificationReadyDelay;
+  final Map<String, int> _remainingStopWriteFailures;
 
   final _scanController = StreamController<List<ScannedDevice>>.broadcast();
   final _states = <String, StreamController<BleConnectionState>>{};
@@ -424,6 +631,7 @@ class FakeBleRepository implements BleRepository {
   final _syncControllers = <String, StreamController<List<int>>>{};
   final _batteryControllers = <String, StreamController<int>>{};
   bool _scanning = false;
+  final List<String> streamPreparationCalls = [];
 
   @override
   Stream<List<ScannedDevice>> get scanResults => _scanController.stream;
@@ -470,11 +678,17 @@ class FakeBleRepository implements BleRepository {
 
   @override
   Future<void> disconnect(String deviceId) async {
+    _disconnectCounts.update(deviceId, (count) => count + 1, ifAbsent: () => 1);
     final c = _states[deviceId];
     if (c != null && !c.isClosed) {
       c.add(BleConnectionState.disconnecting);
       c.add(BleConnectionState.disconnected);
     }
+  }
+
+  @override
+  Future<void> prepareForStreaming(String deviceId) async {
+    streamPreparationCalls.add(deviceId);
   }
 
   @override
@@ -486,6 +700,14 @@ class FakeBleRepository implements BleRepository {
   @override
   Stream<List<int>> imuData(String deviceId) => _imuController(deviceId).stream;
 
+  @override
+  BleNotificationChannel<List<int>> imuNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: _imuController(deviceId).stream,
+        ready: Future<void>.delayed(notificationReadyDelay),
+        close: () async {},
+      );
+
   /// Exposes the IMU notify stream controller for a device so tests can
   /// inject raw batch bytes. The controller is `sync: true` so events are
   /// delivered immediately to listeners (no microtask race with test expects).
@@ -493,7 +715,16 @@ class FakeBleRepository implements BleRepository {
       _imuControllers[deviceId];
 
   @override
-  Stream<List<int>> syncData(String deviceId) => _syncController(deviceId).stream;
+  Stream<List<int>> syncData(String deviceId) =>
+      _syncController(deviceId).stream;
+
+  @override
+  BleNotificationChannel<List<int>> syncNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: _syncController(deviceId).stream,
+        ready: Future<void>.delayed(notificationReadyDelay),
+        close: () async {},
+      );
 
   /// Exposes the Sync notify stream controller for a device so tests can
   /// inject raw Sync event bytes. Same `sync: true` contract as
@@ -502,8 +733,14 @@ class FakeBleRepository implements BleRepository {
       _syncControllers[deviceId];
 
   @override
-  Stream<int> batteryLevel(String deviceId) =>
-      _batteryController(deviceId).stream;
+  Stream<int> batteryLevel(String deviceId) {
+    final controller = _batteryController(deviceId);
+    final initial = initialBatteryFor[deviceId];
+    if (initial != null) {
+      scheduleMicrotask(() => controller.add(initial));
+    }
+    return controller.stream;
+  }
 
   /// Exposes the Battery Level notify stream controller for a device so tests
   /// can inject battery percentage values. `sync: true` for immediate delivery.
@@ -527,14 +764,32 @@ class FakeBleRepository implements BleRepository {
   List<List<int>> allControlWrites(String deviceId) =>
       List.unmodifiable(_allControlWrites[deviceId] ?? const []);
 
+  /// Number of disconnect attempts issued for [deviceId].
+  int disconnectCount(String deviceId) => _disconnectCounts[deviceId] ?? 0;
+
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {
     _lastControlWrites[deviceId] = bytes;
     (_allControlWrites[deviceId] ??= []).add(bytes);
+    if (bytes.isNotEmpty && bytes[0] == 0x02) {
+      final remaining = _remainingStopWriteFailures[deviceId] ?? 0;
+      if (remaining > 0) {
+        _remainingStopWriteFailures[deviceId] = remaining - 1;
+        throw StateError('Injected STOP write failure for $deviceId');
+      }
+    }
+    if (autoAcknowledgeControls && bytes.isNotEmpty) {
+      if (bytes[0] == 0x01) {
+        _syncController(deviceId).add(List<int>.filled(13, 0)..[0] = 0x30);
+      } else if (bytes[0] == 0x02) {
+        _syncController(deviceId).add(List<int>.filled(9, 0)..[0] = 0x40);
+      }
+    }
   }
 
   final Map<String, List<int>> _lastControlWrites = {};
   final Map<String, List<List<int>>> _allControlWrites = {};
+  final Map<String, int> _disconnectCounts = {};
 
   StreamController<List<int>> _imuController(String deviceId) =>
       _imuControllers.putIfAbsent(

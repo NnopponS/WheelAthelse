@@ -91,8 +91,7 @@ class _TagEditorDialogState extends State<_TagEditorDialog> {
                         label: Text(tag),
                         onDeleted: () => _removeTag(tag),
                         deleteIcon: const Icon(Icons.cancel),
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                         backgroundColor: scheme.secondaryContainer,
                       ),
@@ -113,10 +112,7 @@ class _TagEditorDialogState extends State<_TagEditorDialog> {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
-                TextButton(
-                  onPressed: _addTag,
-                  child: const Text('Add'),
-                ),
+                TextButton(onPressed: _addTag, child: const Text('Add')),
               ],
             ),
           ],

@@ -31,29 +31,29 @@ void main() {
         targetTrialCount: 1,
       );
       final templates = await repo.listTemplates();
-      expect(
-        templates.map((t) => t.name).toList(),
-        ['Alpha', 'Mid', 'Zebra'],
-      );
+      expect(templates.map((t) => t.name).toList(), ['Alpha', 'Mid', 'Zebra']);
     });
   });
 
   group('ProtocolRepository — create', () {
-    test('createTemplate returns template with generated id + fields', () async {
-      final template = await repo.createTemplate(
-        name: '20m Sprint Test',
-        description: 'From standing start, 20m max effort',
-        topicName: 'sprint_20m',
-        targetTrialCount: 5,
-        sampleRateHz: 200,
-      );
-      expect(template.id, isNotEmpty);
-      expect(template.name, '20m Sprint Test');
-      expect(template.description, 'From standing start, 20m max effort');
-      expect(template.topicName, 'sprint_20m');
-      expect(template.targetTrialCount, 5);
-      expect(template.sampleRateHz, 200);
-    });
+    test(
+      'createTemplate returns template with generated id + fields',
+      () async {
+        final template = await repo.createTemplate(
+          name: '20m Sprint Test',
+          description: 'From standing start, 20m max effort',
+          topicName: 'sprint_20m',
+          targetTrialCount: 5,
+          sampleRateHz: 200,
+        );
+        expect(template.id, isNotEmpty);
+        expect(template.name, '20m Sprint Test');
+        expect(template.description, 'From standing start, 20m max effort');
+        expect(template.topicName, 'sprint_20m');
+        expect(template.targetTrialCount, 5);
+        expect(template.sampleRateHz, 200);
+      },
+    );
 
     test('createTemplate defaults sampleRateHz to 100', () async {
       final template = await repo.createTemplate(
@@ -101,10 +101,9 @@ void main() {
         topicName: 'sprint',
         targetTrialCount: 5,
       );
-      await repo.updateTemplate(created.copyWith(
-        name: '30m Sprint',
-        targetTrialCount: 10,
-      ));
+      await repo.updateTemplate(
+        created.copyWith(name: '30m Sprint', targetTrialCount: 10),
+      );
       final fetched = await repo.getTemplate(created.id);
       expect(fetched!.name, '30m Sprint');
       expect(fetched.targetTrialCount, 10);

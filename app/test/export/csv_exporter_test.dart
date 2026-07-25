@@ -17,26 +17,35 @@ BufferedSample _sample({
   double gz = 0,
   int timestampAppMs = 0,
   bool marker = false,
-}) =>
-    BufferedSample(
-      reading: ImuReading(
-        seq: seq,
-        tDeviceUs: tDeviceUs,
-        ax: ax,
-        ay: ay,
-        az: az,
-        gx: gx,
-        gy: gy,
-        gz: gz,
-      ),
-      wheel: wheel,
-      timestampAppMs: timestampAppMs,
-      timestampSyncedMs: syncedMs,
-      marker: marker,
-    );
+}) => BufferedSample(
+  reading: ImuReading(
+    seq: seq,
+    tDeviceUs: tDeviceUs,
+    ax: ax,
+    ay: ay,
+    az: az,
+    gx: gx,
+    gy: gy,
+    gz: gz,
+  ),
+  wheel: wheel,
+  timestampAppMs: timestampAppMs,
+  timestampSyncedMs: syncedMs,
+  marker: marker,
+);
 
 void main() {
   group('CsvExporter', () {
+    test('combined export is globally ordered by corrected timestamp', () {
+      final samples = [
+        _sample(seq: 2, tDeviceUs: 20, syncedMs: 20, wheel: WheelSide.right),
+        _sample(seq: 1, tDeviceUs: 10, syncedMs: 10, wheel: WheelSide.left),
+      ];
+      final lines = CsvExporter.toCombinedCsvString(samples).trim().split('\n');
+      expect(lines.first, CsvExporter.header);
+      expect(lines[1].split(',')[1], 'L');
+      expect(lines[2].split(',')[1], 'R');
+    });
     test('header matches schema (§3)', () {
       final csv = CsvExporter.toCsvString(const []);
       final lines = csv.split('\n');
@@ -124,27 +133,44 @@ void main() {
       expect(lines[6].split(',')[1], 'R');
     });
 
-    test('L and R samples are in separate tables, each sorted by synced_ms',
-        () {
-      final samples = [
-        _sample(seq: 10, tDeviceUs: 100, syncedMs: 100, wheel: WheelSide.right),
-        _sample(seq: 5, tDeviceUs: 50, syncedMs: 50, wheel: WheelSide.left),
-        _sample(seq: 20, tDeviceUs: 200, syncedMs: 200, wheel: WheelSide.right),
-        _sample(seq: 10, tDeviceUs: 100, syncedMs: 100, wheel: WheelSide.left),
-      ];
-      final csv = CsvExporter.toCsvString(samples);
-      final lines = csv.trim().split('\n');
-      // L table: # Wheel: L, header, 5(L@50), 10(L@100)
-      // blank
-      // R table: # Wheel: R, header, 10(R@100), 20(R@200)
-      expect(lines[0], '# Wheel: L');
-      expect(lines[2].split(',')[0], '5'); // L synced=50
-      expect(lines[3].split(',')[0], '10'); // L synced=100
-      expect(lines[4], ''); // blank line separator
-      expect(lines[5], '# Wheel: R');
-      expect(lines[7].split(',')[0], '10'); // R synced=100
-      expect(lines[8].split(',')[0], '20'); // R synced=200
-    });
+    test(
+      'L and R samples are in separate tables, each sorted by synced_ms',
+      () {
+        final samples = [
+          _sample(
+            seq: 10,
+            tDeviceUs: 100,
+            syncedMs: 100,
+            wheel: WheelSide.right,
+          ),
+          _sample(seq: 5, tDeviceUs: 50, syncedMs: 50, wheel: WheelSide.left),
+          _sample(
+            seq: 20,
+            tDeviceUs: 200,
+            syncedMs: 200,
+            wheel: WheelSide.right,
+          ),
+          _sample(
+            seq: 10,
+            tDeviceUs: 100,
+            syncedMs: 100,
+            wheel: WheelSide.left,
+          ),
+        ];
+        final csv = CsvExporter.toCsvString(samples);
+        final lines = csv.trim().split('\n');
+        // L table: # Wheel: L, header, 5(L@50), 10(L@100)
+        // blank
+        // R table: # Wheel: R, header, 10(R@100), 20(R@200)
+        expect(lines[0], '# Wheel: L');
+        expect(lines[2].split(',')[0], '5'); // L synced=50
+        expect(lines[3].split(',')[0], '10'); // L synced=100
+        expect(lines[4], ''); // blank line separator
+        expect(lines[5], '# Wheel: R');
+        expect(lines[7].split(',')[0], '10'); // R synced=100
+        expect(lines[8].split(',')[0], '20'); // R synced=200
+      },
+    );
 
     test('double values formatted without trailing zeros', () {
       final samples = [
@@ -191,12 +217,7 @@ void main() {
 
     test('handles negative synced timestamps', () {
       final samples = [
-        _sample(
-          seq: 0,
-          tDeviceUs: 0,
-          syncedMs: -100.5,
-          wheel: WheelSide.left,
-        ),
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: -100.5, wheel: WheelSide.left),
       ];
       final csv = CsvExporter.toCsvString(samples);
       final dataLines = csv.trim().split('\n').where((l) {
@@ -228,7 +249,12 @@ void main() {
 
     test('does not export the raw device timestamp column', () {
       final samples = [
-        _sample(seq: 0, tDeviceUs: 123456789, syncedMs: 42, wheel: WheelSide.left),
+        _sample(
+          seq: 0,
+          tDeviceUs: 123456789,
+          syncedMs: 42,
+          wheel: WheelSide.left,
+        ),
       ];
       final csv = CsvExporter.toCsvString(samples);
       final lines = csv.trim().split('\n');
@@ -266,6 +292,65 @@ void main() {
       // The line between L data and R comment should be empty
       expect(lines[lDataIdx + 1].trim(), isEmpty);
       expect(rCommentIdx, lDataIdx + 2);
+    });
+
+    test('raw schema 2 has exactly time and physical-unit columns', () {
+      final csv = CsvExporter.toRawCsvString([
+        _sample(
+          seq: 99,
+          tDeviceUs: 123456,
+          syncedMs: 1.25,
+          wheel: WheelSide.left,
+          marker: true,
+        ),
+      ], WheelSide.left);
+      final lines = csv.trim().split('\n');
+      expect(lines.first, CsvExporter.rawHeader);
+      expect(lines.first, 'time_us,ax_g,ay_g,az_g,gx_dps,gy_dps,gz_dps');
+      expect(lines[1].split(','), hasLength(7));
+      expect(csv, isNot(contains('marker')));
+      expect(csv, isNot(contains('seq')));
+      expect(csv, isNot(contains('utc')));
+      expect(lines[1].split(',').first, '1250');
+    });
+
+    test('training schema 2 aligns both wheels on integer microseconds', () {
+      final samples = [
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.left),
+        _sample(
+          seq: 1,
+          tDeviceUs: 20000,
+          syncedMs: 20,
+          wheel: WheelSide.left,
+          ax: 3,
+        ),
+        _sample(
+          seq: 0,
+          tDeviceUs: 0,
+          syncedMs: 0,
+          wheel: WheelSide.right,
+          ax: 10,
+        ),
+        _sample(
+          seq: 1,
+          tDeviceUs: 20000,
+          syncedMs: 20,
+          wheel: WheelSide.right,
+          ax: 14,
+        ),
+      ];
+      final csv = CsvExporter.toAlignedTrainingCsvString(
+        samples,
+        gridIntervalUs: 10000,
+      );
+      final lines = csv.trim().split('\n');
+      expect(lines.first, CsvExporter.trainingHeader);
+      expect(lines.first.split(','), hasLength(13));
+      expect(lines[1].split(','), hasLength(13));
+      expect(lines[1].split(',').first, '0');
+      expect(lines[2].split(',').first, '10000');
+      expect(lines[2].split(',')[1], '2');
+      expect(lines[2].split(',')[7], '12');
     });
   });
 }

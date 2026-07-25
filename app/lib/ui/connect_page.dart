@@ -24,8 +24,9 @@ class ConnectPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(connectionManagerProvider);
     final manager = ref.read(connectionManagerProvider.notifier);
-    final anyConnected =
-        state.bySide.values.any((c) => c.status == ConnectionStatus.connected);
+    final anyConnected = state.bySide.values.any(
+      (c) => c.status == ConnectionStatus.connected,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -36,10 +37,8 @@ class ConnectPage extends ConsumerWidget {
             key: liveButtonKey,
             onPressed: anyConnected
                 ? () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const LivePage(),
-                      ),
-                    )
+                    MaterialPageRoute<void>(builder: (_) => const LivePage()),
+                  )
                 : null,
             icon: const Icon(Icons.show_chart_rounded),
           ),
@@ -144,9 +143,9 @@ class _ErrorBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: wc.danger.onContainer,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: wc.danger.onContainer),
               ),
             ),
           ],
@@ -191,11 +190,7 @@ class _ScanSection extends StatelessWidget {
 }
 
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({
-    super.key,
-    required this.device,
-    required this.onConnect,
-  });
+  const _DeviceRow({super.key, required this.device, required this.onConnect});
 
   final ScannedDevice device;
   final VoidCallback onConnect;

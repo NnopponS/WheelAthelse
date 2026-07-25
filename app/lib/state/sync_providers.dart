@@ -8,6 +8,23 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/sync_engine.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
+/// Delay between retries when a transient Android GATT write rejects STOP.
+final stopCommandRetryDelayProvider = Provider<Duration>(
+  (ref) => const Duration(milliseconds: 100),
+);
+
+class StopWriteResult {
+  const StopWriteResult({
+    required this.written,
+    required this.attempts,
+    this.error,
+  });
+
+  final bool written;
+  final int attempts;
+  final Object? error;
+}
+
 /// Per-wheel clock-sync state surfaced to the UI and recording layer.
 class WheelSyncState {
   const WheelSyncState({
@@ -21,6 +38,7 @@ class WheelSyncState {
     this.lastSeq,
     this.utcEpochMs,
     this.utcStartMs,
+    this.acqHealth,
     this.error,
   });
 
@@ -54,6 +72,9 @@ class WheelSyncState {
   /// UTC start instant from extended START_FIRED (v1.1.0), for camera alignment.
   final int? utcStartMs;
 
+  /// Latest protocol 1.6 firmware health snapshot.
+  final AcqHealthEvent? acqHealth;
+
   /// Error message from a NACK, parse failure, or stream error.
   final String? error;
 
@@ -68,27 +89,30 @@ class WheelSyncState {
     int? lastSeq,
     Object? utcEpochMs = _unset,
     Object? utcStartMs = _unset,
+    Object? acqHealth = _unset,
     Object? error = _unset,
-  }) =>
-      WheelSyncState(
-        syncing: syncing ?? this.syncing,
-        offset: offset ?? this.offset,
-        driftFit: driftFit ?? this.driftFit,
-        pendingPing: identical(pendingPing, _unset)
-            ? this.pendingPing
-            : pendingPing as PendingPing?,
-        dropCount: dropCount ?? this.dropCount,
-        lastStartFiredUs: lastStartFiredUs ?? this.lastStartFiredUs,
-        lastStopFiredUs: lastStopFiredUs ?? this.lastStopFiredUs,
-        lastSeq: lastSeq ?? this.lastSeq,
-        utcEpochMs: identical(utcEpochMs, _unset)
-            ? this.utcEpochMs
-            : utcEpochMs as int?,
-        utcStartMs: identical(utcStartMs, _unset)
-            ? this.utcStartMs
-            : utcStartMs as int?,
-        error: identical(error, _unset) ? this.error : error as String?,
-      );
+  }) => WheelSyncState(
+    syncing: syncing ?? this.syncing,
+    offset: offset ?? this.offset,
+    driftFit: driftFit ?? this.driftFit,
+    pendingPing: identical(pendingPing, _unset)
+        ? this.pendingPing
+        : pendingPing as PendingPing?,
+    dropCount: dropCount ?? this.dropCount,
+    lastStartFiredUs: lastStartFiredUs ?? this.lastStartFiredUs,
+    lastStopFiredUs: lastStopFiredUs ?? this.lastStopFiredUs,
+    lastSeq: lastSeq ?? this.lastSeq,
+    utcEpochMs: identical(utcEpochMs, _unset)
+        ? this.utcEpochMs
+        : utcEpochMs as int?,
+    utcStartMs: identical(utcStartMs, _unset)
+        ? this.utcStartMs
+        : utcStartMs as int?,
+    acqHealth: identical(acqHealth, _unset)
+        ? this.acqHealth
+        : acqHealth as AcqHealthEvent?,
+    error: identical(error, _unset) ? this.error : error as String?,
+  );
 
   static const Object _unset = Object();
 }
@@ -114,12 +138,11 @@ class PendingPing {
 
 /// Whole sync state: per-side snapshots.
 class SyncEngineState {
-  SyncEngineState({
-    Map<WheelSide, WheelSyncState>? bySide,
-  }) : bySide = {
-          WheelSide.left: bySide?[WheelSide.left] ?? const WheelSyncState(),
-          WheelSide.right: bySide?[WheelSide.right] ?? const WheelSyncState(),
-        };
+  SyncEngineState({Map<WheelSide, WheelSyncState>? bySide})
+    : bySide = {
+        WheelSide.left: bySide?[WheelSide.left] ?? const WheelSyncState(),
+        WheelSide.right: bySide?[WheelSide.right] ?? const WheelSyncState(),
+      };
 
   final Map<WheelSide, WheelSyncState> bySide;
 
@@ -141,8 +164,12 @@ class SyncEngineState {
 /// exposes the current [DriftFit] once ≥ 2 points are collected.
 class SyncEngineNotifier extends Notifier<SyncEngineState> {
   final _subs = <WheelSide, StreamSubscription<List<int>>>{};
+  final _channels = <WheelSide, BleNotificationChannel<List<int>>>{};
   final _trackers = <WheelSide, MinRttTracker>{};
   final _points = <WheelSide, List<SyncPoint>>{};
+  final Map<WheelSide, List<Completer<int>>> _startWaiters = {};
+  final Map<WheelSide, List<Completer<int>>> _stopWaiters = {};
+
   /// Reference phone timestamp (ms since epoch) captured on the first ping.
   /// All t_app_ms values sent to the firmware are relative to this reference
   /// so they fit in the protocol's uint32 field (§4.1).
@@ -166,9 +193,14 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
       for (final s in _subs.values) {
         s.cancel();
       }
+      for (final channel in _channels.values) {
+        unawaited(channel.close());
+      }
       _subs.clear();
       _trackers.clear();
       _points.clear();
+      _startWaiters.clear();
+      _stopWaiters.clear();
     });
     return SyncEngineState.initial();
   }
@@ -228,6 +260,50 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
     await _ensureListening(side);
   }
 
+  Future<bool> waitForStart(
+    WheelSide side, {
+    required int? previous,
+    required Duration timeout,
+  }) => _waitForAck(
+    side,
+    previous: previous,
+    timeout: timeout,
+    waiters: _startWaiters,
+    current: () => state.bySide[side]!.lastStartFiredUs,
+  );
+
+  Future<bool> waitForStop(
+    WheelSide side, {
+    required int? previous,
+    required Duration timeout,
+  }) => _waitForAck(
+    side,
+    previous: previous,
+    timeout: timeout,
+    waiters: _stopWaiters,
+    current: () => state.bySide[side]!.lastStopFiredUs,
+  );
+
+  Future<bool> _waitForAck(
+    WheelSide side, {
+    required int? previous,
+    required Duration timeout,
+    required Map<WheelSide, List<Completer<int>>> waiters,
+    required int? Function() current,
+  }) async {
+    if (current() != previous) return true;
+    final completer = Completer<int>();
+    (waiters[side] ??= <Completer<int>>[]).add(completer);
+    try {
+      await completer.future.timeout(timeout);
+      return true;
+    } on TimeoutException {
+      return false;
+    } finally {
+      waiters[side]?.remove(completer);
+    }
+  }
+
   Future<void> _ensureListening(WheelSide side) async {
     if (_subs[side] != null) return; // already listening
 
@@ -245,7 +321,9 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
     _points[side] = [];
     state = state.copyWithSide(side, const WheelSyncState(syncing: true));
 
-    _subs[side] = _ble.syncData(deviceId).listen(
+    final channel = _ble.syncNotifications(deviceId);
+    _channels[side] = channel;
+    _subs[side] = channel.stream.listen(
       (bytes) {
         try {
           final event = SyncEvent.parse(bytes);
@@ -270,6 +348,22 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
         _subs.remove(side);
       },
     );
+    try {
+      await channel.ready;
+    } on Object catch (error) {
+      await _subs.remove(side)?.cancel();
+      _channels.remove(side);
+      if (ref.mounted) {
+        state = state.copyWithSide(
+          side,
+          state.bySide[side]!.copyWith(
+            syncing: false,
+            error: 'Sync notification setup failed: $error',
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   void _handleEvent(WheelSide side, SyncEvent event) {
@@ -296,8 +390,9 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
         );
         _trackers[side]!.add(estimate);
         _points[side]!.add(SyncPoint(tDeviceUs: tDeviceUs, tAppUs: t3AppUs));
-        final driftFit =
-            _points[side]!.length >= 2 ? DriftFit.fit(_points[side]!) : null;
+        final driftFit = _points[side]!.length >= 2
+            ? DriftFit.fit(_points[side]!)
+            : null;
         state = state.copyWithSide(
           side,
           cur.copyWith(
@@ -331,17 +426,31 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
             state.bySide[side]!.copyWith(utcStartMs: utcStartMs),
           );
         }
+        for (final waiter
+            in _startWaiters.remove(side) ?? const <Completer<int>>[]) {
+          if (!waiter.isCompleted) waiter.complete(tDeviceUs);
+        }
+      case CountdownCueEvent():
+        // RecordCountdownNotifier consumes and deduplicates audible cues.
+        break;
       case StopFiredEvent(:final tDeviceUs, :final lastSeq):
         state = state.copyWithSide(
           side,
           cur.copyWith(lastStopFiredUs: tDeviceUs, lastSeq: lastSeq),
         );
+        for (final waiter
+            in _stopWaiters.remove(side) ?? const <Completer<int>>[]) {
+          if (!waiter.isCompleted) waiter.complete(tDeviceUs);
+        }
       case UtcSetEvent(:final utcEpochMs):
         // Confirm UTC was received by the board
-        state = state.copyWithSide(
-          side,
-          cur.copyWith(utcEpochMs: utcEpochMs),
-        );
+        state = state.copyWithSide(side, cur.copyWith(utcEpochMs: utcEpochMs));
+      case ReplayResultEvent():
+        // Sample recovery completion is consumed by the shared sample hub;
+        // keep the sync state unchanged.
+        break;
+      case AcqHealthEvent():
+        state = state.copyWithSide(side, cur.copyWith(acqHealth: event));
     }
   }
 
@@ -360,6 +469,33 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
     final deviceId = _deviceIdOrError(side);
     if (deviceId == null) return;
     await _ble.writeControl(deviceId, ControlCommand.stop());
+  }
+
+  /// Sends STOP with bounded retries. A caller should send to each wheel
+  /// serially, then wait for all STOP_FIRED acknowledgements concurrently.
+  Future<StopWriteResult> sendStopWithRetry(
+    WheelSide side, {
+    int maxAttempts = 3,
+  }) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await sendStop(side);
+        return StopWriteResult(written: true, attempts: attempt);
+      } on Object catch (error) {
+        lastError = error;
+      }
+
+      if (attempt < maxAttempts) {
+        final delay = ref.read(stopCommandRetryDelayProvider) * attempt;
+        if (delay > Duration.zero) await Future<void>.delayed(delay);
+      }
+    }
+    return StopWriteResult(
+      written: false,
+      attempts: maxAttempts,
+      error: lastError,
+    );
   }
 
   /// Sends a RESET_SEQ command (§3.1).
@@ -384,5 +520,5 @@ class SyncEngineNotifier extends Notifier<SyncEngineState> {
 
 final syncEngineProvider =
     NotifierProvider<SyncEngineNotifier, SyncEngineState>(
-  SyncEngineNotifier.new,
-);
+      SyncEngineNotifier.new,
+    );

@@ -44,73 +44,77 @@ void main() {
   });
 
   group('QualityBadge.fromMeta', () {
-    SessionMeta meta({
-      double? left,
-      double? right,
-    }) =>
-        SessionMeta(
-          sessionId: 'test',
-          topic: 'topic',
-          trialNumber: 1,
-          sampleRateHz: 100,
-          startTime: DateTime(2026, 1, 1),
-          durationMs: 1000,
-          sampleCount: 100,
-          markerCount: 0,
-          driftResidualRmsMsLeft: left,
-          driftResidualRmsMsRight: right,
-        );
+    SessionMeta meta({double? left, double? right}) => SessionMeta(
+      sessionId: 'test',
+      topic: 'topic',
+      trialNumber: 1,
+      sampleRateHz: 100,
+      startTime: DateTime(2026, 1, 1),
+      durationMs: 1000,
+      sampleCount: 100,
+      markerCount: 0,
+      driftResidualRmsMsLeft: left,
+      driftResidualRmsMsRight: right,
+    );
 
     test('both wheels good -> good', () {
-      expect(QualityBadge.fromMeta(meta(left: 1.0, right: 1.5)),
-          SyncQuality.good);
+      expect(
+        QualityBadge.fromMeta(meta(left: 1.0, right: 1.5)),
+        SyncQuality.good,
+      );
     });
 
     test('one good one poor -> poor (uses max)', () {
-      expect(QualityBadge.fromMeta(meta(left: 1.0, right: 6.0)),
-          SyncQuality.poor);
+      expect(
+        QualityBadge.fromMeta(meta(left: 1.0, right: 6.0)),
+        SyncQuality.poor,
+      );
     });
 
     test('one fair one good -> fair (uses max)', () {
-      expect(QualityBadge.fromMeta(meta(left: 1.0, right: 3.0)),
-          SyncQuality.fair);
+      expect(
+        QualityBadge.fromMeta(meta(left: 1.0, right: 3.0)),
+        SyncQuality.fair,
+      );
     });
 
     test('left null, right set -> based on right', () {
-      expect(QualityBadge.fromMeta(meta(left: null, right: 1.0)),
-          SyncQuality.good);
+      expect(
+        QualityBadge.fromMeta(meta(left: null, right: 1.0)),
+        SyncQuality.good,
+      );
     });
 
     test('right null, left set -> based on left', () {
-      expect(QualityBadge.fromMeta(meta(left: 6.0, right: null)),
-          SyncQuality.poor);
+      expect(
+        QualityBadge.fromMeta(meta(left: 6.0, right: null)),
+        SyncQuality.poor,
+      );
     });
 
     test('both null -> unknown', () {
-      expect(QualityBadge.fromMeta(meta(left: null, right: null)),
-          SyncQuality.unknown);
+      expect(
+        QualityBadge.fromMeta(meta(left: null, right: null)),
+        SyncQuality.unknown,
+      );
     });
   });
 
   group('QualityBadge.color', () {
     test('good -> green', () {
-      expect(QualityBadge.color(SyncQuality.good),
-          const Color(0xFF4CAF50));
+      expect(QualityBadge.color(SyncQuality.good), const Color(0xFF4CAF50));
     });
 
     test('fair -> amber', () {
-      expect(QualityBadge.color(SyncQuality.fair),
-          const Color(0xFFFFC107));
+      expect(QualityBadge.color(SyncQuality.fair), const Color(0xFFFFC107));
     });
 
     test('poor -> red', () {
-      expect(QualityBadge.color(SyncQuality.poor),
-          const Color(0xFFF44336));
+      expect(QualityBadge.color(SyncQuality.poor), const Color(0xFFF44336));
     });
 
     test('unknown -> grey', () {
-      expect(QualityBadge.color(SyncQuality.unknown),
-          const Color(0xFF9E9E9E));
+      expect(QualityBadge.color(SyncQuality.unknown), const Color(0xFF9E9E9E));
     });
   });
 }

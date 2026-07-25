@@ -10,9 +10,7 @@ void main() {
   setUp(() {
     repo = InMemoryProtocolRepository();
     container = ProviderContainer(
-      overrides: [
-        protocolRepositoryProvider.overrideWith((ref) => repo),
-      ],
+      overrides: [protocolRepositoryProvider.overrideWith((ref) => repo)],
     );
     addTearDown(container.dispose);
   });
@@ -36,8 +34,7 @@ void main() {
         topicName: 'balance',
         targetTrialCount: 3,
       );
-      final templates =
-          await container.read(protocolTemplatesProvider.future);
+      final templates = await container.read(protocolTemplatesProvider.future);
       expect(templates.map((t) => t.name).toList(), ['Balance', 'Sprint']);
     });
   });
@@ -61,7 +58,9 @@ void main() {
     });
 
     test('createTemplate adds to the list and refreshes', () async {
-      final notifier = container.read(protocolTemplateNotifierProvider.notifier);
+      final notifier = container.read(
+        protocolTemplateNotifierProvider.notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       final created = await notifier.createTemplate(
@@ -80,7 +79,9 @@ void main() {
     });
 
     test('updateTemplate updates the list', () async {
-      final notifier = container.read(protocolTemplateNotifierProvider.notifier);
+      final notifier = container.read(
+        protocolTemplateNotifierProvider.notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       final created = await notifier.createTemplate(
@@ -98,7 +99,9 @@ void main() {
     });
 
     test('deleteTemplate removes from the list', () async {
-      final notifier = container.read(protocolTemplateNotifierProvider.notifier);
+      final notifier = container.read(
+        protocolTemplateNotifierProvider.notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       final created = await notifier.createTemplate(
@@ -113,7 +116,9 @@ void main() {
     });
 
     test('refresh reloads from repository', () async {
-      final notifier = container.read(protocolTemplateNotifierProvider.notifier);
+      final notifier = container.read(
+        protocolTemplateNotifierProvider.notifier,
+      );
       await Future<void>.delayed(Duration.zero);
 
       // Mutate the repo directly (bypassing the notifier).

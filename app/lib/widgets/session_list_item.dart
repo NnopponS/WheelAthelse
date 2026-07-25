@@ -128,8 +128,7 @@ class SessionListItem extends StatelessWidget {
                                   labelPadding: const EdgeInsets.symmetric(
                                     horizontal: AppSpacing.xs,
                                   ),
-                                  backgroundColor:
-                                      scheme.secondaryContainer,
+                                  backgroundColor: scheme.secondaryContainer,
                                 ),
                             ],
                           ),

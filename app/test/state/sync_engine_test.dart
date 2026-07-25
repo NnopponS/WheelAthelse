@@ -65,11 +65,13 @@ void main() {
   group('MinRttTracker', () {
     test('first ping becomes the best estimate', () {
       final tracker = MinRttTracker();
-      tracker.add(OffsetEstimate.compute(
-        t1AppUs: 1000000,
-        t2DeviceUs: 1004000,
-        t3AppUs: 1010000,
-      ));
+      tracker.add(
+        OffsetEstimate.compute(
+          t1AppUs: 1000000,
+          t2DeviceUs: 1004000,
+          t3AppUs: 1010000,
+        ),
+      );
       expect(tracker.count, 1);
       expect(tracker.best, isNotNull);
       expect(tracker.best!.rttMs, 10.0);
@@ -77,21 +79,27 @@ void main() {
 
     test('keeps the estimate with the lowest RTT', () {
       final tracker = MinRttTracker()
-        ..add(OffsetEstimate.compute(
-          t1AppUs: 1000000,
-          t2DeviceUs: 1004000,
-          t3AppUs: 1020000, // RTT 20 ms
-        ))
-        ..add(OffsetEstimate.compute(
-          t1AppUs: 2000000,
-          t2DeviceUs: 2002000,
-          t3AppUs: 2005000, // RTT 5 ms — better
-        ))
-        ..add(OffsetEstimate.compute(
-          t1AppUs: 3000000,
-          t2DeviceUs: 3003000,
-          t3AppUs: 3012000, // RTT 12 ms — worse
-        ));
+        ..add(
+          OffsetEstimate.compute(
+            t1AppUs: 1000000,
+            t2DeviceUs: 1004000,
+            t3AppUs: 1020000, // RTT 20 ms
+          ),
+        )
+        ..add(
+          OffsetEstimate.compute(
+            t1AppUs: 2000000,
+            t2DeviceUs: 2002000,
+            t3AppUs: 2005000, // RTT 5 ms — better
+          ),
+        )
+        ..add(
+          OffsetEstimate.compute(
+            t1AppUs: 3000000,
+            t2DeviceUs: 3003000,
+            t3AppUs: 3012000, // RTT 12 ms — worse
+          ),
+        );
 
       expect(tracker.count, 3);
       expect(tracker.best!.rttMs, 5.0);
@@ -105,11 +113,13 @@ void main() {
 
     test('clear resets the tracker', () {
       final tracker = MinRttTracker()
-        ..add(OffsetEstimate.compute(
-          t1AppUs: 1000000,
-          t2DeviceUs: 1004000,
-          t3AppUs: 1010000,
-        ));
+        ..add(
+          OffsetEstimate.compute(
+            t1AppUs: 1000000,
+            t2DeviceUs: 1004000,
+            t3AppUs: 1010000,
+          ),
+        );
       tracker.clear();
       expect(tracker.count, 0);
       expect(tracker.best, isNull);

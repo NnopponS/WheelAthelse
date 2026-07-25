@@ -28,15 +28,21 @@ class StatusBadge extends StatelessWidget {
     final wc = context.wheelColors;
     return switch (tone) {
       BadgeTone.neutral => (
-          fg: scheme.onSurfaceVariant,
-          bg: scheme.surfaceContainerHigh,
-        ),
+        fg: scheme.onSurfaceVariant,
+        bg: scheme.surfaceContainerHigh,
+      ),
       BadgeTone.info => (
-          fg: scheme.onPrimaryContainer,
-          bg: scheme.primaryContainer,
-        ),
-      BadgeTone.success => (fg: wc.success.onContainer, bg: wc.success.container),
-      BadgeTone.warning => (fg: wc.warning.onContainer, bg: wc.warning.container),
+        fg: scheme.onPrimaryContainer,
+        bg: scheme.primaryContainer,
+      ),
+      BadgeTone.success => (
+        fg: wc.success.onContainer,
+        bg: wc.success.container,
+      ),
+      BadgeTone.warning => (
+        fg: wc.warning.onContainer,
+        bg: wc.warning.container,
+      ),
       BadgeTone.danger => (fg: wc.danger.onContainer, bg: wc.danger.container),
       BadgeTone.left => (fg: wc.left.onContainer, bg: wc.left.container),
       BadgeTone.right => (fg: wc.right.onContainer, bg: wc.right.container),
@@ -47,19 +53,16 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = _colors(context);
     final textStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: c.fg,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        );
+      color: c.fg,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.2,
+    );
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: dense ? AppSpacing.xs : AppSpacing.sm,
         vertical: dense ? 2 : AppSpacing.xxs,
       ),
-      decoration: BoxDecoration(
-        color: c.bg,
-        borderRadius: AppRadius.brSm,
-      ),
+      decoration: BoxDecoration(color: c.bg, borderRadius: AppRadius.brSm),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

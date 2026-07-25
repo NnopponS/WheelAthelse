@@ -44,18 +44,17 @@ void main() {
     required int trial,
     required DateTime start,
     String? templateId,
-  }) =>
-      SessionMeta(
-        sessionId: '${topic}_${start.millisecondsSinceEpoch.toRadixString(16)}',
-        topic: topic,
-        trialNumber: trial,
-        sampleRateHz: 100,
-        startTime: start,
-        durationMs: 1000,
-        sampleCount: 100,
-        markerCount: 0,
-        protocolTemplateId: templateId,
-      );
+  }) => SessionMeta(
+    sessionId: '${topic}_${start.millisecondsSinceEpoch.toRadixString(16)}',
+    topic: topic,
+    trialNumber: trial,
+    sampleRateHz: 100,
+    startTime: start,
+    durationMs: 1000,
+    sampleCount: 100,
+    markerCount: 0,
+    protocolTemplateId: templateId,
+  );
 
   testWidgets('shows empty state when no templates', (tester) async {
     await pumpTracker(
@@ -82,10 +81,11 @@ void main() {
     await storageRepo.saveSession(
       'sprint',
       makeMeta(
-          topic: 'sprint',
-          trial: 1,
-          start: DateTime(2026, 6, 1),
-          templateId: t.id),
+        topic: 'sprint',
+        trial: 1,
+        start: DateTime(2026, 6, 1),
+        templateId: t.id,
+      ),
       const [],
     );
     await pumpTracker(
@@ -99,8 +99,9 @@ void main() {
     expect(find.text('1 / 5 trials'), findsOneWidget);
   });
 
-  testWidgets('tapping a card calls onOpenTopic with the topic name',
-      (tester) async {
+  testWidgets('tapping a card calls onOpenTopic with the topic name', (
+    tester,
+  ) async {
     final protocolRepo = InMemoryProtocolRepository();
     final storageRepo = InMemoryStorageRepository();
     await protocolRepo.createTemplate(
@@ -136,8 +137,9 @@ void main() {
     expect(find.text('Topic name *'), findsOneWidget);
   });
 
-  testWidgets('create dialog saves a template and refreshes the list',
-      (tester) async {
+  testWidgets('create dialog saves a template and refreshes the list', (
+    tester,
+  ) async {
     final protocolRepo = InMemoryProtocolRepository();
     final storageRepo = InMemoryStorageRepository();
     await pumpTracker(
@@ -151,7 +153,9 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextField, 'Name *'), 'Balance');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Topic name *'), 'balance');
+      find.widgetWithText(TextField, 'Topic name *'),
+      'balance',
+    );
     await tester.tap(find.text('Create'));
     await tester.pumpAndSettle();
 

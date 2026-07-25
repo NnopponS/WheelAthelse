@@ -87,8 +87,8 @@ class SessionPreviewPage extends ConsumerWidget {
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : state.error != null
-              ? _ErrorView(message: state.error!)
-              : _PreviewBody(source: source, state: state, theme: theme, wc: wc),
+          ? _ErrorView(message: state.error!)
+          : _PreviewBody(source: source, state: state, theme: theme, wc: wc),
     );
   }
 
@@ -157,15 +157,22 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded,
-                size: 48, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: AppSpacing.md),
-            Text('Could not load session',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Could not load session',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSpacing.xs),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
@@ -197,17 +204,9 @@ class _PreviewBody extends ConsumerWidget {
         const SizedBox(height: AppSpacing.sm),
         _WheelSelector(source: source, state: state),
         const SizedBox(height: AppSpacing.md),
-        _ChartSection(
-          state: state,
-          wc: wc,
-          isAccel: true,
-        ),
+        _ChartSection(state: state, wc: wc, isAccel: true),
         const SizedBox(height: AppSpacing.md),
-        _ChartSection(
-          state: state,
-          wc: wc,
-          isAccel: false,
-        ),
+        _ChartSection(state: state, wc: wc, isAccel: false),
       ],
     );
   }
@@ -309,10 +308,22 @@ class _StatGrid extends StatelessWidget {
       mainAxisSpacing: AppSpacing.xs,
       crossAxisSpacing: AppSpacing.xs,
       children: [
-        _statTile('Mean accel', '${stats.meanAccelMagnitude.toStringAsFixed(2)} g'),
-        _statTile('Peak accel', '${stats.peakAccelMagnitude.toStringAsFixed(2)} g'),
-        _statTile('Mean gyro', '${stats.meanGyroMagnitude.toStringAsFixed(1)} dps'),
-        _statTile('Peak gyro', '${stats.peakGyroMagnitude.toStringAsFixed(1)} dps'),
+        _statTile(
+          'Mean accel',
+          '${stats.meanAccelMagnitude.toStringAsFixed(2)} g',
+        ),
+        _statTile(
+          'Peak accel',
+          '${stats.peakAccelMagnitude.toStringAsFixed(2)} g',
+        ),
+        _statTile(
+          'Mean gyro',
+          '${stats.meanGyroMagnitude.toStringAsFixed(1)} dps',
+        ),
+        _statTile(
+          'Peak gyro',
+          '${stats.peakGyroMagnitude.toStringAsFixed(1)} dps',
+        ),
       ],
     );
   }
@@ -320,7 +331,9 @@ class _StatGrid extends StatelessWidget {
   Widget _statTile(String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: AppRadius.brSm,
@@ -352,8 +365,7 @@ class _ScrubSlider extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Scrub',
-                style: Theme.of(context).textTheme.labelMedium),
+            Text('Scrub', style: Theme.of(context).textTheme.labelMedium),
             Text(
               _fmtDuration(Duration(milliseconds: state.scrubPositionMs)),
               style: Theme.of(context).textTheme.labelMedium,
@@ -367,8 +379,8 @@ class _ScrubSlider extends ConsumerWidget {
           onChanged: max <= 0
               ? null
               : (v) => ref
-                  .read(previewControllerProvider(source).notifier)
-                  .setScrub(v.round()),
+                    .read(previewControllerProvider(source).notifier)
+                    .setScrub(v.round()),
         ),
       ],
     );
@@ -446,7 +458,8 @@ class _ChartSection extends StatelessWidget {
                 children: [
                   _WheelChart(
                     readings: toReadings(
-                        filterByWheel(chunk, PreviewWheelSelection.left)),
+                      filterByWheel(chunk, PreviewWheelSelection.left),
+                    ),
                     isAccel: isAccel,
                     axisColors: axisColors,
                     label: 'L',
@@ -455,7 +468,8 @@ class _ChartSection extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   _WheelChart(
                     readings: toReadings(
-                        filterByWheel(chunk, PreviewWheelSelection.right)),
+                      filterByWheel(chunk, PreviewWheelSelection.right),
+                    ),
                     isAccel: isAccel,
                     axisColors: axisColors,
                     label: 'R',
@@ -469,10 +483,12 @@ class _ChartSection extends StatelessWidget {
                 isAccel: isAccel,
                 axisColors: axisColors,
                 label: selection == PreviewWheelSelection.left ? 'L' : 'R',
-                color: wc.forWheel(
-                        selection == PreviewWheelSelection.left
-                            ? WheelSide.left
-                            : WheelSide.right)
+                color: wc
+                    .forWheel(
+                      selection == PreviewWheelSelection.left
+                          ? WheelSide.left
+                          : WheelSide.right,
+                    )
                     .solid,
               ),
           ],
@@ -509,9 +525,14 @@ class _WheelChart extends StatelessWidget {
             color: color.withValues(alpha: 0.15),
             borderRadius: AppRadius.brSm,
           ),
-          child: Text(label,
-              style: TextStyle(
-                  color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
         ),
         const SizedBox(width: AppSpacing.xs),
         Expanded(

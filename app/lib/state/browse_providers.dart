@@ -8,13 +8,19 @@ final topicsProvider = FutureProvider<List<TopicEntry>>((ref) async {
   return storage.listTopics();
 });
 
-final trialsProvider = FutureProvider.family<List<int>, String>((ref, topic) async {
+final trialsProvider = FutureProvider.family<List<int>, String>((
+  ref,
+  topic,
+) async {
   final storage = ref.watch(storageRepositoryProvider);
   return storage.listTrials(topic);
 });
 
 // arg is formatted as "topic:trialNumber"
-final sessionsProvider = FutureProvider.family<List<SessionMeta>, String>((ref, arg) async {
+final sessionsProvider = FutureProvider.family<List<SessionMeta>, String>((
+  ref,
+  arg,
+) async {
   final parts = arg.split(':');
   final topic = parts[0];
   final trial = int.parse(parts[1]);
@@ -42,8 +48,7 @@ class BrowseSearchNotifier extends Notifier<String> {
   void clear() => state = '';
 }
 
-final browseSearchProvider =
-    NotifierProvider<BrowseSearchNotifier, String>(
+final browseSearchProvider = NotifierProvider<BrowseSearchNotifier, String>(
   BrowseSearchNotifier.new,
 );
 
@@ -70,8 +75,8 @@ class BrowseTagFilterNotifier extends Notifier<String?> {
 
 final browseTagFilterProvider =
     NotifierProvider<BrowseTagFilterNotifier, String?>(
-  BrowseTagFilterNotifier.new,
-);
+      BrowseTagFilterNotifier.new,
+    );
 
 /// Shared topic to open in the Browse tab (Phase 3, §8 Experiment tracker).
 ///
@@ -90,8 +95,7 @@ class SelectedTopicNotifier extends Notifier<String?> {
   void clear() => state = null;
 }
 
-final selectedTopicProvider =
-    NotifierProvider<SelectedTopicNotifier, String?>(
+final selectedTopicProvider = NotifierProvider<SelectedTopicNotifier, String?>(
   SelectedTopicNotifier.new,
 );
 

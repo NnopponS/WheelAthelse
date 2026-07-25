@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +9,7 @@ import 'package:wheelathlete/ble/wheel_id.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/records/storage_repository.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/countdown_cue_player.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
@@ -19,6 +20,21 @@ import 'package:wheelathlete/theme/theme.dart';
 Uint8List _startFiredEvent(int tDeviceUs) {
   final inner = ByteData(4)..setUint32(0, tDeviceUs, Endian.little);
   return Uint8List.fromList([0x30, ...inner.buffer.asUint8List()]);
+}
+
+Uint8List _firstSampleBatch(int tDeviceUs) {
+  final sample = ByteData(20)
+    ..setUint32(0, 0, Endian.little)
+    ..setUint32(4, tDeviceUs, Endian.little);
+  return Uint8List.fromList([1, ...sample.buffer.asUint8List()]);
+}
+
+void _emitFirstSamples(FakeBleRepository ble, Iterable<String> deviceIds) {
+  var timestampUs = 1001000;
+  for (final deviceId in deviceIds) {
+    ble.imuController(deviceId)!.add(_firstSampleBatch(timestampUs));
+    timestampUs += 500;
+  }
 }
 
 const _leftInfo = DeviceInfo(
@@ -42,6 +58,15 @@ const _rightInfo = DeviceInfo(
   accelScale: 1 / 16384,
   gyroScale: 1 / 16.4,
 );
+
+final class _FakeCuePlayer implements CountdownCuePlayer {
+  final List<({int durationMs, bool isStart})> calls = [];
+
+  @override
+  Future<void> play({required int durationMs, required bool isStart}) async {
+    calls.add((durationMs: durationMs, isStart: isStart));
+  }
+}
 
 void main() {
   group('computeUtcStartMs (pure)', () {
@@ -91,9 +116,11 @@ void main() {
     late FakeBleRepository ble;
     late InMemoryStorageRepository storage;
     late ProviderContainer container;
+    late _FakeCuePlayer cuePlayer;
 
     Future<void> pumpProviders() async {
       storage = InMemoryStorageRepository();
+      cuePlayer = _FakeCuePlayer();
       ble = FakeBleRepository(
         devices: [
           const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
@@ -104,11 +131,14 @@ void main() {
       container = ProviderContainer(
         overrides: [
           bleRepositoryProvider.overrideWith((ref) => ble),
+          countdownCuePlayerProvider.overrideWith((ref) => cuePlayer),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
           interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
           // Short countdown so the test completes quickly.
-          countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
+          countdownDurationProvider.overrideWith(
+            (ref) => const Duration(milliseconds: 200),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -126,33 +156,56 @@ void main() {
       expect(state.utcStartMs, isNull);
     });
 
-    test('start transitions to syncing then counting and sends SET_UTC + START',
-        () async {
+    test(
+      'start transitions to syncing then counting and sends SET_UTC + START',
+      () async {
+        await pumpProviders();
+        final notifier = container.read(recordCountdownProvider.notifier);
+        const config = SessionConfig(
+          topic: 'sprint_test',
+          trialNumber: 1,
+          sampleRateHz: 100,
+        );
+
+        await notifier.start(config);
+
+        // After start completes the sync burst + sends, state should be counting.
+        final state = container.read(recordCountdownProvider);
+        expect(state.status, RecordCountdownStatus.counting);
+        expect(state.tStartPhoneMs, isNotNull);
+        expect(state.utcStartMs, isNotNull);
+
+        // SET_UTC was written to both wheels (0x09). The fake only keeps the
+        // last write per device, so verify the last write is the START command
+        // (0x01) which is sent after SET_UTC.
+        final leftWrite = ble.lastControlWrite('L1');
+        expect(leftWrite, isNotNull);
+        expect(leftWrite![0], ControlCommandId.start);
+        final rightWrite = ble.lastControlWrite('R1');
+        expect(rightWrite, isNotNull);
+        expect(rightWrite![0], ControlCommandId.start);
+      },
+    );
+
+    test('dual-board countdown cues play once on the phone', () async {
       await pumpProviders();
-      final notifier = container.read(recordCountdownProvider.notifier);
-      const config = SessionConfig(
-        topic: 'sprint_test',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      );
+      await container
+          .read(recordCountdownProvider.notifier)
+          .start(
+            const SessionConfig(
+              topic: 'sprint_test',
+              trialNumber: 1,
+              sampleRateHz: 100,
+            ),
+          );
 
-      await notifier.start(config);
+      const cue = [0x31, 0, 4, 150, 0];
+      ble.syncController('L1')!.add(cue);
+      ble.syncController('R1')!.add(cue);
+      await Future<void>.delayed(Duration.zero);
 
-      // After start completes the sync burst + sends, state should be counting.
-      final state = container.read(recordCountdownProvider);
-      expect(state.status, RecordCountdownStatus.counting);
-      expect(state.tStartPhoneMs, isNotNull);
-      expect(state.utcStartMs, isNotNull);
-
-      // SET_UTC was written to both wheels (0x09). The fake only keeps the
-      // last write per device, so verify the last write is the START command
-      // (0x01) which is sent after SET_UTC.
-      final leftWrite = ble.lastControlWrite('L1');
-      expect(leftWrite, isNotNull);
-      expect(leftWrite![0], ControlCommandId.start);
-      final rightWrite = ble.lastControlWrite('R1');
-      expect(rightWrite, isNotNull);
-      expect(rightWrite![0], ControlCommandId.start);
+      expect(cuePlayer.calls, [(durationMs: 150, isStart: false)]);
+      await container.read(recordCountdownProvider.notifier).cancel();
     });
 
     test('scheduled start aligns to next whole second', () async {
@@ -172,7 +225,9 @@ void main() {
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
           interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
-          countdownDurationProvider.overrideWith((ref) => const Duration(seconds: 1)),
+          countdownDurationProvider.overrideWith(
+            (ref) => const Duration(seconds: 1),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -186,7 +241,9 @@ void main() {
         trialNumber: 1,
         sampleRateHz: 100,
       );
-      final countdownMs = container.read(countdownDurationProvider).inMilliseconds;
+      final countdownMs = container
+          .read(countdownDurationProvider)
+          .inMilliseconds;
       final beforeMs = DateTime.now().millisecondsSinceEpoch;
       await notifier.start(config);
       final afterMs = DateTime.now().millisecondsSinceEpoch;
@@ -195,10 +252,16 @@ void main() {
       final tStart = state.tStartPhoneMs!;
       expect(tStart % 1000, 0, reason: 'T_start must land on a whole second');
       final delayMs = tStart - beforeMs;
+      final remainingMs = tStart - afterMs;
       expect(
         delayMs,
-        inInclusiveRange(countdownMs, countdownMs + 1000),
-        reason: 'delay is [countdown, countdown + 1s)',
+        greaterThanOrEqualTo(countdownMs),
+        reason: 'scheduled start cannot precede the requested countdown',
+      );
+      expect(
+        remainingMs,
+        inInclusiveRange(1, countdownMs + 1000),
+        reason: 'remaining delay excludes variable sync-burst test overhead',
       );
       expect(afterMs, lessThan(tStart), reason: 'T_start is in the future');
     });
@@ -214,9 +277,14 @@ void main() {
 
       await notifier.start(config);
 
+      // Notification channels and Android connection priority are prepared
+      // once before countdown/START, never during the START_FIRED handoff.
+      expect(ble.streamPreparationCalls, unorderedEquals(['L1', 'R1']));
+
       // Inject START_FIRED from both wheels.
       ble.syncController('L1')?.add(_startFiredEvent(1000000));
       ble.syncController('R1')?.add(_startFiredEvent(1000500));
+      _emitFirstSamples(ble, const ['L1', 'R1']);
 
       // Allow the stream listeners + recording start to process.
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -228,10 +296,10 @@ void main() {
       final recState = container.read(recordingProvider);
       expect(recState.status, RecordingStatus.recording);
       expect(recState.config?.utcStartMs, isNotNull);
+      expect(ble.streamPreparationCalls, unorderedEquals(['L1', 'R1']));
     });
 
-    test(
-        'IMU streaming is armed during counting, before START_FIRED '
+    test('IMU streaming is armed during counting, before START_FIRED '
         '(regression: avoid dropping the first samples)', () async {
       await pumpProviders();
       final notifier = container.read(recordCountdownProvider.notifier);
@@ -306,63 +374,70 @@ void main() {
       expect(rightWrite![0], ControlCommandId.stop);
     });
 
-    test('start with one wheel connected succeeds (single-wheel mode)', () async {
-      storage = InMemoryStorageRepository();
-      ble = FakeBleRepository(
-        devices: [
-          const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-          const FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
-        ],
-        infoFor: const {'L1': _leftInfo, 'R1': _rightInfo},
-      );
-      container = ProviderContainer(
-        overrides: [
-          bleRepositoryProvider.overrideWith((ref) => ble),
-          storageRepositoryProvider.overrideWith((ref) => storage),
-          rssiPollIntervalProvider.overrideWith((ref) => null),
-          interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
-          countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
-        ],
-      );
-      addTearDown(container.dispose);
-      // Only connect the left wheel.
-      await container.read(connectionManagerProvider.notifier).connect('L1');
-      await storage.createTopic('sprint_test');
+    test(
+      'start with one wheel connected succeeds (single-wheel mode)',
+      () async {
+        storage = InMemoryStorageRepository();
+        ble = FakeBleRepository(
+          devices: [
+            const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+            const FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
+          ],
+          infoFor: const {'L1': _leftInfo, 'R1': _rightInfo},
+        );
+        container = ProviderContainer(
+          overrides: [
+            bleRepositoryProvider.overrideWith((ref) => ble),
+            storageRepositoryProvider.overrideWith((ref) => storage),
+            rssiPollIntervalProvider.overrideWith((ref) => null),
+            interConnectSettleDelayProvider.overrideWith(
+              (ref) => Duration.zero,
+            ),
+            countdownDurationProvider.overrideWith(
+              (ref) => const Duration(milliseconds: 200),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        // Only connect the left wheel.
+        await container.read(connectionManagerProvider.notifier).connect('L1');
+        await storage.createTopic('sprint_test');
 
-      final notifier = container.read(recordCountdownProvider.notifier);
-      const config = SessionConfig(
-        topic: 'sprint_test',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      );
-      await notifier.start(config);
+        final notifier = container.read(recordCountdownProvider.notifier);
+        const config = SessionConfig(
+          topic: 'sprint_test',
+          trialNumber: 1,
+          sampleRateHz: 100,
+        );
+        await notifier.start(config);
 
-      // Single-wheel mode: should proceed to counting (not error).
-      final state = container.read(recordCountdownProvider);
-      expect(state.status, RecordCountdownStatus.counting);
+        // Single-wheel mode: should proceed to counting (not error).
+        final state = container.read(recordCountdownProvider);
+        expect(state.status, RecordCountdownStatus.counting);
 
-      // Fire START_FIRED from the left wheel only â†’ recording should begin.
-      ble.syncController('L1')?.add(_startFiredEvent(1000000));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(
-        container.read(recordingProvider).status,
-        RecordingStatus.recording,
-      );
-    });
+        // Fire START_FIRED from the left wheel only â†’ recording should begin.
+        ble.syncController('L1')?.add(_startFiredEvent(1000000));
+        _emitFirstSamples(ble, const ['L1']);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(
+          container.read(recordingProvider).status,
+          RecordingStatus.recording,
+        );
+      },
+    );
 
     test('start with no wheels connected sets error', () async {
       storage = InMemoryStorageRepository();
-      ble = FakeBleRepository(
-        devices: const [],
-        infoFor: const {},
-      );
+      ble = FakeBleRepository(devices: const [], infoFor: const {});
       container = ProviderContainer(
         overrides: [
           bleRepositoryProvider.overrideWith((ref) => ble),
           storageRepositoryProvider.overrideWith((ref) => storage),
           rssiPollIntervalProvider.overrideWith((ref) => null),
           interConnectSettleDelayProvider.overrideWith((ref) => Duration.zero),
-          countdownDurationProvider.overrideWith((ref) => const Duration(milliseconds: 200)),
+          countdownDurationProvider.overrideWith(
+            (ref) => const Duration(milliseconds: 200),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -396,6 +471,7 @@ void main() {
       // Fire START_FIRED to begin recording.
       ble.syncController('L1')?.add(_startFiredEvent(1000000));
       ble.syncController('R1')?.add(_startFiredEvent(1000500));
+      _emitFirstSamples(ble, const ['L1', 'R1']);
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(
         container.read(recordingProvider).status,
@@ -411,35 +487,38 @@ void main() {
       expect(metas.first.utcStartMs, expectedUtc);
     });
 
-    test('countdown passes utcOffsetMs and UTC startTime to recording config',
-        () async {
-      await pumpProviders();
-      final countdown = container.read(recordCountdownProvider.notifier);
-      const config = SessionConfig(
-        topic: 'sprint_test',
-        trialNumber: 1,
-        sampleRateHz: 100,
-      );
-      await countdown.start(config);
-      final countdownState = container.read(recordCountdownProvider);
-      expect(countdownState.utcStartMs, isNotNull);
-      expect(countdownState.tStartPhoneMs, isNotNull);
+    test(
+      'countdown passes utcOffsetMs and UTC startTime to recording config',
+      () async {
+        await pumpProviders();
+        final countdown = container.read(recordCountdownProvider.notifier);
+        const config = SessionConfig(
+          topic: 'sprint_test',
+          trialNumber: 1,
+          sampleRateHz: 100,
+        );
+        await countdown.start(config);
+        final countdownState = container.read(recordCountdownProvider);
+        expect(countdownState.utcStartMs, isNotNull);
+        expect(countdownState.tStartPhoneMs, isNotNull);
 
-      // Fire START_FIRED to begin recording.
-      ble.syncController('L1')?.add(_startFiredEvent(1000000));
-      ble.syncController('R1')?.add(_startFiredEvent(1000500));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        // Fire START_FIRED to begin recording.
+        ble.syncController('L1')?.add(_startFiredEvent(1000000));
+        ble.syncController('R1')?.add(_startFiredEvent(1000500));
+        _emitFirstSamples(ble, const ['L1', 'R1']);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final recState = container.read(recordingProvider);
-      expect(recState.status, RecordingStatus.recording);
-      expect(recState.config!.utcStartMs, countdownState.utcStartMs);
-      expect(recState.config!.utcOffsetMs, isNotNull);
-      expect(recState.config!.startTime, isNotNull);
-      expect(
-        recState.config!.startTime!.toUtc().millisecondsSinceEpoch,
-        countdownState.utcStartMs,
-      );
-    });
+        final recState = container.read(recordingProvider);
+        expect(recState.status, RecordingStatus.recording);
+        expect(recState.config!.utcStartMs, countdownState.utcStartMs);
+        expect(recState.config!.utcOffsetMs, isNotNull);
+        expect(recState.config!.startTime, isNotNull);
+        expect(
+          recState.config!.startTime!.toUtc().millisecondsSinceEpoch,
+          countdownState.utcStartMs,
+        );
+      },
+    );
 
     test('reset returns to idle from any state', () async {
       await pumpProviders();

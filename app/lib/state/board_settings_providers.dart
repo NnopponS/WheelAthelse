@@ -3,6 +3,7 @@ import 'package:wheelathlete/ble/ble_repository.dart';
 import 'package:wheelathlete/ble/board_config.dart';
 import 'package:wheelathlete/ble/control_command.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
 /// State for the Board Settings screen.
@@ -21,7 +22,7 @@ class BoardSettingsState {
 enum BoardSettingsStatus { loading, loaded, saving, saved, error }
 
 /// Notifier that reads the Config characteristic on build and writes
-/// SET_NAME / SET_WHEEL / SET_RATE commands on save.
+/// SET_NAME / SET_WHEEL / SET_RATE / SET_BEEP_ENABLED commands on save.
 ///
 /// Constructed per [WheelSide] via [boardSettingsProvider].
 class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
@@ -79,7 +80,21 @@ class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
     required String name,
     required int wheelByte,
     required int rateHz,
+    required bool beepEnabled,
   }) async {
+    if (const {
+      RecordingStatus.arming,
+      RecordingStatus.awaitingSamples,
+      RecordingStatus.recording,
+      RecordingStatus.stopping,
+    }.contains(ref.read(recordingProvider).status)) {
+      state = BoardSettingsState(
+        status: BoardSettingsStatus.error,
+        config: state.config,
+        error: 'Stop recording before changing board settings',
+      );
+      return;
+    }
     final conn = ref.read(connectionManagerProvider).bySide[side]!;
     final deviceId = conn.deviceId;
     if (deviceId == null) {
@@ -101,6 +116,12 @@ class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
       await _ble.writeControl(deviceId, ControlCommand.setWheel(wheelByte));
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await _ble.writeControl(deviceId, ControlCommand.setRate(rateHz));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await _ble.writeControl(
+        deviceId,
+        ControlCommand.setBeepEnabled(beepEnabled),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       // Re-read the Config characteristic to confirm changes and update UI.
       final updatedConfig = await _ble.readConfig(deviceId);
       if (!ref.mounted) return;
@@ -120,6 +141,8 @@ class BoardSettingsNotifier extends Notifier<BoardSettingsState> {
 }
 
 final boardSettingsProvider =
-    NotifierProvider.family<BoardSettingsNotifier, BoardSettingsState, WheelSide>(
-  BoardSettingsNotifier.new,
-);
+    NotifierProvider.family<
+      BoardSettingsNotifier,
+      BoardSettingsState,
+      WheelSide
+    >(BoardSettingsNotifier.new);

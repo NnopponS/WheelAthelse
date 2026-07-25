@@ -56,22 +56,24 @@ class Resampler {
         final sideSamples = bySide[side]!;
         final interp = _interpolateAt(sideSamples, t);
         if (interp == null) continue; // outside range for this side
-        result.add(BufferedSample(
-          reading: ImuReading(
-            seq: gridIdx,
-            tDeviceUs: interp.tDeviceUs,
-            ax: interp.ax,
-            ay: interp.ay,
-            az: interp.az,
-            gx: interp.gx,
-            gy: interp.gy,
-            gz: interp.gz,
+        result.add(
+          BufferedSample(
+            reading: ImuReading(
+              seq: gridIdx,
+              tDeviceUs: interp.tDeviceUs,
+              ax: interp.ax,
+              ay: interp.ay,
+              az: interp.az,
+              gx: interp.gx,
+              gy: interp.gy,
+              gz: interp.gz,
+            ),
+            wheel: side,
+            timestampAppMs: interp.timestampAppMs,
+            timestampSyncedMs: t,
+            marker: interp.marker,
           ),
-          wheel: side,
-          timestampAppMs: interp.timestampAppMs,
-          timestampSyncedMs: t,
-          marker: interp.marker,
-        ));
+        );
       }
     }
     return result;
@@ -135,8 +137,7 @@ class Resampler {
     );
   }
 
-  static int lerpInt(int a, int b, double frac) =>
-      (a + frac * (b - a)).round();
+  static int lerpInt(int a, int b, double frac) => (a + frac * (b - a)).round();
 }
 
 class _InterpResult {

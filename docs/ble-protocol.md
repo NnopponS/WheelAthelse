@@ -5,7 +5,7 @@
 เอกสารนี้เป็น source of truth สำหรับทั้งสองฝั่ง — firmware และ app ต้อง implement
 ตามนี้เป๊ะ ห้ามเปลี่ยนโดยไม่ update เอกสารนี้ก่อน
 
-- เวอร์ชัน: `1.1.0` (subtask #11 — Battery Service)
+- เวอร์ชัน: `1.7.0` (dual-wheel lifecycle reliability and acquisition-health telemetry)
 - อ้างอิง: `.project/architecture.md` หัวข้อ 4 (Time Sync) และหัวข้อ 5 (Storage)
 
 ---
@@ -25,9 +25,9 @@
 |---|---|---|---|---|
 | IMU Data | `0000a1b3-0000-1000-8000-00805f9b34fb` | Notify | Firmware → App | up to MTU-3 |
 | Control | `0000a1b4-0000-1000-8000-00805f9b34fb` | Write + Write Without Response | App → Firmware | up to 32 B |
-| Sync | `0000a1b5-0000-1000-8000-00805f9b34fb` | Notify + Indicate | Firmware → App | 12 B |
+| Sync | `0000a1b5-0000-1000-8000-00805f9b34fb` | Notify + Indicate | Firmware → App | 28 B |
 | Info | `0000a1b6-0000-1000-8000-00805f9b34fb` | Read | Firmware → App | 16 B |
-| Config | `0000a1b7-0000-1000-8000-00805f9b34fb` | Read | Firmware → App | 22 B |
+| Config | `0000a1b7-0000-1000-8000-00805f9b34fb` | Read | Firmware → App | 31 B |
 
 > App ควร request MTU 247 ตอน connect เพื่อให้ใส่ batch ได้มากขึ้น
 > Firmware ต้อง support MTU exchange (NimBLE รองรับ default)
@@ -44,7 +44,8 @@
 
 **Battery Level (1 byte, uint8):**
 - ค่า 0–100 = เปอร์เซ็นต์แบตเตอรี่
-- Firmware อ่านจาก `M5.Power.getBatteryLevel()` ทุก ~5 วินาที
+- Firmware publishes a filtered cached battery value while idle and defers
+  blocking ADC sampling until acquisition has stopped.
 - Notify เฉพาะเมื่อค่าเปลี่ยน (ลด noise)
 - ค่าที่อ่านได้ -1 (unknown) → firmware clamp เป็น 0
 - ค่า > 100 → firmware clamp เป็น 100
@@ -67,7 +68,7 @@ Firmware ส่ง batch ของ IMU samples ผ่าน notify 1 ครั�
 | 8  | `ax`             | int16  | accel X raw (LSB) — แปลงด้วย `accel_scale` จาก Info |
 | 10 | `ay`             | int16  | accel Y raw |
 | 12 | `az`             | int16  | accel Z raw |
-| 14 | `gx`             | int16  | gyro X raw (LSB) — แปลงด้วย `gyro_scale` |
+| 14 | `gx`             | int16  | gyro X raw |
 | 16 | `gy`             | int16  | gyro Y raw |
 | 18 | `gz`             | int16  | gyro Z raw |
 
@@ -107,12 +108,20 @@ App เขียนคำสั่งไป firmware ทุกคำสั่ง
 | `0x04` | `SYNC_PING`        | `uint32 t_app_ms` (เวลามือถือตอนส่ง) | firmware echo ผ่าน Sync characteristic (§4) |
 | `0x05` | `SET_RANGE`        | `uint8 accel_range`, `uint8 gyro_range` | firmware เปลี่ยน IMU range + update Info |
 | `0x06` | `BEEP`             | `uint8 count`, `uint16 period_ms` | firmware ส่งเสียง beep (sync marker ที่จอ/ลำโพง) |
-| `0x07` | `SET_NAME`         | `char name[16]` (null-padded ASCII) | firmware เปลี่ยนชื่อ board + update advertised name + Config char |
+| `0x07` | `SET_NAME`         | `char name[24]` (null-padded ASCII) | firmware เปลี่ยนชื่อ board + update advertised name + Config char |
 | `0x08` | `SET_WHEEL`        | `uint8 wheel_id` (`0x4C`='L', `0x52`='R') | firmware เปลี่ยน wheel side + update Info + Config + advertised name |
 | `0x09` | `SET_UTC`         | `uint64 utc_epoch_ms` (LE, epoch ms) | firmware เก็บ UTC epoch ใน RAM + echo ผ่าน `UTC_SET` event (§4.4) |
+| `0x0A` | `REPLAY_RANGE`     | `uint32 start_seq`, `uint16 count` (1–128) | retransmit samples from the 512-sample history |
+| `0x0B` | `SET_BEEP_ENABLED` | `uint8 enabled` (`0`/`1`) | persist per-board countdown audio; visual countdown remains active |
 | `0xFF` | `RESET_SEQ`        | (ไม่มี) | firmware รีเซ็ต `seq` กลับเป็น 0 |
 
 > คำสั่งที่ไม่รู้จัก → firmware ส่ง Sync event `CMD_NACK` (§4.4)
+
+> **v1.6.0 STOP finalization:** firmware drains samples that were already in
+> flight when acquisition stopped, retains/retries the last IMU batch, and
+> emits final `ACQ_HEALTH` followed by `STOP_FIRED` only after the IMU queue and
+> retained batch have remained empty for 30 ms. The final produced and notified
+> counts therefore describe the complete stopped trial.
 
 ### 3.2 Synchronized start (target_start_us)
 
@@ -178,10 +187,19 @@ Sync characteristic ใช้ส่ง event พิเศษด้วย (flag �
 | `0x10` | `DROP_COUNT`    | `uint32 count` | จำนวน sample ที่ถูกทิ้งตั้งแต่ event ล่าสุด |
 | `0x20` | `CMD_NACK`      | `uint8 cmd` | คำสั่งที่ไม่รู้จัก/ไม่ valid |
 | `0x30` | `START_FIRED`   | `uint32 t_device_us`, `uint64 utc_start_ms` | ยืนยันว่าเริ่ม acquisition จริง ณ เวลานี้ + UTC start instant (0 ถ้า UTC ไม่ได้ตั้ง) |
+| `0x31` | `COUNTDOWN_CUE` | `uint8 index`, `uint8 total`, `uint16 duration_ms` | M5 beep/XIAO LED cue; app เล่นเสียงโทรศัพท์หนึ่งครั้งหลัง deduplicate สองบอร์ด |
 | `0x40` | `STOP_FIRED`    | `uint32 t_device_us`, `uint32 last_seq` | ยืนยันว่าหยุด + seq สุดท้าย |
 | `0x50` | `UTC_SET`       | `uint64 utc_epoch_ms` | echo ค่า UTC epoch ที่รับจาก `SET_UTC` (ยืนยันว่า board รับแล้ว) |
+| `0x60` | `ACQ_HEALTH` | `uint8 state`, `uint32 produced`, `uint32 notified`, `uint32 sample_queue_drops`, `uint32 transport_failures`, `uint16 sample_queue_depth`, `uint32 imu_fifo_faults`, `uint32 imu_fifo_dropped_samples` | acquisition health at 1 Hz and on STOP |
+| `0x61` | `REPLAY_RESULT` | `uint32 start_seq`, `uint16 requested`, `uint16 replayed`, `uint8 status` | replay completion; status 0=complete, 1=unavailable |
 
 > App ใช้ `START_FIRED` / `STOP_FIRED` cross-check ว่า 2 ล้อเริ่ม/หยุดตรงกันจริง
+>
+> **v1.7.0:** `ACQ_HEALTH` is 28 bytes total including the event id. The first
+> 20 bytes retain the v1.6.0 layout, but `sample_queue_drops` now means only
+> application queue overflow. Bytes 20-23 report IMU FIFO fault count and bytes
+> 24-27 report estimated samples lost inside the IMU FIFO. The app still reads
+> v1.6.0 20-byte health and the legacy 10-byte `REPLAY_RESULT` at `0x60`.
 >
 > **v1.1.0 — UTC stamp (hybrid UTC):** `START_FIRED` มี `utc_start_ms` เพิ่มขึ้นมา
 > (uint64 LE, 13 bytes total). App ส่ง `SET_UTC` ก่อน scheduled start → board
@@ -206,27 +224,29 @@ App อ่านครั้งเดียวตอน connect เพื่อ�
 | 5  | `gyro_range`   | uint8  | 0=±250, 1=±500, 2=±1000, 3=±2000 dps |
 | 6  | `accel_scale`  | float32 | LSB → g (เช่น ±2g → 1/16384 ≈ 6.10e-5) |
 | 10 | `gyro_scale`   | float32 | LSB → dps (เช่น ±2000 → 1/16.4 ≈ 6.10e-2) |
-| 14 | `reserved`     | uint16 | 0x0000 (สำรอง) |
+| 14 | `hardware_model` | uint8 | 0=legacy, 1=M5StickC Plus2, 2=Xiao BLE Sense |
+| 15 | `capabilities` | uint8 bitset | bit 0=`sampleReplay` (protocol 1.3) |
 
 > `accel_scale` / `gyro_scale` เก็บเป็น float เพื่อให้ app ไม่ต้องเขียนตาราง lookup
 > firmware คำนวณจาก range จริงที่ตั้งไว้ใน MPU6886
 
 ---
 
-## 5.1 Config Characteristic (Read, 22 bytes, v1.1.0)
+## 5.1 Config Characteristic (Read, 31 bytes, v1.6.0)
 
 App อ่านเพื่อรู้ board config ปัจจุบัน (name / wheel / rate / fw version)
 
 | Offset | Field | Type | ความหมาย |
 |---|---|---|---|
-| 0  | `name`       | char[16] | board name (null-padded ASCII, สูงสุด 16 ตัว) |
-| 16 | `wheel_id`   | uint8  | `0x4C` = 'L', `0x52` = 'R' |
-| 17 | `rate_hz`    | uint16 LE | sampling rate ปัจจุบัน (50/100/200) |
-| 19 | `fw_major`   | uint8  | firmware version major |
-| 20 | `fw_minor`   | uint8  | firmware version minor |
-| 21 | `fw_patch`   | uint8  | firmware version patch |
+| 0  | `name`       | char[24] | board name (null-padded ASCII, สูงสุด 24 ตัว) |
+| 24 | `wheel_id`   | uint8  | `0x4C` = 'L', `0x52` = 'R' |
+| 25 | `rate_hz`    | uint16 LE | sampling rate ปัจจุบัน (50/100/200) |
+| 27 | `fw_major`   | uint8  | firmware version major |
+| 28 | `fw_minor`   | uint8  | firmware version minor |
+| 29 | `fw_patch`   | uint8  | firmware version patch |
+| 30 | `beep_enabled` | uint8 | `1` enables board/phone countdown audio, `0` keeps it silent |
 
-> Config เปลี่ยนได้ runtime ผ่าน `SET_NAME` / `SET_WHEEL` / `SET_RATE`
+> Config เปลี่ยนได้ runtime ผ่าน `SET_NAME` / `SET_WHEEL` / `SET_RATE` / `SET_BEEP_ENABLED`
 > ค่าทั้งหมด persist ลง NVS (namespace `wacfg`) — survive reboot
 > Firmware persist ตอน disconnect (ลด NVS wear)
 

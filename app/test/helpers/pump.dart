@@ -20,7 +20,9 @@ Future<void> pumpThemed(
   return tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: brightness == Brightness.light ? AppTheme.light() : AppTheme.dark(),
+      theme: brightness == Brightness.light
+          ? AppTheme.light()
+          : AppTheme.dark(),
       home: Scaffold(body: Center(child: child)),
     ),
   );

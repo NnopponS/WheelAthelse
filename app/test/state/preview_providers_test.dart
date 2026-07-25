@@ -44,15 +44,15 @@ SessionMeta _meta({
 }
 
 ImuReading _r(int seq) => ImuReading(
-      seq: seq,
-      tDeviceUs: seq * 10000,
-      ax: 1.0,
-      ay: 0.0,
-      az: 0.0,
-      gx: 0.0,
-      gy: 2.0,
-      gz: 0.0,
-    );
+  seq: seq,
+  tDeviceUs: seq * 10000,
+  ax: 1.0,
+  ay: 0.0,
+  az: 0.0,
+  gx: 0.0,
+  gy: 2.0,
+  gz: 0.0,
+);
 
 void main() {
   group('filterByWheel', () {
@@ -83,11 +83,7 @@ void main() {
 
   group('toReadings', () {
     test('extracts ImuReading list from BufferedSample list', () {
-      final samples = [
-        _sample(_r(0)),
-        _sample(_r(1)),
-        _sample(_r(2)),
-      ];
+      final samples = [_sample(_r(0)), _sample(_r(1)), _sample(_r(2))];
       final readings = toReadings(samples);
       expect(readings.length, 3);
       expect(readings[0].seq, 0);
@@ -105,47 +101,51 @@ void main() {
 
     tearDown(() => container.dispose());
 
-    test('build sets loading state then microtask loads meta + first chunk',
-        () async {
-      final samples = List.generate(100, (i) => _sample(_r(i)));
-      final meta = _meta(sampleCount: 100, durationMs: 10000);
-      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+    test(
+      'build sets loading state then microtask loads meta + first chunk',
+      () async {
+        final samples = List.generate(100, (i) => _sample(_r(i)));
+        final meta = _meta(sampleCount: 100, durationMs: 10000);
+        final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      container = ProviderContainer();
-      final init = container.read(previewControllerProvider(source));
-      // Synchronous build: loading shell with meta already known.
-      expect(init.isLoading, isTrue);
-      expect(init.meta.sessionId, 'deadbeef');
-      expect(init.totalSampleCount, 100);
+        container = ProviderContainer();
+        final init = container.read(previewControllerProvider(source));
+        // Synchronous build: loading shell with meta already known.
+        expect(init.isLoading, isTrue);
+        expect(init.meta.sessionId, 'deadbeef');
+        expect(init.totalSampleCount, 100);
 
-      // Allow the microtask + async init to complete.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        // Allow the microtask + async init to complete.
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final state = container.read(previewControllerProvider(source));
-      expect(state.isLoading, isFalse);
-      expect(state.error, isNull);
-      expect(state.totalSampleCount, 100);
-      expect(state.currentChunk.length, 100); // all fit in one chunk
-      expect(state.stats, isNotNull);
-      expect(state.stats!.sampleCount, 100);
-      expect(state.scrubPositionMs, 0);
-      expect(state.selectedWheel, PreviewWheelSelection.both);
-    });
+        final state = container.read(previewControllerProvider(source));
+        expect(state.isLoading, isFalse);
+        expect(state.error, isNull);
+        expect(state.totalSampleCount, 100);
+        expect(state.currentChunk.length, 100); // all fit in one chunk
+        expect(state.stats, isNotNull);
+        expect(state.stats!.sampleCount, 100);
+        expect(state.scrubPositionMs, 0);
+        expect(state.selectedWheel, PreviewWheelSelection.both);
+      },
+    );
 
-    test('large in-memory session only loads first chunk into currentChunk',
-        () async {
-      final samples = List.generate(2000, (i) => _sample(_r(i)));
-      final meta = _meta(sampleCount: 2000, durationMs: 20000);
-      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+    test(
+      'large in-memory session only loads first chunk into currentChunk',
+      () async {
+        final samples = List.generate(2000, (i) => _sample(_r(i)));
+        final meta = _meta(sampleCount: 2000, durationMs: 20000);
+        final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      container = ProviderContainer();
-      container.read(previewControllerProvider(source));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        container = ProviderContainer();
+        container.read(previewControllerProvider(source));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final state = container.read(previewControllerProvider(source));
-      expect(state.currentChunk.length, 500); // _kChunkSize
-      expect(state.totalSampleCount, 2000);
-    });
+        final state = container.read(previewControllerProvider(source));
+        expect(state.currentChunk.length, 500); // _kChunkSize
+        expect(state.totalSampleCount, 2000);
+      },
+    );
 
     test('setWheel updates selectedWheel without reload', () async {
       final samples = List.generate(100, (i) => _sample(_r(i)));
@@ -172,7 +172,9 @@ void main() {
       container.read(previewControllerProvider(source));
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      final notifier = container.read(previewControllerProvider(source).notifier);
+      final notifier = container.read(
+        previewControllerProvider(source).notifier,
+      );
       notifier.setScrub(-500);
       expect(
         container.read(previewControllerProvider(source)).scrubPositionMs,
@@ -190,45 +192,47 @@ void main() {
       );
     });
 
-    test('setScrub loads a chunk around the scrub position after debounce',
-        () async {
-      // 2000 samples, 100 Hz, 20s duration. Scrub to 10s -> center index 1000.
-      final samples = List.generate(
-        2000,
-        (i) => _sample(
-          _r(i),
-          timestampSyncedMs: i * 10.0,
-          wheel: i % 2 == 0 ? WheelSide.left : WheelSide.right,
-        ),
-      );
-      final meta = _meta(sampleCount: 2000, durationMs: 20000);
-      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+    test(
+      'setScrub loads a chunk around the scrub position after debounce',
+      () async {
+        // 2000 samples, 100 Hz, 20s duration. Scrub to 10s -> center index 1000.
+        final samples = List.generate(
+          2000,
+          (i) => _sample(
+            _r(i),
+            timestampSyncedMs: i * 10.0,
+            wheel: i % 2 == 0 ? WheelSide.left : WheelSide.right,
+          ),
+        );
+        final meta = _meta(sampleCount: 2000, durationMs: 20000);
+        final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      container = ProviderContainer();
-      container.read(previewControllerProvider(source));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        container = ProviderContainer();
+        container.read(previewControllerProvider(source));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      // Initial chunk is samples [0..500).
-      var state = container.read(previewControllerProvider(source));
-      expect(state.currentChunk.first.reading.seq, 0);
+        // Initial chunk is samples [0..500).
+        var state = container.read(previewControllerProvider(source));
+        expect(state.currentChunk.first.reading.seq, 0);
 
-      // Scrub to 10s -> center 1000 -> offset 750 -> chunk [750..1250).
-      container
-          .read(previewControllerProvider(source).notifier)
-          .setScrub(10000);
+        // Scrub to 10s -> center 1000 -> offset 750 -> chunk [750..1250).
+        container
+            .read(previewControllerProvider(source).notifier)
+            .setScrub(10000);
 
-      // Before debounce fires, scrub position is updated but chunk unchanged.
-      state = container.read(previewControllerProvider(source));
-      expect(state.scrubPositionMs, 10000);
-      expect(state.currentChunk.first.reading.seq, 0);
+        // Before debounce fires, scrub position is updated but chunk unchanged.
+        state = container.read(previewControllerProvider(source));
+        expect(state.scrubPositionMs, 10000);
+        expect(state.currentChunk.first.reading.seq, 0);
 
-      // After debounce (200ms) + microtask, chunk reloads.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+        // After debounce (200ms) + microtask, chunk reloads.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
 
-      state = container.read(previewControllerProvider(source));
-      expect(state.currentChunk.first.reading.seq, 750);
-      expect(state.currentChunk.length, 500);
-    });
+        state = container.read(previewControllerProvider(source));
+        expect(state.currentChunk.first.reading.seq, 750);
+        expect(state.currentChunk.length, 500);
+      },
+    );
   });
 
   group('PreviewController (DiskPreviewSource)', () {
@@ -246,9 +250,9 @@ void main() {
       final meta = _meta(sampleCount: 100, durationMs: 10000);
       await storage.saveSession('test-topic', meta, samples);
 
-      container = ProviderContainer(overrides: [
-        storageRepositoryProvider.overrideWith((ref) => storage),
-      ]);
+      container = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
+      );
       final source = DiskPreviewSource(
         topic: 'test-topic',
         trialNumber: 1,
@@ -274,9 +278,9 @@ void main() {
     });
 
     test('missing session sets error state', () async {
-      container = ProviderContainer(overrides: [
-        storageRepositoryProvider.overrideWith((ref) => storage),
-      ]);
+      container = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
+      );
       final source = DiskPreviewSource(
         topic: 'nope',
         trialNumber: 1,
@@ -295,17 +299,14 @@ void main() {
     test('scrub loads chunk from disk around scrub position', () async {
       final samples = List.generate(
         2000,
-        (i) => _sample(
-          _r(i),
-          timestampSyncedMs: i * 10.0,
-        ),
+        (i) => _sample(_r(i), timestampSyncedMs: i * 10.0),
       );
       final meta = _meta(sampleCount: 2000, durationMs: 20000);
       await storage.saveSession('test-topic', meta, samples);
 
-      container = ProviderContainer(overrides: [
-        storageRepositoryProvider.overrideWith((ref) => storage),
-      ]);
+      container = ProviderContainer(
+        overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
+      );
       final source = DiskPreviewSource(
         topic: 'test-topic',
         trialNumber: 1,
@@ -341,10 +342,7 @@ void main() {
       final samples = [_sample(_r(0))];
       final a = InMemoryPreviewSource(meta: meta, samples: samples);
       final b = InMemoryPreviewSource(meta: meta, samples: samples);
-      final c = InMemoryPreviewSource(
-        meta: meta,
-        samples: [_sample(_r(0))],
-      );
+      final c = InMemoryPreviewSource(meta: meta, samples: [_sample(_r(0))]);
       expect(a == b, isTrue); // same samples identity
       expect(a == c, isFalse); // different samples identity
     });

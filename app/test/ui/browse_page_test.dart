@@ -46,6 +46,20 @@ class _RecordingExportActions extends ExportActions {
     lastTopic = topic;
     return const [];
   }
+
+  @override
+  Future<TopicExportResult> exportTopicFolder({
+    required String topic,
+    required DirectoryPicker pickDirectory,
+    required FileSink writeFile,
+    DirectoryCreator? createDirectory,
+    DirectoryRenamer? renameDirectory,
+    DirectoryRemover? removeDirectory,
+  }) async {
+    lastLevel = ExportLevel.topic;
+    lastTopic = topic;
+    return const TopicExportCancelled();
+  }
 }
 
 class _NoopOps implements ExportOperations {
@@ -57,42 +71,45 @@ class _NoopOps implements ExportOperations {
   }) async {}
 
   @override
-  Future<void> shareTrial({required String topic, required int trialNumber}) async {}
+  Future<void> shareTrial({
+    required String topic,
+    required int trialNumber,
+  }) async {}
 
   @override
   Future<void> shareTopic({required String topic}) async {}
 }
 
 SessionMeta _meta({String id = 'abc123', int trial = 1}) => SessionMeta(
-      sessionId: id,
-      topic: 'sprint_test',
-      trialNumber: trial,
-      athleteName: 'athlete_A',
-      sampleRateHz: 100,
-      startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
-      durationMs: 5000,
-      sampleCount: 2,
-      markerCount: 1,
-      notes: 'test session',
-    );
+  sessionId: id,
+  topic: 'sprint_test',
+  trialNumber: trial,
+  athleteName: 'athlete_A',
+  sampleRateHz: 100,
+  startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
+  durationMs: 5000,
+  sampleCount: 2,
+  markerCount: 1,
+  notes: 'test session',
+);
 
 List<BufferedSample> _samples() => [
-      const BufferedSample(
-        reading: ImuReading(
-          seq: 0,
-          tDeviceUs: 0,
-          ax: 1,
-          ay: 0,
-          az: 0,
-          gx: 0,
-          gy: 0,
-          gz: 0,
-        ),
-        wheel: WheelSide.left,
-        timestampAppMs: 1000000,
-        timestampSyncedMs: 0,
-      ),
-    ];
+  const BufferedSample(
+    reading: ImuReading(
+      seq: 0,
+      tDeviceUs: 0,
+      ax: 1,
+      ay: 0,
+      az: 0,
+      gx: 0,
+      gy: 0,
+      gz: 0,
+    ),
+    wheel: WheelSide.left,
+    timestampAppMs: 1000000,
+    timestampSyncedMs: 0,
+  ),
+];
 
 void main() {
   late InMemoryStorageRepository storage;
@@ -101,18 +118,12 @@ void main() {
   setUp(() async {
     storage = InMemoryStorageRepository();
     container = ProviderContainer(
-      overrides: [
-        storageRepositoryProvider.overrideWith((ref) => storage),
-      ],
+      overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
     );
     addTearDown(container.dispose);
     await storage.createTopic('sprint_test');
     await storage.saveSession('sprint_test', _meta(), _samples());
-    await storage.saveSession(
-      'sprint_test',
-      _meta(id: 'def456'),
-      _samples(),
-    );
+    await storage.saveSession('sprint_test', _meta(id: 'def456'), _samples());
   });
 
   Future<void> pumpPage(WidgetTester tester) async {
@@ -156,8 +167,9 @@ void main() {
       expect(find.text('def456'), findsOneWidget);
     });
 
-    testWidgets('session list shows sample count + marker count',
-        (tester) async {
+    testWidgets('session list shows sample count + marker count', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.text('sprint_test').first);
       await tester.pumpAndSettle();
@@ -182,8 +194,9 @@ void main() {
       expect(find.byIcon(Icons.save_alt_rounded), findsNWidgets(3));
     });
 
-    testWidgets('back button returns to topic list from trial list',
-        (tester) async {
+    testWidgets('back button returns to topic list from trial list', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.text('sprint_test').first);
       await tester.pumpAndSettle();
@@ -243,8 +256,9 @@ void main() {
   });
 
   group('BrowsePage — editing', () {
-    testWidgets('topic overflow menu offers rename + edit description',
-        (tester) async {
+    testWidgets('topic overflow menu offers rename + edit description', (
+      tester,
+    ) async {
       await pumpPage(tester);
       // Topic row has a more-vert overflow menu.
       expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
@@ -282,8 +296,9 @@ void main() {
       expect(topics.map((t) => t.name).toList(), ['renamed_topic']);
     });
 
-    testWidgets('edit description dialog updates the topic description',
-        (tester) async {
+    testWidgets('edit description dialog updates the topic description', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.byIcon(Icons.more_vert_rounded));
       await tester.pumpAndSettle();
@@ -305,8 +320,9 @@ void main() {
       expect(topics.first.description, 'a sprint session');
     });
 
-    testWidgets('session overflow menu offers edit notes / video',
-        (tester) async {
+    testWidgets('session overflow menu offers edit notes / video', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.text('sprint_test').first);
       await tester.pumpAndSettle();
@@ -363,7 +379,9 @@ void main() {
       expect(meta.videoFileName, 'cam_01.mp4');
     });
 
-    testWidgets('edit tags opens TagEditorDialog and saves tags', (tester) async {
+    testWidgets('edit tags opens TagEditorDialog and saves tags', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.text('sprint_test').first);
       await tester.pumpAndSettle();
@@ -395,8 +413,9 @@ void main() {
   });
 
   group('BrowsePage — share/export wiring', () {
-    testWidgets('tapping a session share button invokes ExportActions.share',
-        (tester) async {
+    testWidgets('tapping a session share button invokes ExportActions.share', (
+      tester,
+    ) async {
       final fakeActions = _RecordingExportActions();
       final container2 = ProviderContainer(
         overrides: [
@@ -434,8 +453,9 @@ void main() {
       expect(fakeActions.lastSession, 'abc123');
     });
 
-    testWidgets('tapping the trial AppBar share button invokes trial share',
-        (tester) async {
+    testWidgets('tapping the trial AppBar share button invokes trial share', (
+      tester,
+    ) async {
       final fakeActions = _RecordingExportActions();
       final container2 = ProviderContainer(
         overrides: [
@@ -469,8 +489,9 @@ void main() {
       expect(fakeActions.lastTrial, 1);
     });
 
-    testWidgets('tapping the topic AppBar share button invokes topic share',
-        (tester) async {
+    testWidgets('tapping the topic AppBar share button invokes topic share', (
+      tester,
+    ) async {
       final fakeActions = _RecordingExportActions();
       final container2 = ProviderContainer(
         overrides: [
@@ -511,33 +532,35 @@ void main() {
     });
 
     testWidgets(
-        'topic delete confirmation shows trial + session count and deletes on confirm',
-        (tester) async {
-      await pumpPage(tester);
-      await tester.tap(find.byIcon(Icons.more_vert_rounded));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
-      await tester.pumpAndSettle();
+      'topic delete confirmation shows trial + session count and deletes on confirm',
+      (tester) async {
+        await pumpPage(tester);
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog shows the topic name + counts.
-      expect(find.textContaining('Delete topic'), findsOneWidget);
-      expect(find.textContaining('sprint_test'), findsWidgets);
-      // 1 trial, 2 sessions.
-      expect(find.textContaining('1 trial'), findsOneWidget);
-      expect(find.textContaining('2 sessions'), findsOneWidget);
+        // Confirmation dialog shows the topic name + counts.
+        expect(find.textContaining('Delete topic'), findsOneWidget);
+        expect(find.textContaining('sprint_test'), findsWidgets);
+        // 1 trial, 2 sessions.
+        expect(find.textContaining('1 trial'), findsOneWidget);
+        expect(find.textContaining('2 sessions'), findsOneWidget);
 
-      // Confirm the delete.
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pumpAndSettle();
+        // Confirm the delete.
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pumpAndSettle();
 
-      // Topic gone from the list.
-      expect(find.text('sprint_test'), findsNothing);
-      final topics = await storage.listTopics();
-      expect(topics, isEmpty);
-    });
+        // Topic gone from the list.
+        expect(find.text('sprint_test'), findsNothing);
+        final topics = await storage.listTopics();
+        expect(topics, isEmpty);
+      },
+    );
 
-    testWidgets('topic delete confirmation cancels without deleting',
-        (tester) async {
+    testWidgets('topic delete confirmation cancels without deleting', (
+      tester,
+    ) async {
       await pumpPage(tester);
       await tester.tap(find.byIcon(Icons.more_vert_rounded));
       await tester.pumpAndSettle();
@@ -566,29 +589,30 @@ void main() {
     });
 
     testWidgets(
-        'trial delete confirmation shows session count and deletes on confirm',
-        (tester) async {
-      await pumpPage(tester);
-      await tester.tap(find.text('sprint_test').first);
-      await tester.pumpAndSettle();
+      'trial delete confirmation shows session count and deletes on confirm',
+      (tester) async {
+        await pumpPage(tester);
+        await tester.tap(find.text('sprint_test').first);
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.more_vert_rounded));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog shows trial name + session count.
-      expect(find.textContaining('Delete trial'), findsOneWidget);
-      expect(find.textContaining('trial_01'), findsWidgets);
-      expect(find.textContaining('2 sessions'), findsOneWidget);
+        // Confirmation dialog shows trial name + session count.
+        expect(find.textContaining('Delete trial'), findsOneWidget);
+        expect(find.textContaining('trial_01'), findsWidgets);
+        expect(find.textContaining('2 sessions'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pumpAndSettle();
 
-      // Trial gone from the list.
-      expect(find.text('trial_01'), findsNothing);
-      expect(await storage.listTrials('sprint_test'), isEmpty);
-    });
+        // Trial gone from the list.
+        expect(find.text('trial_01'), findsNothing);
+        expect(await storage.listTrials('sprint_test'), isEmpty);
+      },
+    );
 
     testWidgets('session list has a delete button per row', (tester) async {
       await pumpPage(tester);
@@ -602,28 +626,29 @@ void main() {
     });
 
     testWidgets(
-        'session delete confirmation deletes the session and refreshes the list',
-        (tester) async {
-      await pumpPage(tester);
-      await tester.tap(find.text('sprint_test').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('trial_01').first);
-      await tester.pumpAndSettle();
+      'session delete confirmation deletes the session and refreshes the list',
+      (tester) async {
+        await pumpPage(tester);
+        await tester.tap(find.text('sprint_test').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('trial_01').first);
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
-      await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
+        await tester.pumpAndSettle();
 
-      // Confirmation dialog shows session id.
-      expect(find.textContaining('Delete session'), findsOneWidget);
+        // Confirmation dialog shows session id.
+        expect(find.textContaining('Delete session'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pumpAndSettle();
 
-      // One session gone — only one delete icon remains.
-      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
-      final sessions = await storage.listSessions('sprint_test', 1);
-      expect(sessions.length, 1);
-    });
+        // One session gone — only one delete icon remains.
+        expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
+        final sessions = await storage.listSessions('sprint_test', 1);
+        expect(sessions.length, 1);
+      },
+    );
   });
 
   group('BrowsePage — search/filter', () {
@@ -632,20 +657,19 @@ void main() {
       required String id,
       String notes = 'test session',
       List<String> tags = const [],
-    }) =>
-        SessionMeta(
-          sessionId: id,
-          topic: 'sprint_test',
-          trialNumber: 1,
-          athleteName: 'athlete_A',
-          sampleRateHz: 100,
-          startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
-          durationMs: 5000,
-          sampleCount: 2,
-          markerCount: 1,
-          notes: notes,
-          tags: tags,
-        );
+    }) => SessionMeta(
+      sessionId: id,
+      topic: 'sprint_test',
+      trialNumber: 1,
+      athleteName: 'athlete_A',
+      sampleRateHz: 100,
+      startTime: DateTime.fromMillisecondsSinceEpoch(1000000),
+      durationMs: 5000,
+      sampleCount: 2,
+      markerCount: 1,
+      notes: notes,
+      tags: tags,
+    );
 
     /// Storage with two topics + three tagged sessions in one trial.
     Future<InMemoryStorageRepository> searchStorage() async {
@@ -687,8 +711,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('topic search bar filters topics by name (case-insensitive)',
-        (tester) async {
+    testWidgets('topic search bar filters topics by name (case-insensitive)', (
+      tester,
+    ) async {
       final s = await searchStorage();
       final c = ProviderContainer(
         overrides: [storageRepositoryProvider.overrideWith((ref) => s)],
@@ -874,8 +899,9 @@ void main() {
       expect(find.text('ccc333'), findsOneWidget);
     });
 
-    testWidgets('search + tag filter work together (AND logic)',
-        (tester) async {
+    testWidgets('search + tag filter work together (AND logic)', (
+      tester,
+    ) async {
       final s = await searchStorage();
       final c = ProviderContainer(
         overrides: [storageRepositoryProvider.overrideWith((ref) => s)],

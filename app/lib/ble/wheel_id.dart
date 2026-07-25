@@ -34,7 +34,7 @@ enum WheelId {
 
   /// Maps to the UI-level [WheelSide] used by the design system.
   WheelSide toWheelSide() => switch (this) {
-        WheelId.left => WheelSide.left,
-        WheelId.right => WheelSide.right,
-      };
+    WheelId.left => WheelSide.left,
+    WheelId.right => WheelSide.right,
+  };
 }

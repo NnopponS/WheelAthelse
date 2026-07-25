@@ -41,7 +41,10 @@ class ImuChartBuffer {
   /// Downsamples [readings] to exactly [targetPoints] evenly-spaced samples,
   /// always preserving the first and last. Returns the input unchanged when
   /// it's already at or below [targetPoints].
-  static List<ImuReading> decimate(List<ImuReading> readings, int targetPoints) {
+  static List<ImuReading> decimate(
+    List<ImuReading> readings,
+    int targetPoints,
+  ) {
     if (readings.length <= targetPoints) return List<ImuReading>.of(readings);
     if (targetPoints <= 1) return [readings.last];
     final n = readings.length;
@@ -120,8 +123,9 @@ class ImuChart extends StatelessWidget {
     data = ImuChartBuffer.trimToWindowMs(data, windowUs);
     final plot = ImuChartBuffer.decimate(data, targetPoints);
 
-    List<FlSpot> spots(int axis) =>
-        isAccel ? ImuChartBuffer.toAccelSpots(plot, axis: axis) : ImuChartBuffer.toGyroSpots(plot, axis: axis);
+    List<FlSpot> spots(int axis) => isAccel
+        ? ImuChartBuffer.toAccelSpots(plot, axis: axis)
+        : ImuChartBuffer.toGyroSpots(plot, axis: axis);
 
     final bars = <LineChartBarData>[
       for (var a = 0; a < 3; a++)
@@ -149,10 +153,8 @@ class ImuChart extends StatelessWidget {
             show: true,
             drawVerticalLine: false,
             horizontalInterval: _autoInterval(plot, isAccel),
-            getDrawingHorizontalLine: (value) => FlLine(
-              color: wc.chartGrid,
-              strokeWidth: 0.5,
-            ),
+            getDrawingHorizontalLine: (value) =>
+                FlLine(color: wc.chartGrid, strokeWidth: 0.5),
           ),
           titlesData: const FlTitlesData(show: false),
           borderData: FlBorderData(show: false),

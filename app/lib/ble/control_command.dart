@@ -15,6 +15,8 @@ class ControlCommandId {
   static const int setName = 0x07;
   static const int setWheel = 0x08;
   static const int setUtc = 0x09;
+  static const int replayRange = 0x0A;
+  static const int setBeepEnabled = 0x0B;
   static const int resetSeq = 0xFF;
 }
 
@@ -72,7 +74,10 @@ class ControlCommand {
   /// `SET_RANGE` (0x05): change IMU accel/gyro ranges (0–3 each).
   static List<int> setRange({required int accelRange, required int gyroRange}) {
     if (accelRange < 0 || accelRange > 3) {
-      throw ArgumentError('accelRange must be 0–3, got $accelRange', 'accelRange');
+      throw ArgumentError(
+        'accelRange must be 0–3, got $accelRange',
+        'accelRange',
+      );
     }
     if (gyroRange < 0 || gyroRange > 3) {
       throw ArgumentError('gyroRange must be 0–3, got $gyroRange', 'gyroRange');
@@ -97,10 +102,10 @@ class ControlCommand {
   }
 
   /// `SET_NAME` (0x07): set the board name (persisted to NVS by firmware).
-  /// [name] is truncated/padded to exactly 16 bytes (ASCII, null-padded).
+  /// [name] is truncated/padded to exactly 24 bytes (ASCII, null-padded).
   static List<int> setName(String name) {
-    final encoded = name.codeUnits.take(16).toList();
-    final padded = List<int>.filled(17, 0);
+    final encoded = name.codeUnits.take(24).toList();
+    final padded = List<int>.filled(25, 0);
     padded[0] = ControlCommandId.setName;
     for (var i = 0; i < encoded.length; i++) {
       padded[1 + i] = encoded[i] & 0xFF;
@@ -124,8 +129,7 @@ class ControlCommand {
   /// epoch). Used for camera alignment — the board stamps START_FIRED with
   /// the UTC instant. Payload is uint64 LE (8 bytes).
   static List<int> setUtc(int epochMs) {
-    final b = ByteData(9)
-      ..setUint8(0, ControlCommandId.setUtc);
+    final b = ByteData(9)..setUint8(0, ControlCommandId.setUtc);
     // Write uint64 LE manually (ByteData.setUint64 may not be available on
     // all platforms; use two uint32 writes).
     b.setUint32(1, epochMs & 0xFFFFFFFF, Endian.little);
@@ -133,6 +137,24 @@ class ControlCommand {
     return b.buffer.asUint8List();
   }
 
+  /// `REPLAY_RANGE` (0x0A): retransmit a bounded sequence range from the
+  /// protocol 1.3 firmware history buffer.
+  static List<int> replayRange({required int startSeq, required int count}) {
+    if (count < 1 || count > 128) {
+      throw RangeError.range(count, 1, 128, 'count');
+    }
+    final b = ByteData(7)
+      ..setUint8(0, ControlCommandId.replayRange)
+      ..setUint32(1, startSeq.toUnsigned(32), Endian.little)
+      ..setUint16(5, count, Endian.little);
+    return b.buffer.asUint8List();
+  }
+
+  /// `SET_BEEP_ENABLED` (0x0B): persist the countdown sound preference.
+  static List<int> setBeepEnabled(bool enabled) =>
+      Uint8List.fromList([ControlCommandId.setBeepEnabled, enabled ? 1 : 0]);
+
   /// `RESET_SEQ` (0xFF): reset the sample sequence counter to 0.
-  static List<int> resetSeq() => Uint8List.fromList([ControlCommandId.resetSeq]);
+  static List<int> resetSeq() =>
+      Uint8List.fromList([ControlCommandId.resetSeq]);
 }

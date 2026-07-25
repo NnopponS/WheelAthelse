@@ -6,6 +6,8 @@ import 'package:wheelathlete/ble/control_command.dart';
 import 'package:wheelathlete/ble/sync_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
+import 'package:wheelathlete/state/countdown_cue_player.dart';
+import 'package:wheelathlete/state/live_acquisition_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/state/sync_engine.dart';
 import 'package:wheelathlete/state/sync_providers.dart';
@@ -16,7 +18,14 @@ import 'package:wheelathlete/widgets/connection_card.dart';
 ///
 /// Flow: idle → syncing → counting → recording → stopped.
 /// Cancel path: counting → idle (sends STOP before T_start).
-enum RecordCountdownStatus { idle, syncing, counting, recording, stopped, error }
+enum RecordCountdownStatus {
+  idle,
+  syncing,
+  counting,
+  recording,
+  stopped,
+  error,
+}
 
 /// State surfaced to the countdown UI.
 class RecordCountdownState {
@@ -48,17 +57,17 @@ class RecordCountdownState {
     Object? tStartPhoneMs = _unset,
     Object? utcStartMs = _unset,
     Object? error = _unset,
-  }) =>
-      RecordCountdownState(
-        status: status ?? this.status,
-        countdownSeconds: countdownSeconds ?? this.countdownSeconds,
-        tStartPhoneMs: identical(tStartPhoneMs, _unset)
-            ? this.tStartPhoneMs
-            : tStartPhoneMs as int?,
-        utcStartMs:
-            identical(utcStartMs, _unset) ? this.utcStartMs : utcStartMs as int?,
-        error: identical(error, _unset) ? this.error : error as String?,
-      );
+  }) => RecordCountdownState(
+    status: status ?? this.status,
+    countdownSeconds: countdownSeconds ?? this.countdownSeconds,
+    tStartPhoneMs: identical(tStartPhoneMs, _unset)
+        ? this.tStartPhoneMs
+        : tStartPhoneMs as int?,
+    utcStartMs: identical(utcStartMs, _unset)
+        ? this.utcStartMs
+        : utcStartMs as int?,
+    error: identical(error, _unset) ? this.error : error as String?,
+  );
 
   static const Object _unset = Object();
 }
@@ -73,7 +82,8 @@ const int kSyncBurstCount = 10;
 const Duration kSyncBurstInterval = Duration(milliseconds: 30);
 
 /// Countdown duration before the scheduled start. The in-app UI shows
-/// 5-4-3-2-1; the firmware beeps 3-2-1 on the M5 speaker.
+/// 5-4-3-2-1; M5 beeps and XIAO flashes at 3-2-1-start while the phone
+/// plays one deduplicated tone for each firmware cue.
 const Duration kCountdownDuration = Duration(seconds: 5);
 
 /// Notifier that orchestrates the record countdown flow (subtask #16):
@@ -93,18 +103,21 @@ const Duration kCountdownDuration = Duration(seconds: 5);
 class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
   Timer? _displayTimer;
   Timer? _startTimer;
+  Timer? _ackTimer;
   final _startFiredSubs = <WheelSide, StreamSubscription<List<int>>>{};
   final _startFired = <WheelSide, bool>{};
   SessionConfig? _pendingConfig;
   int? _utcStartMs;
   int? _utcOffsetMs;
   bool _cancelled = false;
+  final _cueDeduplicator = CountdownCueDeduplicator();
 
   @override
   RecordCountdownState build() {
     ref.onDispose(() {
       _displayTimer?.cancel();
       _startTimer?.cancel();
+      _ackTimer?.cancel();
       for (final s in _startFiredSubs.values) {
         s.cancel();
       }
@@ -129,12 +142,30 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       throw StateError('Countdown already in progress');
     }
     _cancelled = false;
+    _cueDeduplicator.reset();
     _pendingConfig = config;
     _startFired
       ..clear()
       ..[WheelSide.left] = false
       ..[WheelSide.right] = false;
     state = const RecordCountdownState(status: RecordCountdownStatus.syncing);
+
+    // Live and Record share the same raw BLE stream. Firmware resets its
+    // sequence counter on START, so fully stop Live first to dispose the old
+    // reorder/replay buffer before Record pre-arms a fresh stream.
+    final live = ref.read(liveAcquisitionProvider);
+    if (live.active || live.status == LiveAcquisitionStatus.stopping) {
+      await ref.read(liveAcquisitionProvider.notifier).stop();
+      if (!ref.mounted) return;
+      final stopped = ref.read(liveAcquisitionProvider);
+      if (stopped.status != LiveAcquisitionStatus.idle) {
+        state = RecordCountdownState(
+          status: RecordCountdownStatus.error,
+          error: stopped.error ?? 'Unable to stop Live acquisition',
+        );
+        return;
+      }
+    }
 
     final connState = ref.read(connectionManagerProvider);
     // Build the list of connected wheels (at least one required).
@@ -168,9 +199,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     final sync = ref.read(syncEngineProvider.notifier);
     for (var i = 0; i < kSyncBurstCount; i++) {
       if (_cancelled) return;
-      await Future.wait(
-        connectedSides.map((side) => sync.sendPing(side)),
-      );
+      await Future.wait(connectedSides.map((side) => sync.sendPing(side)));
       if (i < kSyncBurstCount - 1) {
         await Future<void>.delayed(kSyncBurstInterval);
       }
@@ -185,11 +214,14 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     // scheduled start always lands on a .000 boundary (camera sync).
     final nextWholeSecondMs = ((nowPhoneMs + 999) ~/ 1000) * 1000;
     final tStartPhoneMs = nextWholeSecondMs + countdownMs;
-    final utcStartMs = (computeUtcStartMs(
-      utcEpochNowMs: utcEpochNowMs,
-      nowPhoneMs: nowPhoneMs,
-      tStartPhoneMs: tStartPhoneMs,
-    ) ~/ 1000) * 1000;
+    final utcStartMs =
+        (computeUtcStartMs(
+              utcEpochNowMs: utcEpochNowMs,
+              nowPhoneMs: nowPhoneMs,
+              tStartPhoneMs: tStartPhoneMs,
+            ) ~/
+            1000) *
+        1000;
     // The drift-fit timeline uses _tAppRefMs as its origin. utcStartMs is the
     // UTC instant of the scheduled start, so the offset that converts any
     // relative synced ms to absolute UTC is utcStartMs - tStartRelMs.
@@ -198,12 +230,27 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     _utcStartMs = utcStartMs;
     _utcOffsetMs = utcStartMs - tStartRelMs;
 
+    // Subscribe before START. Immediate-start firmware can acknowledge in the
+    // same BLE turn as the write; subscribing afterwards loses that event.
+    await Future.wait(
+      connectedSides.map((side) {
+        final deviceId = connState.bySide[side]!.deviceId!;
+        return _subscribeStartFired(side, deviceId);
+      }),
+    );
+    if (_cancelled || !ref.mounted) return;
+
     // 3. Send SET_UTC to every connected wheel in PARALLEL so both boards
     // receive the UTC epoch at the same instant.
-    await Future.wait(connectedSides.map((side) {
-      final deviceId = connState.bySide[side]!.deviceId!;
-      return _ble.writeControl(deviceId, ControlCommand.setUtc(utcEpochNowMs));
-    }));
+    await Future.wait(
+      connectedSides.map((side) {
+        final deviceId = connState.bySide[side]!.deviceId!;
+        return _ble.writeControl(
+          deviceId,
+          ControlCommand.setUtc(utcEpochNowMs),
+        );
+      }),
+    );
     if (_cancelled || !ref.mounted) return;
 
     // 4. Send scheduled START to every connected wheel in PARALLEL (firmware
@@ -214,14 +261,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     );
     if (_cancelled || !ref.mounted) return;
 
-    // 5. Subscribe to START_FIRED events from every connected wheel in
-    // parallel.
-    await Future.wait(connectedSides.map((side) {
-      final deviceId = connState.bySide[side]!.deviceId!;
-      return _subscribeStartFired(side, deviceId);
-    }));
-
-    // 6. Begin the in-app countdown display.
+    // 5. Begin the in-app countdown display and enforce acknowledgement.
     state = RecordCountdownState(
       status: RecordCountdownStatus.counting,
       countdownSeconds: (countdownMs / 1000).ceil(),
@@ -229,10 +269,55 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       utcStartMs: utcStartMs,
     );
     _startDisplayTimer(tStartPhoneMs);
+    _ackTimer?.cancel();
+    _ackTimer = Timer(
+      Duration(milliseconds: countdownMs + 3000),
+      () => unawaited(_failMissingStartAcks()),
+    );
+  }
+
+  Future<void> _failMissingStartAcks() async {
+    if (!ref.mounted ||
+        _cancelled ||
+        state.status == RecordCountdownStatus.recording) {
+      return;
+    }
+    final missing = _startFiredSubs.keys
+        .where((side) => !_startFired[side]!)
+        .toList();
+    if (missing.isEmpty) {
+      return;
+    }
+    _cancelled = true;
+    final sync = ref.read(syncEngineProvider.notifier);
+    await Future.wait(
+      _startFiredSubs.keys.map((side) async {
+        try {
+          await sync.sendStop(side);
+        } on Object {
+          /* best effort rollback */
+        }
+      }),
+    );
+    await ref.read(recordingProvider.notifier).disarmStreaming();
+    for (final sub in _startFiredSubs.values) {
+      await sub.cancel();
+    }
+    _startFiredSubs.clear();
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      status: RecordCountdownStatus.error,
+      error:
+          'START not acknowledged by ${missing.map((s) => s.name.toUpperCase()).join(', ')}',
+    );
   }
 
   Future<void> _sendScheduledStart(WheelSide side, int tStartPhoneMs) async {
     final sync = ref.read(syncEngineProvider.notifier);
+    final deviceId = ref.read(connectionManagerProvider).bySide[side]!.deviceId;
+    if (deviceId != null) {
+      ref.read(connectionManagerProvider.notifier).setAcquiring(deviceId, true);
+    }
     final syncState = ref.read(syncEngineProvider).bySide[side]!;
     final offset = syncState.offset;
     if (offset == null) {
@@ -280,12 +365,20 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
 
   Future<void> _subscribeStartFired(WheelSide side, String deviceId) async {
     await _startFiredSubs[side]?.cancel();
-    _startFiredSubs[side] = _ble.syncData(deviceId).listen(
+    final channel = _ble.syncNotifications(deviceId);
+    _startFiredSubs[side] = channel.stream.listen(
       (bytes) {
         try {
           final event = SyncEvent.parse(bytes);
           if (event is StartFiredEvent) {
             _onStartFired(side);
+          } else if (event is CountdownCueEvent &&
+              _cueDeduplicator.accept(event.index)) {
+            unawaited(
+              ref
+                  .read(countdownCuePlayerProvider)
+                  .play(durationMs: event.durationMs, isStart: event.isStart),
+            );
           }
         } on Object {
           // Parse errors are handled by the sync engine; ignore here.
@@ -299,6 +392,9 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
         );
       },
     );
+    // Do not issue SET_UTC or START until the native CCCD write has completed.
+    // Immediate firmware responses are now guaranteed to reach the listener.
+    await channel.ready;
   }
 
   void _onStartFired(WheelSide side) {
@@ -314,6 +410,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
   }
 
   Future<void> _beginRecording() async {
+    _ackTimer?.cancel();
     _displayTimer?.cancel();
     for (final s in _startFiredSubs.values) {
       await s.cancel();
@@ -355,6 +452,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     }
     _cancelled = true;
     _displayTimer?.cancel();
+    _ackTimer?.cancel();
     for (final s in _startFiredSubs.values) {
       await s.cancel();
     }
@@ -366,6 +464,14 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
       await sync.sendStop(WheelSide.right);
     } on Object {
       // Best-effort — the wheels may not have started yet.
+    }
+    final connectionManager = ref.read(connectionManagerProvider.notifier);
+    for (final side in WheelSide.values) {
+      final deviceId = ref
+          .read(connectionManagerProvider)
+          .bySide[side]!
+          .deviceId;
+      if (deviceId != null) connectionManager.setAcquiring(deviceId, false);
     }
     // Tear down the IMU streaming armed in step 0 — no recording happened.
     try {
@@ -383,6 +489,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
   /// transitions to stopped, or manually to clear an error).
   void reset() {
     _displayTimer?.cancel();
+    _ackTimer?.cancel();
     for (final s in _startFiredSubs.values) {
       s.cancel();
     }
@@ -403,5 +510,5 @@ final countdownDurationProvider = Provider<Duration>(
 
 final recordCountdownProvider =
     NotifierProvider<RecordCountdownNotifier, RecordCountdownState>(
-  RecordCountdownNotifier.new,
-);
+      RecordCountdownNotifier.new,
+    );

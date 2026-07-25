@@ -2,7 +2,7 @@
 
 **IMU-based wheelchair motion data collection system** — captures raw accelerometer + gyroscope data from both wheelchair wheels and synchronizes it with a video gold standard, replacing multi-camera 3D motion capture.
 
-> **Status:** `v0.1.0` — Data Collection MVP (pre-release)
+> **Release:** `v1.7.0` — Dual-wheel reliability release
 > **Languages:** [English](README.md) · [ภาษาไทย](README.th.md)
 
 ---
@@ -68,13 +68,13 @@ hardware.
 
 ---
 
-## What's Working in v0.1.0
+## What's Included in v1.7.0
 
-This is the first usable release. It is a **data collection MVP** — the app
-captures, syncs, previews, and exports. It does **not** train or run any
-machine-learning model yet.
+The v1.7.0 release is the stable **data-collection core**. The app captures,
+synchronizes, previews, validates, and exports dual-wheel IMU sessions. It does
+**not** train or run a machine-learning model yet.
 
-### Firmware (M5StickCPlus2)
+### Firmware (M5StickC Plus2 + Xiao BLE Sense)
 - MPU6886 IMU acquisition via hardware data-ready interrupt + FIFO
 - Configurable sampling rate: 50 / 100 / 200 Hz
 - BLE GATT server (NimBLE) with 5 characteristics + standard Battery Service
@@ -82,13 +82,15 @@ machine-learning model yet.
 - Control commands: START, STOP, SET_RATE, SYNC_PING, SET_RANGE, BEEP,
   SET_NAME, SET_WHEEL, SET_UTC, RESET_SEQ
 - Scheduled synchronized start with countdown beep 3-2-1
+- Bounded replay plus acquisition-health telemetry for BLE queue pressure,
+  transport failures, IMU FIFO faults, and lost samples
 - On-device display: connection state, recording, battery, sample count
 - Board identity (L/R) configurable at build time or at runtime via BLE
 - Persistent config store (name, wheel side, ranges) in NVS
-- Firmware version 0.2.0
+- Firmware version 1.7.0 (M5StickC Plus2 and Xiao BLE Sense)
 
 ### Mobile App (Flutter, iOS + Android)
-- BLE scan + connect to two M5StickCPlus2 modules simultaneously
+- BLE scan + simultaneous left/right connection for supported board targets
 - Automatic L/R side assignment from board Info characteristic
 - Clock sync engine (NTP/PTP-lite over BLE): offset estimation + drift
   correction → common timeline in UTC milliseconds
@@ -99,10 +101,12 @@ machine-learning model yet.
 - Session tags + search/filter on Browse
 - Session preview page: scrub slider, accel/gyro charts, summary stats
 - Quality badges (good / fair / poor / unknown) from drift residual RMS
-- Export to CSV (separate L/R tables) and Excel (.xlsx)
+- Named trial CSV, aligned training CSV, complete-data ZIP, and Excel export
+- Versioned metadata, collision-safe filenames, and non-destructive IMU/C3D
+  processing tools
 - Share exported files via OS share sheet
 - Light + dark theme, designed for outdoor sunlight readability
-- App version 1.0.0+1
+- App version 1.7.0+8
 
 ### Documentation
 - BLE protocol spec (`docs/ble-protocol.md`) — single source of truth
@@ -111,7 +115,7 @@ machine-learning model yet.
 
 ---
 
-## What's NOT in v0.1.0
+## What's NOT in v1.7.0
 
 - No machine-learning model training or inference
 - No real-time biomechanical feedback to the athlete
@@ -250,7 +254,7 @@ Wheel side can also be changed at runtime via the `SET_WHEEL` BLE command
 (persisted to NVS by `config_store`).
 
 Firmware version is defined in `platformio.ini`:
-`WheelAthlete_FW_MAJOR=0`, `WheelAthlete_FW_MINOR=2`, `WheelAthlete_FW_PATCH=0`.
+`WheelAthlete_FW_MAJOR=1`, `WheelAthlete_FW_MINOR=7`, `WheelAthlete_FW_PATCH=0`.
 
 ---
 
@@ -280,7 +284,7 @@ Key dependencies (see `pubspec.yaml` for full list):
 - `share_plus ^13.2.0`, `path_provider ^2.1.6` — file sharing
 - `file_picker 12.0.0-beta.7` — directory picker (pinned for share_plus compat)
 
-App version: `1.0.0+1` (defined in `pubspec.yaml`).
+App version: `1.7.0+8` (defined in `pubspec.yaml`).
 
 ---
 
@@ -347,7 +351,7 @@ Sync quality is reported as **drift residual RMS in ms**:
 
 ## BLE Protocol
 
-Full contract: [`docs/ble-protocol.md`](docs/ble-protocol.md) (version 1.1.0).
+Full contract: [`docs/ble-protocol.md`](docs/ble-protocol.md) (version 1.7.0).
 
 Summary:
 
@@ -430,4 +434,4 @@ This is a research project; contact the maintainer before reuse.
 
 ---
 
-**Release:** `v0.1.0` (pre-release) · **Firmware:** `0.2.0` · **App:** `1.0.0+1`
+**Release:** `v1.7.0` · **Firmware:** `1.7.0` · **App:** `1.7.0+8`

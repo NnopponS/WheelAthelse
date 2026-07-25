@@ -20,10 +20,8 @@ void main() {
           body: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
-                onPressed: () => showTagEditorDialog(
-                  context,
-                  initialTags: initialTags,
-                ),
+                onPressed: () =>
+                    showTagEditorDialog(context, initialTags: initialTags),
                 child: const Text('open'),
               ),
             ),
@@ -56,8 +54,9 @@ void main() {
       expect(find.text('morning'), findsOneWidget);
     });
 
-    testWidgets('tapping delete icon on a chip removes the tag',
-        (tester) async {
+    testWidgets('tapping delete icon on a chip removes the tag', (
+      tester,
+    ) async {
       await pumpDialog(tester, initialTags: ['good', 'bad']);
       // Each chip has a delete icon.
       expect(find.byIcon(Icons.cancel), findsNWidgets(2));

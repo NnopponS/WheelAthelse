@@ -47,9 +47,7 @@ void main() {
 
   setUp(() async {
     ble = FakeBleRepository(
-      devices: [
-        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-      ],
+      devices: [const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42)],
       infoFor: const {'L1': _leftInfo},
       configFor: {'L1': _configBytes()},
     );
@@ -83,25 +81,33 @@ void main() {
     expect(state.config!.rateHz, 100);
   });
 
-  test('BoardSettingsNotifier.save writes SET_NAME, SET_WHEEL, SET_RATE',
-      () async {
-    // Load config first.
-    container.read(boardSettingsProvider(WheelSide.left));
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    final notifier = container.read(
-      boardSettingsProvider(WheelSide.left).notifier,
-    );
-    await notifier.save(name: 'NewName', wheelByte: 0x52, rateHz: 200);
-    final state = container.read(boardSettingsProvider(WheelSide.left));
-    expect(state.status, BoardSettingsStatus.saved);
+  test(
+    'BoardSettingsNotifier.save writes name, wheel, rate, and sound setting',
+    () async {
+      // Load config first.
+      container.read(boardSettingsProvider(WheelSide.left));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final notifier = container.read(
+        boardSettingsProvider(WheelSide.left).notifier,
+      );
+      await notifier.save(
+        name: 'NewName',
+        wheelByte: 0x52,
+        rateHz: 200,
+        beepEnabled: false,
+      );
+      final state = container.read(boardSettingsProvider(WheelSide.left));
+      expect(state.status, BoardSettingsStatus.saved);
 
-    // Verify all three commands were written in order.
-    final writes = ble.allControlWrites('L1');
-    expect(writes.length, 3);
-    expect(writes[0][0], ControlCommandId.setName);
-    expect(writes[1][0], ControlCommandId.setWheel);
-    expect(writes[2][0], ControlCommandId.setRate);
-  });
+      // Verify all four commands were written in order.
+      final writes = ble.allControlWrites('L1');
+      expect(writes.length, 4);
+      expect(writes[0][0], ControlCommandId.setName);
+      expect(writes[1][0], ControlCommandId.setWheel);
+      expect(writes[2][0], ControlCommandId.setRate);
+      expect(writes[3], [ControlCommandId.setBeepEnabled, 0]);
+    },
+  );
 
   test('BoardSettingsNotifier.save re-reads config after save', () async {
     // Load config first.
@@ -110,24 +116,36 @@ void main() {
     final notifier = container.read(
       boardSettingsProvider(WheelSide.left).notifier,
     );
-    await notifier.save(name: 'NewName', wheelByte: 0x52, rateHz: 200);
+    await notifier.save(
+      name: 'NewName',
+      wheelByte: 0x52,
+      rateHz: 200,
+      beepEnabled: true,
+    );
     final state = container.read(boardSettingsProvider(WheelSide.left));
     expect(state.status, BoardSettingsStatus.saved);
     // Config should be re-read (not null) after save.
     expect(state.config, isNotNull);
   });
 
-  test('BoardSettingsNotifier.save with disconnected wheel sets error',
-      () async {
-    // Use a fresh container with no connection on right side.
-    final notifier = container.read(
-      boardSettingsProvider(WheelSide.right).notifier,
-    );
-    await notifier.save(name: 'Test', wheelByte: 0x52, rateHz: 100);
-    final state = container.read(boardSettingsProvider(WheelSide.right));
-    expect(state.status, BoardSettingsStatus.error);
-    expect(state.error, isNotNull);
-  });
+  test(
+    'BoardSettingsNotifier.save with disconnected wheel sets error',
+    () async {
+      // Use a fresh container with no connection on right side.
+      final notifier = container.read(
+        boardSettingsProvider(WheelSide.right).notifier,
+      );
+      await notifier.save(
+        name: 'Test',
+        wheelByte: 0x52,
+        rateHz: 100,
+        beepEnabled: true,
+      );
+      final state = container.read(boardSettingsProvider(WheelSide.right));
+      expect(state.status, BoardSettingsStatus.error);
+      expect(state.error, isNotNull);
+    },
+  );
 
   test('readConfig throws if no config seeded', () async {
     final bleNoConfig = FakeBleRepository(

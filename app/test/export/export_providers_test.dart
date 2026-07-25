@@ -76,7 +76,7 @@ void main() {
         trialNumber: 1,
         sessionId: 'abc123',
       );
-      expect(path, endsWith('sprint_test_trial_01_1970-01-01.csv'));
+      expect(path, endsWith('sprint_test_trial_01_training_1970-01-01.csv'));
       expect(path, isNot(contains('session_')));
     });
 
@@ -130,7 +130,7 @@ void main() {
         topic: 'sprint_test',
         trialNumber: 1,
       );
-      expect(paths.length, 2);
+      expect(paths.length, 1); // one combined CSV per trial
     });
 
     test('exportTopic exports all sessions in all trials', () async {

@@ -106,9 +106,9 @@ abstract final class AppTypography {
 
   /// Uppercase eyebrow/section label (used sparingly, ≤ a few words).
   static TextStyle eyebrow(Color color) => GoogleFonts.inter(
-        color: color,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-      );
+    color: color,
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.2,
+  );
 }

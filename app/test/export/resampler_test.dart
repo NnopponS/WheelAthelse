@@ -16,22 +16,21 @@ BufferedSample _s({
   double gz = 0,
   int tDeviceUs = 0,
   int tAppMs = 0,
-}) =>
-    BufferedSample(
-      reading: ImuReading(
-        seq: seq,
-        tDeviceUs: tDeviceUs,
-        ax: ax,
-        ay: ay,
-        az: az,
-        gx: gx,
-        gy: gy,
-        gz: gz,
-      ),
-      wheel: wheel,
-      timestampAppMs: tAppMs,
-      timestampSyncedMs: syncedMs,
-    );
+}) => BufferedSample(
+  reading: ImuReading(
+    seq: seq,
+    tDeviceUs: tDeviceUs,
+    ax: ax,
+    ay: ay,
+    az: az,
+    gx: gx,
+    gy: gy,
+    gz: gz,
+  ),
+  wheel: wheel,
+  timestampAppMs: tAppMs,
+  timestampSyncedMs: syncedMs,
+);
 
 void main() {
   group('Resampler', () {
@@ -81,10 +80,12 @@ void main() {
       // At 0: L=1 (exact), R=10 (exact)
       // At 10: L=2 (exact), R=20 (exact)
       expect(result.length, 4); // 2 grid points × 2 wheels
-      final leftAt0 = result.where((s) =>
-          s.wheel == WheelSide.left && s.timestampSyncedMs == 0).first;
-      final rightAt0 = result.where((s) =>
-          s.wheel == WheelSide.right && s.timestampSyncedMs == 0).first;
+      final leftAt0 = result
+          .where((s) => s.wheel == WheelSide.left && s.timestampSyncedMs == 0)
+          .first;
+      final rightAt0 = result
+          .where((s) => s.wheel == WheelSide.right && s.timestampSyncedMs == 0)
+          .first;
       expect(leftAt0.reading.ax, 1);
       expect(rightAt0.reading.ax, 10);
     });
@@ -99,24 +100,45 @@ void main() {
       expect(result.last.timestampSyncedMs, 110);
     });
 
-    test('extrapolation not done — points before first/after last are skipped', () {
-      final samples = [
-        _s(seq: 0, syncedMs: 5, wheel: WheelSide.left, ax: 1),
-        _s(seq: 1, syncedMs: 15, wheel: WheelSide.left, ax: 2),
-      ];
-      // Grid: 0, 10, 20 — but only 10 is within [5, 15]
-      final result = Resampler.resample(samples, gridIntervalMs: 10);
-      expect(result.length, 1);
-      expect(result[0].timestampSyncedMs, 10);
-      expect(result[0].reading.ax, closeTo(1.5, 0.001));
-    });
+    test(
+      'extrapolation not done — points before first/after last are skipped',
+      () {
+        final samples = [
+          _s(seq: 0, syncedMs: 5, wheel: WheelSide.left, ax: 1),
+          _s(seq: 1, syncedMs: 15, wheel: WheelSide.left, ax: 2),
+        ];
+        // Grid: 0, 10, 20 — but only 10 is within [5, 15]
+        final result = Resampler.resample(samples, gridIntervalMs: 10);
+        expect(result.length, 1);
+        expect(result[0].timestampSyncedMs, 10);
+        expect(result[0].reading.ax, closeTo(1.5, 0.001));
+      },
+    );
 
     test('interpolates all 6 axes', () {
       final samples = [
-        _s(seq: 0, syncedMs: 0, wheel: WheelSide.left,
-           ax: 1, ay: 2, az: 3, gx: 4, gy: 5, gz: 6),
-        _s(seq: 1, syncedMs: 20, wheel: WheelSide.left,
-           ax: 11, ay: 12, az: 13, gx: 14, gy: 15, gz: 16),
+        _s(
+          seq: 0,
+          syncedMs: 0,
+          wheel: WheelSide.left,
+          ax: 1,
+          ay: 2,
+          az: 3,
+          gx: 4,
+          gy: 5,
+          gz: 6,
+        ),
+        _s(
+          seq: 1,
+          syncedMs: 20,
+          wheel: WheelSide.left,
+          ax: 11,
+          ay: 12,
+          az: 13,
+          gx: 14,
+          gy: 15,
+          gz: 16,
+        ),
       ];
       final result = Resampler.resample(samples, gridIntervalMs: 10);
       final mid = result[1]; // at synced=10
@@ -128,29 +150,32 @@ void main() {
       expect(mid.reading.gz, closeTo(11, 0.001));
     });
 
-    test('marker flag preserved: any sample with marker in range sets marker', () {
-      final samples = [
-        _s(seq: 0, syncedMs: 0, wheel: WheelSide.left, ax: 1),
-        _s(seq: 1, syncedMs: 10, wheel: WheelSide.left, ax: 2, ),
-        _s(seq: 2, syncedMs: 20, wheel: WheelSide.left, ax: 3),
-      ];
-      // Mark the middle sample
-      final marked = [
-        ...samples.sublist(0, 1),
-        BufferedSample(
-          reading: samples[1].reading,
-          wheel: WheelSide.left,
-          timestampAppMs: 0,
-          timestampSyncedMs: 10,
-          marker: true,
-        ),
-        ...samples.sublist(2),
-      ];
-      final result = Resampler.resample(marked, gridIntervalMs: 10);
-      // The grid point at 10 should have marker=true
-      final at10 = result.where((s) => s.timestampSyncedMs == 10).first;
-      expect(at10.marker, isTrue);
-    });
+    test(
+      'marker flag preserved: any sample with marker in range sets marker',
+      () {
+        final samples = [
+          _s(seq: 0, syncedMs: 0, wheel: WheelSide.left, ax: 1),
+          _s(seq: 1, syncedMs: 10, wheel: WheelSide.left, ax: 2),
+          _s(seq: 2, syncedMs: 20, wheel: WheelSide.left, ax: 3),
+        ];
+        // Mark the middle sample
+        final marked = [
+          ...samples.sublist(0, 1),
+          BufferedSample(
+            reading: samples[1].reading,
+            wheel: WheelSide.left,
+            timestampAppMs: 0,
+            timestampSyncedMs: 10,
+            marker: true,
+          ),
+          ...samples.sublist(2),
+        ];
+        final result = Resampler.resample(marked, gridIntervalMs: 10);
+        // The grid point at 10 should have marker=true
+        final at10 = result.where((s) => s.timestampSyncedMs == 10).first;
+        expect(at10.marker, isTrue);
+      },
+    );
 
     test('resampled seq is synthetic (grid index)', () {
       final samples = [

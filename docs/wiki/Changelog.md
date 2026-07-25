@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.7.0+8 / Firmware 1.7.0 / BLE 1.7.0 — 2026-07-25
+
+- Harden dual-wheel BLE connect, start, stop, replay, and recovery flows.
+- Keep STOP responsive under load and remove the Android dual-connection
+  notification bottleneck that previously caused retry/queue congestion.
+- Add lossless recording handoff, bounded live/replay recovery, and clearer
+  acquisition-health telemetry for queue, transport, and IMU FIFO failures.
+- Add named trial CSV and complete-data ZIP export workflows with versioned
+  metadata and collision-safe output names.
+- Move firmware into separate M5StickCPlus2 and Xiao targets with coordinated
+  left/right build configurations.
+- Keep the previous `main` baseline archived as `archive/main-v0.1.0`.
+
+## 1.6.1+7 / Firmware 1.6.1 / BLE 1.6.1
+
+- Prepare both Android notification channels and connection priority once,
+  before countdown; reuse those subscriptions after `START_FIRED` without BLE
+  link renegotiation.
+- Split acquisition telemetry into sample-queue drops and IMU FIFO faults/lost
+  samples so recording failures show the correct hardware or transport cause.
+- Keep the app compatible with the v1.6.0 20-byte `ACQ_HEALTH` event while new
+  firmware emits the extended 28-byte event.
+
+## 1.6.0+6 / Firmware 1.6.0 / BLE 1.6.0
+
+- Arm notifications before PING/START and require a `START_FIRED` plus the first
+  sample from every expected wheel before recording is accepted.
+- Buffer samples losslessly before publishing 4 Hz UI health snapshots; abort
+  zero-sample and stalled trials with side-specific recovery guidance.
+- Add `ACQ_HEALTH` telemetry and compact M5/XIAO acquisition status indicators.
+- Export schema 2 raw and aligned training CSVs with START-relative `time_us`;
+  keep labels, UTC, quality, versions, and provenance in JSON metadata.
+- Add the non-destructive July IMU/C3D processing and QC pipeline.
+
+## 1.4.0+5 / Firmware 1.5.0 / BLE 1.5.0
+
+- Run M5 IMU BLE streaming from one real dedicated Core 1 task instead of the
+  display/button loop.
+- Serialize M5 START, STOP, replay, and configuration commands through the BLE
+  owner so STOP cannot race a live batch notification.
+- Replace per-sample Flutter chart-list copies with an O(1) circular buffer and
+  emit independent per-wheel presentation snapshots at 10 Hz.
+- Keep RSSI and blocking battery sampling outside acquisition and retain the
+  lossless recording sink under sustained dual-wheel input.
+
+## 1.3.0+4 / Firmware 1.4.0 / BLE 1.4.0
+
+- Reset the shared BLE sample/replay stream when handing off from Live to Record.
+- Keep Stop Recording fixed at the bottom of the screen and guard repeated taps.
+- Add event-driven phone countdown tones synchronized to firmware cues.
+- Match XIAO LED countdown flashes to the M5 3-2-1-start schedule.
+
+## 1.2.0 — BLE recovery and Live control
+
+- Live Start/Stop controls connected boards directly without saving a trial.
+- Protocol 1.3 adds 25 ms MTU-aware batching and bounded sample replay.
+- Connected devices are filtered from scans and battery is read on connect.
+- Topic export creates a named folder with trial CSVs and metadata.
+
+## v1.1.0 — BLE reliability and portable exports (2026-07-11)
+
+- App 1.2.0+3, both firmware targets 1.3.0, BLE protocol 1.3.0.
+- Unified idle/countdown/recording/stop lifecycle for M5StickC Plus2 and Xiao.
+- START acknowledgement race protection, repeat recording, drift-corrected timestamps.
+- Model-and-side BLE names, hardware model metadata, filtered battery telemetry.
+- Named combined trial CSV export and complete-data ZIP export.
+
 All notable changes to WheelAthlete are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 

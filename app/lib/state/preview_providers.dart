@@ -179,10 +179,7 @@ class PreviewController extends Notifier<PreviewState> {
         );
         if (loaded == null) {
           if (!ref.mounted) return;
-          state = state.copyWith(
-            isLoading: false,
-            error: 'Session not found',
-          );
+          state = state.copyWith(isLoading: false, error: 'Session not found');
           return;
         }
         meta = loaded;
@@ -292,8 +289,8 @@ class PreviewController extends Notifier<PreviewState> {
 
 final previewControllerProvider =
     NotifierProvider.family<PreviewController, PreviewState, PreviewSource>(
-  PreviewController.new,
-);
+      PreviewController.new,
+    );
 
 /// Filters a chunk of [BufferedSample]s to a single [WheelSide]. Returns the
 /// input unchanged when [selection] is [PreviewWheelSelection.both].

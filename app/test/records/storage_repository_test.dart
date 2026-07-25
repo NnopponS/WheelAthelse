@@ -29,10 +29,7 @@ void main() {
 
     test('createTopic throws if topic already exists', () async {
       await storage.createTopic('sprint_test');
-      expect(
-        () => storage.createTopic('sprint_test'),
-        throwsStateError,
-      );
+      expect(() => storage.createTopic('sprint_test'), throwsStateError);
     });
 
     test('listTopics returns sorted by name', () async {
@@ -60,28 +57,39 @@ void main() {
     test('nextTrialNumber accounts for multiple saved sessions', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's2', trialNumber: 2), []);
+        'test',
+        _makeMeta(sessionId: 's2', trialNumber: 2),
+        [],
+      );
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's3', trialNumber: 5), []);
+        'test',
+        _makeMeta(sessionId: 's3', trialNumber: 5),
+        [],
+      );
       expect(await storage.nextTrialNumber('test'), 6);
     });
   });
 
   group('StorageRepository — save + read sessions', () {
-    test('saveSession writes meta + samples, readSessionMeta reads it back',
-        () async {
-      await storage.createTopic('test');
-      final meta = _makeMeta(sessionId: 'abc', trialNumber: 1);
-      await storage.saveSession('test', meta, []);
+    test(
+      'saveSession writes meta + samples, readSessionMeta reads it back',
+      () async {
+        await storage.createTopic('test');
+        final meta = _makeMeta(sessionId: 'abc', trialNumber: 1);
+        await storage.saveSession('test', meta, []);
 
-      final read = await storage.readSessionMeta('test', 1, 'abc');
-      expect(read, isNotNull);
-      expect(read!.sessionId, 'abc');
-      expect(read.topic, 'test');
-      expect(read.trialNumber, 1);
-    });
+        final read = await storage.readSessionMeta('test', 1, 'abc');
+        expect(read, isNotNull);
+        expect(read!.sessionId, 'abc');
+        expect(read.topic, 'test');
+        expect(read.trialNumber, 1);
+      },
+    );
 
     test('readSessionMeta returns null for non-existent session', () async {
       await storage.createTopic('test');
@@ -92,9 +100,15 @@ void main() {
     test('listSessions returns all sessions for a topic/trial', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's2', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's2', trialNumber: 1),
+        [],
+      );
       final sessions = await storage.listSessions('test', 1);
       expect(sessions.length, 2);
       expect(sessions.map((m) => m.sessionId).toSet(), {'s1', 's2'});
@@ -111,7 +125,10 @@ void main() {
     test('deleteSession removes the session', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.deleteSession('test', 1, 's1');
       final read = await storage.readSessionMeta('test', 1, 's1');
       expect(read, isNull);
@@ -120,46 +137,54 @@ void main() {
     test('deleteTopic removes the topic and all its sessions', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.deleteTopic('test');
       expect(await storage.listTopics(), isEmpty);
       expect(await storage.listSessions('test', 1), isEmpty);
     });
 
-    test('deleteTrial removes the trial folder and all sessions inside',
-        () async {
-      await storage.createTopic('test');
-      await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
-      await storage.saveSession(
-          'test', _makeMeta(sessionId: 's2', trialNumber: 1), []);
-      await storage.saveSession(
-          'test', _makeMeta(sessionId: 's3', trialNumber: 2), []);
+    test(
+      'deleteTrial removes the trial folder and all sessions inside',
+      () async {
+        await storage.createTopic('test');
+        await storage.saveSession(
+          'test',
+          _makeMeta(sessionId: 's1', trialNumber: 1),
+          [],
+        );
+        await storage.saveSession(
+          'test',
+          _makeMeta(sessionId: 's2', trialNumber: 1),
+          [],
+        );
+        await storage.saveSession(
+          'test',
+          _makeMeta(sessionId: 's3', trialNumber: 2),
+          [],
+        );
 
-      await storage.deleteTrial('test', 1);
+        await storage.deleteTrial('test', 1);
 
-      // Trial 1 sessions gone.
-      expect(await storage.listSessions('test', 1), isEmpty);
-      // Trial 1 no longer listed.
-      expect(await storage.listTrials('test'), [2]);
-      // Trial 2 sessions untouched.
-      final remaining = await storage.listSessions('test', 2);
-      expect(remaining.map((m) => m.sessionId).toList(), ['s3']);
-    });
+        // Trial 1 sessions gone.
+        expect(await storage.listSessions('test', 1), isEmpty);
+        // Trial 1 no longer listed.
+        expect(await storage.listTrials('test'), [2]);
+        // Trial 2 sessions untouched.
+        final remaining = await storage.listSessions('test', 2);
+        expect(remaining.map((m) => m.sessionId).toList(), ['s3']);
+      },
+    );
 
     test('deleteTrial throws if the trial does not exist', () async {
       await storage.createTopic('test');
-      expect(
-        () => storage.deleteTrial('test', 99),
-        throwsStateError,
-      );
+      expect(() => storage.deleteTrial('test', 99), throwsStateError);
     });
 
     test('deleteTrial throws if the topic does not exist', () async {
-      expect(
-        () => storage.deleteTrial('missing', 1),
-        throwsStateError,
-      );
+      expect(() => storage.deleteTrial('missing', 1), throwsStateError);
     });
   });
 
@@ -167,7 +192,10 @@ void main() {
     test('renameTopic moves the folder to the new name', () async {
       await storage.createTopic('old_name', description: 'desc');
       await storage.saveSession(
-          'old_name', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'old_name',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.renameTopic('old_name', 'new_name');
 
       final topics = await storage.listTopics();
@@ -203,13 +231,15 @@ void main() {
   });
 
   group('StorageRepository — update topic description', () {
-    test('updateTopicDescription sets the description on an existing topic',
-        () async {
-      await storage.createTopic('test', description: 'old');
-      await storage.updateTopicDescription('test', 'new desc');
-      final topics = await storage.listTopics();
-      expect(topics.first.description, 'new desc');
-    });
+    test(
+      'updateTopicDescription sets the description on an existing topic',
+      () async {
+        await storage.createTopic('test', description: 'old');
+        await storage.updateTopicDescription('test', 'new desc');
+        final topics = await storage.listTopics();
+        expect(topics.first.description, 'new desc');
+      },
+    );
 
     test('updateTopicDescription can clear the description', () async {
       await storage.createTopic('test', description: 'old');
@@ -230,7 +260,10 @@ void main() {
     test('updateSessionMeta updates notes + videoFile', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionMeta(
         'test',
         1,
@@ -247,7 +280,10 @@ void main() {
     test('updateSessionMeta preserves other fields', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionMeta('test', 1, 's1', notes: 'only notes');
       final meta = await storage.readSessionMeta('test', 1, 's1');
       expect(meta, isNotNull);
@@ -269,7 +305,10 @@ void main() {
     test('updateSessionTags sets tags on a session', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionTags('test', 1, 's1', ['good', 'athlete-A']);
       final meta = await storage.readSessionMeta('test', 1, 's1');
       expect(meta, isNotNull);
@@ -279,7 +318,10 @@ void main() {
     test('updateSessionTags overwrites existing tags', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionTags('test', 1, 's1', ['a', 'b']);
       await storage.updateSessionTags('test', 1, 's1', ['c']);
       final meta = await storage.readSessionMeta('test', 1, 's1');
@@ -290,7 +332,10 @@ void main() {
     test('updateSessionTags can clear tags with empty list', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionTags('test', 1, 's1', ['a']);
       await storage.updateSessionTags('test', 1, 's1', []);
       final meta = await storage.readSessionMeta('test', 1, 's1');
@@ -301,7 +346,10 @@ void main() {
     test('updateSessionTags preserves other fields', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       await storage.updateSessionTags('test', 1, 's1', ['tag1']);
       final meta = await storage.readSessionMeta('test', 1, 's1');
       expect(meta, isNotNull);
@@ -329,11 +377,20 @@ void main() {
       await storage.createTopic('topicA');
       await storage.createTopic('topicB');
       await storage.saveSession(
-          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 1), []);
+        'topicA',
+        _makeMeta(sessionId: 'a1', trialNumber: 1),
+        [],
+      );
       await storage.saveSession(
-          'topicA', _makeMeta(sessionId: 'a2', trialNumber: 2), []);
+        'topicA',
+        _makeMeta(sessionId: 'a2', trialNumber: 2),
+        [],
+      );
       await storage.saveSession(
-          'topicB', _makeMeta(sessionId: 'b1', trialNumber: 1), []);
+        'topicB',
+        _makeMeta(sessionId: 'b1', trialNumber: 1),
+        [],
+      );
       final all = await storage.listAllSessions();
       expect(all.length, 3);
       final ids = all.map((m) => m.sessionId).toSet();
@@ -343,7 +400,10 @@ void main() {
     test('returns sessions with their trialNumber intact', () async {
       await storage.createTopic('topicA');
       await storage.saveSession(
-          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 3), []);
+        'topicA',
+        _makeMeta(sessionId: 'a1', trialNumber: 3),
+        [],
+      );
       final all = await storage.listAllSessions();
       expect(all.length, 1);
       expect(all.first.trialNumber, 3);
@@ -353,9 +413,15 @@ void main() {
       await storage.createTopic('topicA');
       await storage.createTopic('topicB');
       await storage.saveSession(
-          'topicA', _makeMeta(sessionId: 'a1', trialNumber: 1), []);
+        'topicA',
+        _makeMeta(sessionId: 'a1', trialNumber: 1),
+        [],
+      );
       await storage.saveSession(
-          'topicB', _makeMeta(sessionId: 'b1', trialNumber: 1), []);
+        'topicB',
+        _makeMeta(sessionId: 'b1', trialNumber: 1),
+        [],
+      );
       await storage.deleteTopic('topicA');
       final all = await storage.listAllSessions();
       expect(all.length, 1);
@@ -368,7 +434,10 @@ void main() {
       await storage.createTopic('test');
       final samples = List.generate(10, _makeSample);
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
       final chunk = await storage.readSampleChunk(
         'test',
         1,
@@ -381,28 +450,36 @@ void main() {
       expect(chunk.map((s) => s.reading.seq).toList(), [3, 4, 5, 6]);
     });
 
-    test('chunk at end returns partial count when fewer samples remain',
-        () async {
-      await storage.createTopic('test');
-      final samples = List.generate(10, _makeSample);
-      await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
-      final chunk = await storage.readSampleChunk(
-        'test',
-        1,
-        's1',
-        offset: 8,
-        count: 10,
-      );
-      expect(chunk.length, 2);
-      expect(chunk.map((s) => s.reading.seq).toList(), [8, 9]);
-    });
+    test(
+      'chunk at end returns partial count when fewer samples remain',
+      () async {
+        await storage.createTopic('test');
+        final samples = List.generate(10, _makeSample);
+        await storage.saveSession(
+          'test',
+          _makeMeta(sessionId: 's1', trialNumber: 1),
+          samples,
+        );
+        final chunk = await storage.readSampleChunk(
+          'test',
+          1,
+          's1',
+          offset: 8,
+          count: 10,
+        );
+        expect(chunk.length, 2);
+        expect(chunk.map((s) => s.reading.seq).toList(), [8, 9]);
+      },
+    );
 
     test('offset beyond sample count returns empty list', () async {
       await storage.createTopic('test');
       final samples = List.generate(10, _makeSample);
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
       final chunk = await storage.readSampleChunk(
         'test',
         1,
@@ -416,7 +493,10 @@ void main() {
     test('negative offset throws ArgumentError', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       expect(
         () => storage.readSampleChunk('test', 1, 's1', offset: -1, count: 5),
         throwsArgumentError,
@@ -426,7 +506,10 @@ void main() {
     test('zero count throws ArgumentError', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       expect(
         () => storage.readSampleChunk('test', 1, 's1', offset: 0, count: 0),
         throwsArgumentError,
@@ -436,7 +519,10 @@ void main() {
     test('negative count throws ArgumentError', () async {
       await storage.createTopic('test');
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), []);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        [],
+      );
       expect(
         () => storage.readSampleChunk('test', 1, 's1', offset: 0, count: -3),
         throwsArgumentError,
@@ -447,7 +533,10 @@ void main() {
       await storage.createTopic('test');
       final samples = List.generate(10, _makeSample);
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
       final chunk = await storage.readSampleChunk(
         'test',
         1,
@@ -456,12 +545,13 @@ void main() {
         count: 100,
       );
       expect(chunk.length, 10);
-      expect(chunk.map((s) => s.reading.seq).toList(),
-          List.generate(10, (i) => i));
+      expect(
+        chunk.map((s) => s.reading.seq).toList(),
+        List.generate(10, (i) => i),
+      );
     });
 
-    test('chunk from session that does not exist returns empty list',
-        () async {
+    test('chunk from session that does not exist returns empty list', () async {
       await storage.createTopic('test');
       final chunk = await storage.readSampleChunk(
         'test',
@@ -477,7 +567,10 @@ void main() {
       await storage.createTopic('test');
       final samples = List.generate(5, _makeSample);
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
       final chunk = await storage.readSampleChunk(
         'test',
         1,
@@ -513,7 +606,15 @@ void main() {
       final samples = [
         const BufferedSample(
           reading: ImuReading(
-              seq: 0, tDeviceUs: 0, ax: 1, ay: 2, az: 3, gx: 4, gy: 5, gz: 6),
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 1,
+            ay: 2,
+            az: 3,
+            gx: 4,
+            gy: 5,
+            gz: 6,
+          ),
           wheel: WheelSide.left,
           timestampAppMs: 100,
           timestampSyncedMs: 0.0,
@@ -521,7 +622,15 @@ void main() {
         ),
         const BufferedSample(
           reading: ImuReading(
-              seq: 1, tDeviceUs: 1000, ax: 7, ay: 8, az: 9, gx: 10, gy: 11, gz: 12),
+            seq: 1,
+            tDeviceUs: 1000,
+            ax: 7,
+            ay: 8,
+            az: 9,
+            gx: 10,
+            gy: 11,
+            gz: 12,
+          ),
           wheel: WheelSide.left,
           timestampAppMs: 110,
           timestampSyncedMs: 10.0,
@@ -529,7 +638,15 @@ void main() {
         ),
         const BufferedSample(
           reading: ImuReading(
-              seq: 0, tDeviceUs: 0, ax: 13, ay: 14, az: 15, gx: 16, gy: 17, gz: 18),
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 13,
+            ay: 14,
+            az: 15,
+            gx: 16,
+            gy: 17,
+            gz: 18,
+          ),
           wheel: WheelSide.right,
           timestampAppMs: 105,
           timestampSyncedMs: 5.0,
@@ -537,14 +654,20 @@ void main() {
         ),
       ];
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
 
       final read = await storage.readSamples('test', 1, 's1');
       expect(read.length, 3);
       // Chronologically merged: L@0, R@5, L@10.
       expect(read.map((s) => s.timestampSyncedMs).toList(), [0.0, 5.0, 10.0]);
-      expect(read.map((s) => s.wheel).toList(),
-          [WheelSide.left, WheelSide.right, WheelSide.left]);
+      expect(read.map((s) => s.wheel).toList(), [
+        WheelSide.left,
+        WheelSide.right,
+        WheelSide.left,
+      ]);
       // IMU values survive the round-trip.
       expect(read[0].reading.ax, 1);
       expect(read[2].reading.ax, 7);
@@ -560,53 +683,90 @@ void main() {
       final samples = [
         const BufferedSample(
           reading: ImuReading(
-              seq: 0, tDeviceUs: 0, ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 0,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.left,
           timestampAppMs: 0,
           timestampSyncedMs: 0.0,
         ),
         const BufferedSample(
           reading: ImuReading(
-              seq: 0, tDeviceUs: 0, ax: 1, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+            seq: 0,
+            tDeviceUs: 0,
+            ax: 1,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.right,
           timestampAppMs: 5,
           timestampSyncedMs: 5.0,
         ),
         const BufferedSample(
           reading: ImuReading(
-              seq: 1, tDeviceUs: 1000, ax: 2, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+            seq: 1,
+            tDeviceUs: 1000,
+            ax: 2,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.left,
           timestampAppMs: 10,
           timestampSyncedMs: 10.0,
         ),
         const BufferedSample(
           reading: ImuReading(
-              seq: 1, tDeviceUs: 1000, ax: 3, ay: 0, az: 0, gx: 0, gy: 0, gz: 0),
+            seq: 1,
+            tDeviceUs: 1000,
+            ax: 3,
+            ay: 0,
+            az: 0,
+            gx: 0,
+            gy: 0,
+            gz: 0,
+          ),
           wheel: WheelSide.right,
           timestampAppMs: 15,
           timestampSyncedMs: 15.0,
         ),
       ];
       await storage.saveSession(
-          'test', _makeMeta(sessionId: 's1', trialNumber: 1), samples);
+        'test',
+        _makeMeta(sessionId: 's1', trialNumber: 1),
+        samples,
+      );
 
       // offset 1, count 2 → merged timeline positions 1,2 = R@5, L@10.
       final chunk = await storage.readSampleChunk(
-        'test', 1, 's1',
-        offset: 1, count: 2,
+        'test',
+        1,
+        's1',
+        offset: 1,
+        count: 2,
       );
       expect(chunk.length, 2);
       expect(chunk.map((s) => s.timestampSyncedMs).toList(), [5.0, 10.0]);
-      expect(chunk.map((s) => s.wheel).toList(),
-          [WheelSide.right, WheelSide.left]);
+      expect(chunk.map((s) => s.wheel).toList(), [
+        WheelSide.right,
+        WheelSide.left,
+      ]);
     });
   });
 }
 
-SessionMeta _makeMeta({
-  required String sessionId,
-  required int trialNumber,
-}) =>
+SessionMeta _makeMeta({required String sessionId, required int trialNumber}) =>
     SessionMeta(
       sessionId: sessionId,
       topic: 'test',
@@ -619,18 +779,18 @@ SessionMeta _makeMeta({
     );
 
 BufferedSample _makeSample(int i) => BufferedSample(
-      reading: ImuReading(
-        seq: i,
-        tDeviceUs: i * 1000,
-        ax: i.toDouble(),
-        ay: 0,
-        az: 0,
-        gx: 0,
-        gy: 0,
-        gz: 0,
-      ),
-      wheel: WheelSide.left,
-      timestampAppMs: i * 10,
-      timestampSyncedMs: i * 10.0,
-      marker: false,
-    );
+  reading: ImuReading(
+    seq: i,
+    tDeviceUs: i * 1000,
+    ax: i.toDouble(),
+    ay: 0,
+    az: 0,
+    gx: 0,
+    gy: 0,
+    gz: 0,
+  ),
+  wheel: WheelSide.left,
+  timestampAppMs: i * 10,
+  timestampSyncedMs: i * 10.0,
+  marker: false,
+);

@@ -41,17 +41,15 @@ void main() {
     var shared = false;
     await pumpThemed(
       tester,
-      SessionListItem(
-        title: 's',
-        subtitle: 't',
-        onShare: () => shared = true,
-      ),
+      SessionListItem(title: 's', subtitle: 't', onShare: () => shared = true),
     );
     await tester.tap(find.byIcon(Icons.ios_share_rounded));
     expect(shared, isTrue);
   });
 
-  testWidgets('formats sub-1000 sample counts without k suffix', (tester) async {
+  testWidgets('formats sub-1000 sample counts without k suffix', (
+    tester,
+  ) async {
     await pumpThemed(
       tester,
       const SessionListItem(
@@ -81,10 +79,7 @@ void main() {
   });
 
   testWidgets('hides delete button when onDelete is null', (tester) async {
-    await pumpThemed(
-      tester,
-      const SessionListItem(title: 's', subtitle: 't'),
-    );
+    await pumpThemed(tester, const SessionListItem(title: 's', subtitle: 't'));
     expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
   });
 
@@ -165,8 +160,7 @@ void main() {
       expect(_syncBadgeTone(tester), BadgeTone.danger);
     });
 
-    testWidgets('qualityLevel=unknown -> neutral tone (grey)',
-        (tester) async {
+    testWidgets('qualityLevel=unknown -> neutral tone (grey)', (tester) async {
       await pumpThemed(
         tester,
         const SessionListItem(
@@ -179,8 +173,9 @@ void main() {
       expect(_syncBadgeTone(tester), BadgeTone.neutral);
     });
 
-    testWidgets('qualityLevel null but syncQuality set -> neutral tone',
-        (tester) async {
+    testWidgets('qualityLevel null but syncQuality set -> neutral tone', (
+      tester,
+    ) async {
       await pumpThemed(
         tester,
         const SessionListItem(
@@ -192,8 +187,9 @@ void main() {
       expect(_syncBadgeTone(tester), BadgeTone.neutral);
     });
 
-    testWidgets('no sync badge when both qualityLevel and syncQuality null',
-        (tester) async {
+    testWidgets('no sync badge when both qualityLevel and syncQuality null', (
+      tester,
+    ) async {
       await pumpThemed(
         tester,
         const SessionListItem(title: 's', subtitle: 't'),

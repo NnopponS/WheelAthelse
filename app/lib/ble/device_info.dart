@@ -17,6 +17,8 @@ class DeviceInfo {
     required this.gyroRange,
     required this.accelScale,
     required this.gyroScale,
+    this.hardwareModel = HardwareModel.legacy,
+    this.capabilities = 0,
   });
 
   final WheelId wheelId;
@@ -31,26 +33,31 @@ class DeviceInfo {
 
   /// LSB → dps conversion factor (depends on `gyroRange`).
   final double gyroScale;
+  final HardwareModel hardwareModel;
+  final int capabilities;
+
+  static const int sampleReplayCapability = 0x01;
+  bool get supportsSampleReplay => capabilities & sampleReplayCapability != 0;
 
   String get fwVersion => '$fwMajor.$fwMinor.$fwPatch';
 
   /// Human-readable accel range label (e.g. "±2g").
   String get accelRangeName => switch (accelRange) {
-        0 => '±2g',
-        1 => '±4g',
-        2 => '±8g',
-        3 => '±16g',
-        _ => 'range#$accelRange',
-      };
+    0 => '±2g',
+    1 => '±4g',
+    2 => '±8g',
+    3 => '±16g',
+    _ => 'range#$accelRange',
+  };
 
   /// Human-readable gyro range label (e.g. "±2000 dps").
   String get gyroRangeName => switch (gyroRange) {
-        0 => '±250 dps',
-        1 => '±500 dps',
-        2 => '±1000 dps',
-        3 => '±2000 dps',
-        _ => 'range#$gyroRange',
-      };
+    0 => '±250 dps',
+    1 => '±500 dps',
+    2 => '±1000 dps',
+    3 => '±2000 dps',
+    _ => 'range#$gyroRange',
+  };
 
   /// Parses the 16-byte Info payload (little-endian) per protocol §5.
   ///
@@ -73,6 +80,22 @@ class DeviceInfo {
       gyroRange: data.getUint8(5),
       accelScale: data.getFloat32(6, Endian.little),
       gyroScale: data.getFloat32(10, Endian.little),
+      hardwareModel: HardwareModel.fromByte(data.getUint8(14)),
+      capabilities: data.getUint8(15),
     );
   }
+}
+
+enum HardwareModel {
+  legacy(0, 'Legacy'),
+  m5StickCPlus2(1, 'M5StickC Plus2'),
+  xiaoBleSense(2, 'Xiao BLE Sense');
+
+  const HardwareModel(this.id, this.label);
+  final int id;
+  final String label;
+
+  static HardwareModel fromByte(int value) =>
+      HardwareModel.values.where((model) => model.id == value).firstOrNull ??
+      legacy;
 }

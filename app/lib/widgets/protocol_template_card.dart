@@ -13,11 +13,7 @@ import 'package:wheelathlete/theme/theme.dart';
 /// (warning) while in progress. Tapping the card invokes [onTap], which the
 /// dashboard wires up to switch to the Browse tab at the template's topic.
 class ProtocolTemplateCard extends StatelessWidget {
-  const ProtocolTemplateCard({
-    super.key,
-    required this.progress,
-    this.onTap,
-  });
+  const ProtocolTemplateCard({super.key, required this.progress, this.onTap});
 
   final ExperimentProgress progress;
   final VoidCallback? onTap;
@@ -73,8 +69,9 @@ class ProtocolTemplateCard extends StatelessWidget {
                     LinearProgressIndicator(
                       value: progress.progress,
                       minHeight: 8,
-                      borderRadius:
-                          const BorderRadius.all(Radius.circular(AppRadius.pill)),
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(AppRadius.pill),
+                      ),
                       backgroundColor: scheme.surfaceContainerHigh,
                       color: accent,
                     ),

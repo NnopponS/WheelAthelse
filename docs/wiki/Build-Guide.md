@@ -50,8 +50,8 @@ pio test -e native
 Defined in `platformio.ini`:
 - `-std=c++17`
 - `-DCORE_DEBUG_LEVEL=3`
-- `-DWheelAthlete_FW_MAJOR=0`
-- `-DWheelAthlete_FW_MINOR=2`
+- `-DWheelAthlete_FW_MAJOR=1`
+- `-DWheelAthlete_FW_MINOR=4`
 - `-DWheelAthlete_FW_PATCH=0`
 - `-DWHEEL_ID=0x4C` or `0x52` (per env)
 

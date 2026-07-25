@@ -8,25 +8,16 @@ void main() {
   setUpAll(disableGoogleFontsFetching);
 
   testWidgets('singular vs plural marker count label', (tester) async {
-    await pumpThemed(
-      tester,
-      MarkEventButton(markerCount: 1, onPressed: () {}),
-    );
+    await pumpThemed(tester, MarkEventButton(markerCount: 1, onPressed: () {}));
     expect(find.text('1 marker'), findsOneWidget);
 
-    await pumpThemed(
-      tester,
-      MarkEventButton(markerCount: 3, onPressed: () {}),
-    );
+    await pumpThemed(tester, MarkEventButton(markerCount: 3, onPressed: () {}));
     expect(find.text('3 markers'), findsOneWidget);
   });
 
   testWidgets('invokes onPressed when enabled', (tester) async {
     var taps = 0;
-    await pumpThemed(
-      tester,
-      MarkEventButton(onPressed: () => taps++),
-    );
+    await pumpThemed(tester, MarkEventButton(onPressed: () => taps++));
     await tester.tap(find.byIcon(Icons.flag_rounded));
     expect(taps, 1);
   });

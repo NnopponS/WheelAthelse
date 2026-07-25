@@ -35,7 +35,9 @@ void main() {
         gyroScale: 6.1e-2,
       );
       final repo = FakeBleRepository(
-        devices: [const FakeDevice(id: 'AA', name: 'WheelAthlete-L', rssi: -40)],
+        devices: [
+          const FakeDevice(id: 'AA', name: 'WheelAthlete-L', rssi: -40),
+        ],
         infoFor: {'AA': info},
       );
 

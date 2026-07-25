@@ -12,23 +12,22 @@ BufferedSample _sample({
   double ax = 1.0,
   int timestampAppMs = 0,
   bool marker = false,
-}) =>
-    BufferedSample(
-      reading: ImuReading(
-        seq: seq,
-        tDeviceUs: 0,
-        ax: ax,
-        ay: 0,
-        az: 0,
-        gx: 0,
-        gy: 0,
-        gz: 0,
-      ),
-      wheel: wheel,
-      timestampAppMs: timestampAppMs,
-      timestampSyncedMs: syncedMs,
-      marker: marker,
-    );
+}) => BufferedSample(
+  reading: ImuReading(
+    seq: seq,
+    tDeviceUs: 0,
+    ax: ax,
+    ay: 0,
+    az: 0,
+    gx: 0,
+    gy: 0,
+    gz: 0,
+  ),
+  wheel: wheel,
+  timestampAppMs: timestampAppMs,
+  timestampSyncedMs: syncedMs,
+  marker: marker,
+);
 
 void main() {
   group('CsvSampleParser.parse', () {
@@ -65,8 +64,12 @@ void main() {
       final csv = CsvExporter.toCsvString(samples);
       final parsed = CsvSampleParser.parse(csv);
 
-      expect(parsed.map((s) => s.timestampSyncedMs).toList(),
-          [50, 100, 150, 200]);
+      expect(parsed.map((s) => s.timestampSyncedMs).toList(), [
+        50,
+        100,
+        150,
+        200,
+      ]);
     });
 
     test('breaks exact timestamp ties with L before R', () {
@@ -83,7 +86,8 @@ void main() {
     });
 
     test('skips comment lines and headers', () {
-      const csv = '# Wheel: L\n'
+      const csv =
+          '# Wheel: L\n'
           'seq,wheel,timestamp_app_ms,timestamp_utc_ms,ax,ay,az,gx,gy,gz,marker\n'
           '0,L,0,0,1,0,0,0,0,0,0\n'
           '\n'
@@ -99,7 +103,8 @@ void main() {
     });
 
     test('skips malformed rows without throwing', () {
-      const csv = '# Wheel: L\n'
+      const csv =
+          '# Wheel: L\n'
           'seq,wheel,timestamp_app_ms,timestamp_utc_ms,ax,ay,az,gx,gy,gz,marker\n'
           '0,L,0,0,1,0,0,0,0,0,0\n'
           'not,a,valid,row\n'
@@ -126,7 +131,10 @@ void main() {
       ];
       final csv = CsvExporter.toCsvString(samples);
       final parsed = CsvSampleParser.parse(csv);
-      expect(parsed[1].reading.tDeviceUs, greaterThan(parsed[0].reading.tDeviceUs));
+      expect(
+        parsed[1].reading.tDeviceUs,
+        greaterThan(parsed[0].reading.tDeviceUs),
+      );
     });
   });
 }

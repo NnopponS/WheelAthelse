@@ -84,6 +84,18 @@ void main() {
     expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.disconnected);
   });
 
+  test('connected device is removed from later scan results', () async {
+    final manager = container.read(connectionManagerProvider.notifier);
+    await manager.startScan();
+    await manager.connect('L1');
+    await manager.startScan();
+    expect(
+      state().scanResults.map((device) => device.id),
+      isNot(contains('L1')),
+    );
+    expect(state().scanResults.map((device) => device.id), contains('R1'));
+  });
+
   test('connecting R after L keeps L connected (independent)', () async {
     final manager = container.read(connectionManagerProvider.notifier);
     await manager.connect('L1');
@@ -250,14 +262,33 @@ class _ThrowingBleRepository implements BleRepository {
   Future<void> disconnect(String deviceId) async {}
 
   @override
+  Future<void> prepareForStreaming(String deviceId) async {}
+
+  @override
   Future<int> readRssi(String deviceId) async => 0;
 
   @override
   Stream<List<int>> imuData(String deviceId) => const Stream<List<int>>.empty();
 
   @override
+  BleNotificationChannel<List<int>> imuNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: imuData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
+
+  @override
   Stream<List<int>> syncData(String deviceId) =>
       const Stream<List<int>>.empty();
+
+  @override
+  BleNotificationChannel<List<int>> syncNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: syncData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
 
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {}
@@ -299,14 +330,33 @@ class _ErrorScanBleRepository implements BleRepository {
   Future<void> disconnect(String deviceId) async {}
 
   @override
+  Future<void> prepareForStreaming(String deviceId) async {}
+
+  @override
   Future<int> readRssi(String deviceId) async => 0;
 
   @override
   Stream<List<int>> imuData(String deviceId) => const Stream<List<int>>.empty();
 
   @override
+  BleNotificationChannel<List<int>> imuNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: imuData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
+
+  @override
   Stream<List<int>> syncData(String deviceId) =>
       const Stream<List<int>>.empty();
+
+  @override
+  BleNotificationChannel<List<int>> syncNotifications(String deviceId) =>
+      BleNotificationChannel<List<int>>(
+        stream: syncData(deviceId),
+        ready: Future<void>.value(),
+        close: () async {},
+      );
 
   @override
   Future<void> writeControl(String deviceId, List<int> bytes) async {}

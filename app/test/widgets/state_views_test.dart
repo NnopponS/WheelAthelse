@@ -7,8 +7,9 @@ import '../helpers/pump.dart';
 void main() {
   setUpAll(disableGoogleFontsFetching);
 
-  testWidgets('EmptyState renders title/message and fires action',
-      (tester) async {
+  testWidgets('EmptyState renders title/message and fires action', (
+    tester,
+  ) async {
     var tapped = false;
     await pumpThemed(
       tester,
@@ -25,8 +26,7 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('EmptyState hides action when no callback given',
-      (tester) async {
+  testWidgets('EmptyState hides action when no callback given', (tester) async {
     await pumpThemed(
       tester,
       const EmptyState(title: 'Empty', actionLabel: 'Ignored'),
@@ -44,18 +44,14 @@ void main() {
     var retried = false;
     await pumpThemed(
       tester,
-      ErrorState(
-        title: 'Lost connection',
-        onRetry: () => retried = true,
-      ),
+      ErrorState(title: 'Lost connection', onRetry: () => retried = true),
     );
     expect(find.text('Lost connection'), findsOneWidget);
     await tester.tap(find.text('Try again'));
     expect(retried, isTrue);
   });
 
-  testWidgets('ErrorState omits retry button without callback',
-      (tester) async {
+  testWidgets('ErrorState omits retry button without callback', (tester) async {
     await pumpThemed(tester, const ErrorState(title: 'Boom'));
     expect(find.text('Try again'), findsNothing);
   });

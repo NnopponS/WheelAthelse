@@ -62,16 +62,16 @@ class _NoopOps implements ExportOperations {
   }) async {}
 
   @override
-  Future<void> shareTrial({required String topic, required int trialNumber}) async {}
+  Future<void> shareTrial({
+    required String topic,
+    required int trialNumber,
+  }) async {}
 
   @override
   Future<void> shareTopic({required String topic}) async {}
 }
 
-BufferedSample _sample(
-  ImuReading reading, {
-  WheelSide wheel = WheelSide.left,
-}) {
+BufferedSample _sample(ImuReading reading, {WheelSide wheel = WheelSide.left}) {
   return BufferedSample(
     reading: reading,
     wheel: wheel,
@@ -96,33 +96,27 @@ SessionMeta _meta({int durationMs = 10000, int sampleCount = 100}) {
 }
 
 ImuReading _r(int seq) => ImuReading(
-      seq: seq,
-      tDeviceUs: seq * 10000,
-      ax: 1.0,
-      ay: 0.0,
-      az: 0.0,
-      gx: 0.0,
-      gy: 2.0,
-      gz: 0.0,
-    );
+  seq: seq,
+  tDeviceUs: seq * 10000,
+  ax: 1.0,
+  ay: 0.0,
+  az: 0.0,
+  gx: 0.0,
+  gy: 2.0,
+  gz: 0.0,
+);
 
 void main() {
   setUpAll(disableGoogleFontsFetching);
 
   /// Mixed-wheel samples so both L and R charts render in "Both" mode.
   List<BufferedSample> _mixedSamples(int count) => List.generate(
-        count,
-        (i) => _sample(
-          _r(i),
-          wheel: i % 2 == 0 ? WheelSide.left : WheelSide.right,
-        ),
-      );
+    count,
+    (i) => _sample(_r(i), wheel: i % 2 == 0 ? WheelSide.left : WheelSide.right),
+  );
 
   /// Pumps the page in a tall viewport so both chart sections are visible.
-  Future<void> _pumpPage(
-    WidgetTester tester,
-    Widget child,
-  ) async {
+  Future<void> _pumpPage(WidgetTester tester, Widget child) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -135,62 +129,61 @@ void main() {
     );
   }
 
-  testWidgets('renders loading state then summary + charts for in-memory source',
-      (tester) async {
+  testWidgets(
+    'renders loading state then summary + charts for in-memory source',
+    (tester) async {
+      final samples = _mixedSamples(100);
+      final meta = _meta();
+      final source = InMemoryPreviewSource(meta: meta, samples: samples);
+
+      await _pumpPage(
+        tester,
+        ProviderScope(child: SessionPreviewPage(source: source)),
+      );
+      // Initial loading frame.
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+      // Let the microtask + async init complete.
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      // AppBar shows session id.
+      expect(find.text('deadbeef'), findsOneWidget);
+      // Summary card.
+      expect(find.text('Summary'), findsOneWidget);
+      expect(find.textContaining('samples'), findsOneWidget);
+      expect(find.textContaining('marks'), findsOneWidget);
+      // Sync quality badge — "Fair" because right drift = 3.5 ms.
+      expect(find.textContaining('sync Fair'), findsOneWidget);
+      // Stat tiles.
+      expect(find.text('Mean accel'), findsOneWidget);
+      expect(find.text('Peak accel'), findsOneWidget);
+      expect(find.text('Mean gyro'), findsOneWidget);
+      expect(find.text('Peak gyro'), findsOneWidget);
+      // Scrub slider.
+      expect(find.byType(Slider), findsOneWidget);
+      // Wheel selector chips.
+      expect(find.text('Both'), findsOneWidget);
+      expect(find.text('Left'), findsOneWidget);
+      expect(find.text('Right'), findsOneWidget);
+      // Chart titles.
+      expect(find.text('Accelerometer (g)'), findsOneWidget);
+      expect(find.text('Gyroscope (dps)'), findsOneWidget);
+      // Both wheels -> two 'L' and two 'R' labels (accel + gyro).
+      expect(find.text('L'), findsNWidgets(2));
+      expect(find.text('R'), findsNWidgets(2));
+    },
+  );
+
+  testWidgets('selecting Left wheel shows a single chart with L label', (
+    tester,
+  ) async {
     final samples = _mixedSamples(100);
     final meta = _meta();
     final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
     await _pumpPage(
       tester,
-      ProviderScope(
-        child: SessionPreviewPage(source: source),
-      ),
-    );
-    // Initial loading frame.
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
-
-    // Let the microtask + async init complete.
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-
-    // AppBar shows session id.
-    expect(find.text('deadbeef'), findsOneWidget);
-    // Summary card.
-    expect(find.text('Summary'), findsOneWidget);
-    expect(find.textContaining('samples'), findsOneWidget);
-    expect(find.textContaining('marks'), findsOneWidget);
-    // Sync quality badge — "Fair" because right drift = 3.5 ms.
-    expect(find.textContaining('sync Fair'), findsOneWidget);
-    // Stat tiles.
-    expect(find.text('Mean accel'), findsOneWidget);
-    expect(find.text('Peak accel'), findsOneWidget);
-    expect(find.text('Mean gyro'), findsOneWidget);
-    expect(find.text('Peak gyro'), findsOneWidget);
-    // Scrub slider.
-    expect(find.byType(Slider), findsOneWidget);
-    // Wheel selector chips.
-    expect(find.text('Both'), findsOneWidget);
-    expect(find.text('Left'), findsOneWidget);
-    expect(find.text('Right'), findsOneWidget);
-    // Chart titles.
-    expect(find.text('Accelerometer (g)'), findsOneWidget);
-    expect(find.text('Gyroscope (dps)'), findsOneWidget);
-    // Both wheels -> two 'L' and two 'R' labels (accel + gyro).
-    expect(find.text('L'), findsNWidgets(2));
-    expect(find.text('R'), findsNWidgets(2));
-  });
-
-  testWidgets('selecting Left wheel shows a single chart with L label',
-      (tester) async {
-    final samples = _mixedSamples(100);
-    final meta = _meta();
-    final source = InMemoryPreviewSource(meta: meta, samples: samples);
-
-    await _pumpPage(
-      tester,
-      ProviderScope(
-        child: SessionPreviewPage(source: source),
-      ),
+      ProviderScope(child: SessionPreviewPage(source: source)),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
@@ -209,9 +202,7 @@ void main() {
 
     await _pumpPage(
       tester,
-      ProviderScope(
-        child: SessionPreviewPage(source: source),
-      ),
+      ProviderScope(child: SessionPreviewPage(source: source)),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
@@ -227,8 +218,9 @@ void main() {
     expect(find.text('0.0s'), findsNothing);
   });
 
-  testWidgets('shows error view when disk source session is missing',
-      (tester) async {
+  testWidgets('shows error view when disk source session is missing', (
+    tester,
+  ) async {
     final storage = InMemoryStorageRepository();
     final source = DiskPreviewSource(
       topic: 'nope',
@@ -239,9 +231,7 @@ void main() {
     await _pumpPage(
       tester,
       ProviderScope(
-        overrides: [
-          storageRepositoryProvider.overrideWith((ref) => storage),
-        ],
+        overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
         child: SessionPreviewPage(source: source),
       ),
     );
@@ -265,9 +255,7 @@ void main() {
     await _pumpPage(
       tester,
       ProviderScope(
-        overrides: [
-          storageRepositoryProvider.overrideWith((ref) => storage),
-        ],
+        overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
         child: SessionPreviewPage(source: source),
       ),
     );
@@ -279,8 +267,9 @@ void main() {
   });
 
   group('export/share from preview', () {
-    testWidgets('share button invokes ExportActions.share with session meta',
-        (tester) async {
+    testWidgets('share button invokes ExportActions.share with session meta', (
+      tester,
+    ) async {
       final exportActions = _RecordingExportActions();
       final samples = _mixedSamples(50);
       final meta = _meta(sampleCount: 50);
@@ -306,8 +295,9 @@ void main() {
       expect(exportActions.lastSession, 'deadbeef');
     });
 
-    testWidgets('overflow menu Save to device invokes saveToDevice',
-        (tester) async {
+    testWidgets('overflow menu Save to device invokes saveToDevice', (
+      tester,
+    ) async {
       final exportActions = _RecordingExportActions();
       final samples = _mixedSamples(50);
       final meta = _meta(sampleCount: 50);

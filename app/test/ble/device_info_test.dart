@@ -5,6 +5,13 @@ import 'package:wheelathlete/ble/device_info.dart';
 import 'package:wheelathlete/ble/wheel_id.dart';
 
 void main() {
+  test('Info reserved capability byte enables sample replay', () {
+    final bytes = List<int>.filled(16, 0)
+      ..[0] = 0x4C
+      ..[15] = DeviceInfo.sampleReplayCapability;
+    final info = DeviceInfo.parse(bytes);
+    expect(info.supportsSampleReplay, isTrue);
+  });
   group('DeviceInfo.parse', () {
     Uint8List buildInfo({
       required int wheelId,
@@ -53,17 +60,11 @@ void main() {
     });
 
     test('throws ArgumentError when bytes < 16 (truncated)', () {
-      expect(
-        () => DeviceInfo.parse(Uint8List(15)),
-        throwsArgumentError,
-      );
+      expect(() => DeviceInfo.parse(Uint8List(15)), throwsArgumentError);
     });
 
     test('throws ArgumentError when bytes > 16', () {
-      expect(
-        () => DeviceInfo.parse(Uint8List(17)),
-        throwsArgumentError,
-      );
+      expect(() => DeviceInfo.parse(Uint8List(17)), throwsArgumentError);
     });
 
     test('reserved bytes are ignored (do not throw)', () {
@@ -126,7 +127,10 @@ void main() {
         ..setUint8(4, 99)
         ..setFloat32(6, 0.0, Endian.little)
         ..setFloat32(10, 0.0, Endian.little);
-      expect(DeviceInfo.parse(b.buffer.asUint8List()).accelRangeName, 'range#99');
+      expect(
+        DeviceInfo.parse(b.buffer.asUint8List()).accelRangeName,
+        'range#99',
+      );
     });
 
     test('gyroRangeName falls back for invalid range code', () {
@@ -135,7 +139,10 @@ void main() {
         ..setUint8(5, 77)
         ..setFloat32(6, 0.0, Endian.little)
         ..setFloat32(10, 0.0, Endian.little);
-      expect(DeviceInfo.parse(b.buffer.asUint8List()).gyroRangeName, 'range#77');
+      expect(
+        DeviceInfo.parse(b.buffer.asUint8List()).gyroRangeName,
+        'range#77',
+      );
     });
   });
 }

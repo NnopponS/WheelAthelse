@@ -43,9 +43,7 @@ void main() {
 
   setUp(() {
     ble = FakeBleRepository(
-      devices: [
-        const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
-      ],
+      devices: [const FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42)],
       infoFor: const {'L1': _leftInfo},
     );
     container = ProviderContainer(
@@ -81,14 +79,53 @@ void main() {
       expect(written![0], ControlCommandId.syncPing);
       // t_app_ms is in bytes 1–4 (little-endian). It's a relative timestamp
       // (ms since first ping), so the first ping sends 0.
-      final tAppMs = ByteData.sublistView(Uint8List.fromList(written))
-          .getUint32(1, Endian.little);
+      final tAppMs = ByteData.sublistView(
+        Uint8List.fromList(written),
+      ).getUint32(1, Endian.little);
       expect(tAppMs, greaterThanOrEqualTo(0));
 
       // A pending ping should be tracked (waiting for the Sync response).
       final state = container.read(syncEngineProvider);
       expect(state.bySide[side]!.pendingPing, isNotNull);
     });
+
+    test(
+      'sendPing waits for Sync notification readiness before write',
+      () async {
+        final delayedBle = FakeBleRepository(
+          devices: const [
+            FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+          ],
+          infoFor: const {'L1': _leftInfo},
+          notificationReadyDelay: const Duration(milliseconds: 40),
+        );
+        final delayedContainer = ProviderContainer(
+          overrides: [
+            bleRepositoryProvider.overrideWith((ref) => delayedBle),
+            rssiPollIntervalProvider.overrideWith((ref) => null),
+            interConnectSettleDelayProvider.overrideWith(
+              (ref) => Duration.zero,
+            ),
+          ],
+        );
+        addTearDown(delayedContainer.dispose);
+        await delayedContainer
+            .read(connectionManagerProvider.notifier)
+            .connect('L1');
+
+        final pending = delayedContainer
+            .read(syncEngineProvider.notifier)
+            .sendPing(side);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        expect(delayedBle.allControlWrites('L1'), isEmpty);
+
+        await pending;
+        expect(
+          delayedBle.lastControlWrite('L1')?.first,
+          ControlCommandId.syncPing,
+        );
+      },
+    );
 
     test('Sync response completes the round trip and sets offset', () async {
       await container.read(connectionManagerProvider.notifier).connect('L1');
@@ -97,24 +134,34 @@ void main() {
       await notifier.sendPing(side);
       // Simulate firmware response: T2 = T1_us + 4000 (4ms later on device).
       // T3 will be ~T1 + 8ms. We use t1AppUs for sub-ms precision.
-      final pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
+      final pending = container
+          .read(syncEngineProvider)
+          .bySide[side]!
+          .pendingPing!;
       final t2DeviceUs = pending.t1AppUs + 4000;
-      ble.syncController('L1')!.add(_syncResponseEvent(
-        tAppMs: pending.t1AppMs,
-        tDeviceUs: t2DeviceUs,
-        seqPing: 1,
-      ));
+      ble
+          .syncController('L1')!
+          .add(
+            _syncResponseEvent(
+              tAppMs: pending.t1AppMs,
+              tDeviceUs: t2DeviceUs,
+              seqPing: 1,
+            ),
+          );
       // Allow the stream listener to process.
       await Future<void>.delayed(Duration.zero);
 
       final state = container.read(syncEngineProvider);
       expect(state.bySide[side]!.pendingPing, isNull);
-      expect(state.bySide[side]!.offset, isNotNull);
+      final estimate = state.bySide[side]!.offset;
+      expect(estimate, isNotNull);
       // offset = T2 - (T1_us + RTT_us/2). T2 = T1_us + 4000.
-      // RTT varies with async scheduling (0-10 ms), so offset = 4000 - RTT/2
-      // is in range [-1000, 4000]. Check it's reasonable.
-      expect(state.bySide[side]!.offset!.offsetUs, greaterThanOrEqualTo(-1000));
-      expect(state.bySide[side]!.offset!.offsetUs, lessThanOrEqualTo(4000));
+      // Assert the exact relationship instead of imposing a wall-clock upper
+      // bound, because a loaded full-suite runner may schedule this response
+      // more than 10 ms later without changing the sync math.
+      final measuredRttUs = (estimate!.rttMs * 1000).round();
+      expect(estimate.rttMs, greaterThanOrEqualTo(0));
+      expect(estimate.offsetUs, 4000 - measuredRttUs ~/ 2);
     });
 
     test('multiple pings keep the min-RTT estimate', () async {
@@ -123,23 +170,34 @@ void main() {
 
       // Ping 1: high RTT (we simulate by delaying the response).
       await notifier.sendPing(side);
-      var pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
-      ble.syncController('L1')!.add(_syncResponseEvent(
-        tAppMs: pending.t1AppMs,
-        tDeviceUs: pending.t1AppUs + 10000,
-        seqPing: 1,
-      ));
+      var pending = container
+          .read(syncEngineProvider)
+          .bySide[side]!
+          .pendingPing!;
+      ble
+          .syncController('L1')!
+          .add(
+            _syncResponseEvent(
+              tAppMs: pending.t1AppMs,
+              tDeviceUs: pending.t1AppUs + 10000,
+              seqPing: 1,
+            ),
+          );
       await Future<void>.delayed(Duration.zero);
       final offset1 = container.read(syncEngineProvider).bySide[side]!.offset!;
 
       // Ping 2: lower RTT (response arrives sooner).
       await notifier.sendPing(side);
       pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
-      ble.syncController('L1')!.add(_syncResponseEvent(
-        tAppMs: pending.t1AppMs,
-        tDeviceUs: pending.t1AppUs + 2000,
-        seqPing: 2,
-      ));
+      ble
+          .syncController('L1')!
+          .add(
+            _syncResponseEvent(
+              tAppMs: pending.t1AppMs,
+              tDeviceUs: pending.t1AppUs + 2000,
+              seqPing: 2,
+            ),
+          );
       await Future<void>.delayed(Duration.zero);
       final offset2 = container.read(syncEngineProvider).bySide[side]!.offset!;
 
@@ -147,35 +205,48 @@ void main() {
       expect(offset2.rttMs, lessThanOrEqualTo(offset1.rttMs));
     });
 
-    test('collects drift points and computes DriftFit after ≥2 pings',
-        () async {
-      await container.read(connectionManagerProvider.notifier).connect('L1');
-      final notifier = container.read(syncEngineProvider.notifier);
+    test(
+      'collects drift points and computes DriftFit after ≥2 pings',
+      () async {
+        await container.read(connectionManagerProvider.notifier).connect('L1');
+        final notifier = container.read(syncEngineProvider.notifier);
 
-      // Ping 1: t_device=1000000, t_app=1000
-      await notifier.sendPing(side);
-      var pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
-      ble.syncController('L1')!.add(_syncResponseEvent(
-        tAppMs: pending.t1AppMs,
-        tDeviceUs: 1000000,
-        seqPing: 1,
-      ));
-      await Future<void>.delayed(Duration.zero);
+        // Ping 1: t_device=1000000, t_app=1000
+        await notifier.sendPing(side);
+        var pending = container
+            .read(syncEngineProvider)
+            .bySide[side]!
+            .pendingPing!;
+        ble
+            .syncController('L1')!
+            .add(
+              _syncResponseEvent(
+                tAppMs: pending.t1AppMs,
+                tDeviceUs: 1000000,
+                seqPing: 1,
+              ),
+            );
+        await Future<void>.delayed(Duration.zero);
 
-      // Ping 2: t_device=2000000, t_app=2000
-      await notifier.sendPing(side);
-      pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
-      ble.syncController('L1')!.add(_syncResponseEvent(
-        tAppMs: pending.t1AppMs,
-        tDeviceUs: 2000000,
-        seqPing: 2,
-      ));
-      await Future<void>.delayed(Duration.zero);
+        // Ping 2: t_device=2000000, t_app=2000
+        await notifier.sendPing(side);
+        pending = container.read(syncEngineProvider).bySide[side]!.pendingPing!;
+        ble
+            .syncController('L1')!
+            .add(
+              _syncResponseEvent(
+                tAppMs: pending.t1AppMs,
+                tDeviceUs: 2000000,
+                seqPing: 2,
+              ),
+            );
+        await Future<void>.delayed(Duration.zero);
 
-      final state = container.read(syncEngineProvider);
-      expect(state.bySide[side]!.driftFit, isNotNull);
-      expect(state.bySide[side]!.driftFit!.n, 2);
-    });
+        final state = container.read(syncEngineProvider);
+        expect(state.bySide[side]!.driftFit, isNotNull);
+        expect(state.bySide[side]!.driftFit!.n, 2);
+      },
+    );
 
     test('START_FIRED event sets lastStartFiredUs', () async {
       await container.read(connectionManagerProvider.notifier).connect('L1');
@@ -196,8 +267,9 @@ void main() {
       await notifier.startListening(side);
       await Future<void>.delayed(Duration.zero);
 
-      ble.syncController('L1')!.add(
-          _event(0x40, [..._u32LE(6000000), ..._u32LE(9999)]));
+      ble
+          .syncController('L1')!
+          .add(_event(0x40, [..._u32LE(6000000), ..._u32LE(9999)]));
       await Future<void>.delayed(Duration.zero);
 
       final state = container.read(syncEngineProvider);
@@ -240,8 +312,9 @@ void main() {
 
       final written = ble.lastControlWrite('L1')!;
       expect(written[0], ControlCommandId.start);
-      final target =
-          ByteData.sublistView(Uint8List.fromList(written)).getUint32(1, Endian.little);
+      final target = ByteData.sublistView(
+        Uint8List.fromList(written),
+      ).getUint32(1, Endian.little);
       expect(target, 1234567);
     });
 

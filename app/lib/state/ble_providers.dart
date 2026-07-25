@@ -42,6 +42,8 @@ class WheelConnection {
     this.deviceName,
     this.rssi,
     this.batteryPercent,
+    this.batteryUpdatedAt,
+    this.batteryError,
     this.info,
   });
 
@@ -56,6 +58,12 @@ class WheelConnection {
   /// Battery level 0–100 from the Battery Service (0x2A19), or null when
   /// unknown / not yet received.
   final int? batteryPercent;
+  final DateTime? batteryUpdatedAt;
+  final String? batteryError;
+  bool get batteryStale =>
+      batteryUpdatedAt == null ||
+      DateTime.now().difference(batteryUpdatedAt!) >
+          const Duration(seconds: 30);
   final DeviceInfo? info;
 
   WheelConnection copyWith({
@@ -64,18 +72,25 @@ class WheelConnection {
     String? deviceName,
     Object? rssi = _unset,
     Object? batteryPercent = _unset,
+    Object? batteryUpdatedAt = _unset,
+    Object? batteryError = _unset,
     DeviceInfo? info,
-  }) =>
-      WheelConnection(
-        status: status ?? this.status,
-        deviceId: deviceId ?? this.deviceId,
-        deviceName: deviceName ?? this.deviceName,
-        rssi: identical(rssi, _unset) ? this.rssi : rssi as int?,
-        batteryPercent: identical(batteryPercent, _unset)
-            ? this.batteryPercent
-            : batteryPercent as int?,
-        info: info ?? this.info,
-      );
+  }) => WheelConnection(
+    status: status ?? this.status,
+    deviceId: deviceId ?? this.deviceId,
+    deviceName: deviceName ?? this.deviceName,
+    rssi: identical(rssi, _unset) ? this.rssi : rssi as int?,
+    batteryPercent: identical(batteryPercent, _unset)
+        ? this.batteryPercent
+        : batteryPercent as int?,
+    batteryUpdatedAt: identical(batteryUpdatedAt, _unset)
+        ? this.batteryUpdatedAt
+        : batteryUpdatedAt as DateTime?,
+    batteryError: identical(batteryError, _unset)
+        ? this.batteryError
+        : batteryError as String?,
+    info: info ?? this.info,
+  );
 
   static const Object _unset = Object();
 }
@@ -88,9 +103,9 @@ class ConnectionManagerState {
     Map<WheelSide, WheelConnection>? bySide,
     this.error,
   }) : bySide = {
-          WheelSide.left: bySide?[WheelSide.left] ?? const WheelConnection(),
-          WheelSide.right: bySide?[WheelSide.right] ?? const WheelConnection(),
-        };
+         WheelSide.left: bySide?[WheelSide.left] ?? const WheelConnection(),
+         WheelSide.right: bySide?[WheelSide.right] ?? const WheelConnection(),
+       };
 
   final bool isScanning;
   final List<ScannedDevice> scanResults;
@@ -106,13 +121,12 @@ class ConnectionManagerState {
     List<ScannedDevice>? scanResults,
     Map<WheelSide, WheelConnection>? bySide,
     Object? error = _unsetError,
-  }) =>
-      ConnectionManagerState(
-        isScanning: isScanning ?? this.isScanning,
-        scanResults: scanResults ?? this.scanResults,
-        bySide: bySide ?? this.bySide,
-        error: identical(error, _unsetError) ? this.error : error as String?,
-      );
+  }) => ConnectionManagerState(
+    isScanning: isScanning ?? this.isScanning,
+    scanResults: scanResults ?? this.scanResults,
+    bySide: bySide ?? this.bySide,
+    error: identical(error, _unsetError) ? this.error : error as String?,
+  );
 
   /// Sentinel: a fresh idle state with both wheels disconnected.
   static ConnectionManagerState initial() => ConnectionManagerState();
@@ -128,6 +142,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
   final _connSubs = <String, StreamSubscription<BleConnectionState>>{};
   final _batterySubs = <String, StreamSubscription<int>>{};
   final _rssiPolling = <String, bool>{}; // active flags for RSSI poll loops
+  final _acquiring = <String>{};
 
   @override
   ConnectionManagerState build() {
@@ -144,6 +159,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
       }
       _batterySubs.clear();
       _rssiPolling.clear();
+      _acquiring.clear();
     });
     return ConnectionManagerState();
   }
@@ -152,10 +168,31 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
 
   Future<void> startScan() async {
     if (!ref.mounted) return;
-    state = state.copyWith(isScanning: true, error: null);
+    state = state.copyWith(
+      isScanning: true,
+      scanResults: const [],
+      error: null,
+    );
     _scanSub = _ble.scanResults.listen(
       (results) {
-        if (ref.mounted) state = state.copyWith(scanResults: results);
+        if (!ref.mounted) return;
+        final connectedIds = state.bySide.values
+            .map((connection) => connection.deviceId)
+            .whereType<String>()
+            .toSet();
+        final discovered = {
+          for (final device in state.scanResults) device.id: device,
+          for (final device in results) device.id: device,
+        };
+        for (final id in connectedIds) {
+          discovered.remove(id);
+        }
+        state = state.copyWith(
+          // flutter_blue_plus can emit an empty terminal snapshot when the
+          // native scan stops. Keep devices discovered earlier in this scan
+          // so the user still has a Connect target after the 10 s timeout.
+          scanResults: discovered.values.toList(growable: false),
+        );
       },
       onError: (Object e) {
         if (ref.mounted) state = state.copyWith(error: '$e');
@@ -216,6 +253,9 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
       }
       if (!ref.mounted) return;
       state = state.copyWith(
+        scanResults: state.scanResults
+            .where((device) => device.id != deviceId)
+            .toList(growable: false),
         bySide: {
           ...state.bySide,
           side: WheelConnection(
@@ -243,10 +283,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
     await _ble.disconnect(deviceId);
     if (!ref.mounted) return;
     state = state.copyWith(
-      bySide: {
-        ...state.bySide,
-        side: const WheelConnection(),
-      },
+      bySide: {...state.bySide, side: const WheelConnection()},
     );
   }
 
@@ -257,10 +294,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
       if (s == BleConnectionState.disconnected) {
         _stopTelemetry(deviceId);
         state = state.copyWith(
-          bySide: {
-            ...state.bySide,
-            side: const WheelConnection(),
-          },
+          bySide: {...state.bySide, side: const WheelConnection()},
         );
         _connSubs.remove(deviceId)?.cancel();
       }
@@ -271,22 +305,36 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
   /// per-side [WheelConnection.batteryPercent] on each notification.
   void _subscribeBattery(String deviceId, WheelSide side) {
     _batterySubs[deviceId]?.cancel();
-    _batterySubs[deviceId] = _ble.batteryLevel(deviceId).listen(
-      (pct) {
-        if (!ref.mounted) return;
-        final cur = state.bySide[side]!;
-        state = state.copyWith(
-          bySide: {
-            ...state.bySide,
-            side: cur.copyWith(batteryPercent: pct),
+    _batterySubs[deviceId] = _ble
+        .batteryLevel(deviceId)
+        .listen(
+          (pct) {
+            if (!ref.mounted) return;
+            final cur = state.bySide[side]!;
+            state = state.copyWith(
+              bySide: {
+                ...state.bySide,
+                side: cur.copyWith(
+                  batteryPercent: pct,
+                  batteryUpdatedAt: DateTime.now(),
+                  batteryError: null,
+                ),
+              },
+            );
+          },
+          onError: (Object e) {
+            if (!ref.mounted) return;
+            final cur = state.bySide[side]!;
+            state = state.copyWith(
+              bySide: {
+                ...state.bySide,
+                side: cur.copyWith(batteryError: '$e'),
+              },
+            );
+            // Battery stream errors are non-fatal — the card just keeps the last
+            // known value (or null).
           },
         );
-      },
-      onError: (Object e) {
-        // Battery stream errors are non-fatal — the card just keeps the last
-        // known value (or null).
-      },
-    );
   }
 
   /// Starts a periodic poll that reads RSSI at the interval from
@@ -311,6 +359,7 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
       try {
         await Future<void>.delayed(interval);
         if (!ref.mounted || _rssiPolling[deviceId] != true) return;
+        if (_acquiring.contains(deviceId)) continue;
         final rssi = await _ble.readRssi(deviceId);
         if (!ref.mounted || _rssiPolling[deviceId] != true) return;
         final cur = state.bySide[side]!;
@@ -332,10 +381,17 @@ class ConnectionManagerNotifier extends Notifier<ConnectionManagerState> {
     _batterySubs.remove(deviceId)?.cancel();
     _rssiPolling[deviceId] = false;
   }
-}
 
+  void setAcquiring(String deviceId, bool active) {
+    if (active) {
+      _acquiring.add(deviceId);
+    } else {
+      _acquiring.remove(deviceId);
+    }
+  }
+}
 
 final connectionManagerProvider =
     NotifierProvider<ConnectionManagerNotifier, ConnectionManagerState>(
-  ConnectionManagerNotifier.new,
-);
+      ConnectionManagerNotifier.new,
+    );

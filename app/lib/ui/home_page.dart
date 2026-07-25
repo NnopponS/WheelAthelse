@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/home_providers.dart';
@@ -48,8 +48,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget build(BuildContext context) {
     final connState = ref.watch(connectionManagerProvider);
     final tab = ref.watch(homeTabIndexProvider);
-    final connectedCount =
-        connState.bySide.values.where((c) => c.status == ConnectionStatus.connected).length;
+    final connectedCount = connState.bySide.values
+        .where((c) => c.status == ConnectionStatus.connected)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -67,15 +68,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       body: IndexedStack(
         index: tab,
-        children: const [
-          _ConnectTab(),
-          _LiveTab(),
-          _BrowseTab(),
-        ],
+        children: const [_ConnectTab(), _LiveTab(), _BrowseTab()],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: (i) => ref.read(homeTabIndexProvider.notifier).setTab(i),
+        onDestinationSelected: (i) =>
+            ref.read(homeTabIndexProvider.notifier).setTab(i),
         destinations: [
           NavigationDestination(
             icon: Badge(
@@ -192,9 +190,9 @@ class _ConnectedChip extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -220,7 +218,12 @@ class _ThemeToggle extends StatelessWidget {
       itemBuilder: (context) {
         final current = controller.value;
         return [
-          _item(ThemeMode.system, 'System', current, Icons.brightness_auto_rounded),
+          _item(
+            ThemeMode.system,
+            'System',
+            current,
+            Icons.brightness_auto_rounded,
+          ),
           _item(ThemeMode.light, 'Light', current, Icons.light_mode_rounded),
           _item(ThemeMode.dark, 'Dark', current, Icons.dark_mode_rounded),
         ];

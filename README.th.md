@@ -4,7 +4,7 @@
 ดิบจากล้อทั้งสองข้างและ sync กับวิดีโอกล้อง (gold standard) แทนการใช้ 3D Motion Capture
 หลายกล้องที่แพงและไม่พกพาได้
 
-> **สถานะ:** `v0.1.0` — Data Collection MVP (pre-release)
+> **รุ่น:** `v1.7.0` — Dual-wheel reliability release
 > **ภาษา:** [English](README.md) · [ภาษาไทย](README.th.md)
 
 ---
@@ -69,13 +69,13 @@ WheelAthlete เปลี่ยน M5StickCPlus2 ราคาถูก 2 ตั�
 
 ---
 
-## ฟีเจอร์ที่ใช้ได้ใน v0.1.0
+## ฟีเจอร์ที่ใช้ได้ใน v1.7.0
 
-นี่คือ release แรกที่ใช้งานได้จริง เป็น **Data Collection MVP** — แอปเก็บ
-sync preview และ export ได้ แต่ยัง **ไม่มี** การ train หรือรัน machine-learning
-model ใดๆ
+รุ่น v1.7.0 คือ **แกนระบบเก็บข้อมูลรุ่นเสถียร** แอปสามารถเก็บ sync preview
+ตรวจสอบคุณภาพ และ export ข้อมูล IMU จากล้อสองข้างได้ แต่ยัง **ไม่มี** การ train
+หรือรัน machine-learning model
 
-### Firmware (M5StickCPlus2)
+### Firmware (M5StickC Plus2 + Xiao BLE Sense)
 - อ่าน IMU MPU6886 ผ่าน data-ready interrupt + hardware FIFO
 - sampling rate ปรับได้: 50 / 100 / 200 Hz
 - BLE GATT server (NimBLE) 5 characteristics + Battery Service มาตรฐาน
@@ -83,13 +83,15 @@ model ใดๆ
 - คำสั่ง control: START, STOP, SET_RATE, SYNC_PING, SET_RANGE, BEEP,
   SET_NAME, SET_WHEEL, SET_UTC, RESET_SEQ
 - scheduled synchronized start + นับถอยหลัง beep 3-2-1
+- replay แบบมีขอบเขต พร้อม acquisition-health telemetry สำหรับ BLE queue,
+  transport failure, IMU FIFO fault และ sample ที่สูญหาย
 - จอแสดงสถานะ: connection, recording, battery, sample count
 - ระบุตัวเอง L/R ได้ทั้งตอน build และตอน runtime ผ่าน BLE
 - เก็บ config (ชื่อ, ฝั่งล้อ, range) ถาวรใน NVS
-- firmware version 0.2.0
+- firmware version 1.7.0 (M5StickC Plus2 และ Xiao BLE Sense)
 
 ### Mobile App (Flutter, iOS + Android)
-- สแกน + เชื่อม BLE กับ M5StickCPlus2 พร้อมกัน 2 ตัว
+- สแกน + เชื่อมบอร์ดฝั่งซ้าย/ขวาที่รองรับพร้อมกัน 2 ตัว
 - กำหนด L/R อัตโนมัติจาก Info characteristic ของบอร์ด
 - Clock sync engine (NTP/PTP-lite ผ่าน BLE): offset + drift correction
   → timeline กลางในหน่วย UTC milliseconds
@@ -100,10 +102,12 @@ model ใดๆ
 - session tags + ค้นหา/กรองในหน้า Browse
 - หน้า session preview: scrub slider, กราฟ accel/gyro, สรุป stats
 - quality badges (good / fair / poor / unknown) จาก drift residual RMS
-- export CSV (ตาราง L/R แยก) และ Excel (.xlsx)
+- export named trial CSV, aligned training CSV, complete-data ZIP และ Excel
+- metadata ระบุเวอร์ชัน ชื่อไฟล์ไม่ชนกัน และเครื่องมือประมวลผล IMU/C3D
+  แบบไม่แก้ไขข้อมูลต้นฉบับ
 - แชร์ไฟล์ผ่าน OS share sheet
 - theme light + dark ออกแบบให้อ่านได้กลางแดด
-- app version 1.0.0+1
+- app version 1.7.0+8
 
 ### เอกสาร
 - BLE protocol spec (`docs/ble-protocol.md`) — source of truth เดียว
@@ -112,7 +116,7 @@ model ใดๆ
 
 ---
 
-## ฟีเจอร์ที่ยังไม่มีใน v0.1.0
+## ฟีเจอร์ที่ยังไม่มีใน v1.7.0
 
 - ไม่มีการ train หรือรัน machine-learning model
 - ไม่มี feedback ทาง biomechanics แบบ realtime ให้นักกีฬา
@@ -251,7 +255,7 @@ build flag ตั้ง `WHEEL_ID` ตาม env:
 ฝั่งล้อเปลี่ยนได้ตอน runtime ผ่านคำสั่ง `SET_WHEEL` BLE (เก็บถาวรใน NVS)
 
 firmware version กำหนดใน `platformio.ini`:
-`WheelAthlete_FW_MAJOR=0`, `WheelAthlete_FW_MINOR=2`, `WheelAthlete_FW_PATCH=0`
+`WheelAthlete_FW_MAJOR=1`, `WheelAthlete_FW_MINOR=7`, `WheelAthlete_FW_PATCH=0`
 
 ---
 
@@ -281,7 +285,7 @@ dependencies หลัก (ดู `pubspec.yaml` สำหรับรายก�
 - `share_plus ^13.2.0`, `path_provider ^2.1.6` — แชร์ไฟล์
 - `file_picker 12.0.0-beta.7` — directory picker (pinned เพราะ share_plus compat)
 
-app version: `1.0.0+1` (กำหนดใน `pubspec.yaml`)
+app version: `1.7.0+8` (กำหนดใน `pubspec.yaml`)
 
 ---
 
@@ -346,7 +350,7 @@ sync quality รายงานเป็น **drift residual RMS หน่วย
 
 ## BLE Protocol
 
-contract เต็ม: [`docs/ble-protocol.md`](docs/ble-protocol.md) (version 1.1.0)
+contract เต็ม: [`docs/ble-protocol.md`](docs/ble-protocol.md) (version 1.7.0)
 
 สรุป:
 
@@ -429,4 +433,4 @@ Proprietary — สงวนลิขสิทธิ์ทั้งหมด ด
 
 ---
 
-**Release:** `v0.1.0` (pre-release) · **Firmware:** `0.2.0` · **App:** `1.0.0+1`
+**Release:** `v1.7.0` · **Firmware:** `1.7.0` · **App:** `1.7.0+8`

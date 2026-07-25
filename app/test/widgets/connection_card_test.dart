@@ -7,8 +7,9 @@ import '../helpers/pump.dart';
 void main() {
   setUpAll(disableGoogleFontsFetching);
 
-  testWidgets('connected card shows device name, battery and status',
-      (tester) async {
+  testWidgets('connected card shows device name, battery and status', (
+    tester,
+  ) async {
     await pumpThemed(
       tester,
       const ConnectionCard(
@@ -26,8 +27,9 @@ void main() {
     expect(find.text('Connected'), findsOneWidget);
   });
 
-  testWidgets('disconnected card shows placeholders, not telemetry',
-      (tester) async {
+  testWidgets('disconnected card shows placeholders, not telemetry', (
+    tester,
+  ) async {
     await pumpThemed(
       tester,
       const ConnectionCard(

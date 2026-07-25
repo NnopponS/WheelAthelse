@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:wheelathlete/export/csv_exporter.dart';
 import 'package:wheelathlete/export/csv_parser.dart';
-import 'package:wheelathlete/export/excel_exporter.dart';
 import 'package:wheelathlete/records/session_model.dart';
 
 /// One topic/subject folder in the storage hierarchy (Â§5 of architecture.md).
@@ -73,11 +72,7 @@ abstract class StorageRepository {
   Future<List<SessionMeta>> listSessions(String topic, int trialNumber);
 
   /// Deletes a single session (meta + CSV).
-  Future<void> deleteSession(
-    String topic,
-    int trialNumber,
-    String sessionId,
-  );
+  Future<void> deleteSession(String topic, int trialNumber, String sessionId);
 
   /// Updates the editable fields of a session's metadata (notes + video
   /// filename). Other fields are preserved. Throws if the session doesn't
@@ -201,24 +196,28 @@ class PathProviderStorageRepository implements StorageRepository {
       Directory('${root.path}/$topic');
 
   Directory _trialDir(Directory root, String topic, int trialNumber) =>
-      Directory('${root.path}/$topic/trial_${trialNumber.toString().padLeft(2, '0')}');
+      Directory(
+        '${root.path}/$topic/trial_${trialNumber.toString().padLeft(2, '0')}',
+      );
 
   @override
   Future<List<TopicEntry>> listTopics() async {
     final root = await _rootDir();
-    final dirs = root
-        .listSync()
-        .whereType<Directory>()
-        .map((d) => d.path.split(Platform.pathSeparator).last)
-        .where((name) => !name.startsWith('.'))
-        .toList()
-      ..sort();
+    final dirs =
+        root
+            .listSync()
+            .whereType<Directory>()
+            .map((d) => d.path.split(Platform.pathSeparator).last)
+            .where((name) => !name.startsWith('.'))
+            .toList()
+          ..sort();
     return dirs.map((name) {
       final metaFile = File('${_topicDir(root, name).path}/topic_meta.json');
       String? desc;
       DateTime? createdAt;
       if (metaFile.existsSync()) {
-        final json = jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+        final json =
+            jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
         desc = json['description'] as String?;
         final created = json['created_at'] as String?;
         if (created != null) createdAt = DateTime.parse(created);
@@ -236,10 +235,12 @@ class PathProviderStorageRepository implements StorageRepository {
     }
     dir.createSync(recursive: true);
     final metaFile = File('${dir.path}/topic_meta.json');
-    metaFile.writeAsStringSync(jsonEncode({
-      'description': description,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    }));
+    metaFile.writeAsStringSync(
+      jsonEncode({
+        'description': description,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      }),
+    );
   }
 
   @override
@@ -254,9 +255,7 @@ class PathProviderStorageRepository implements StorageRepository {
     final root = await _rootDir();
     final trialDir = _trialDir(root, topic, trialNumber);
     if (!trialDir.existsSync()) {
-      throw StateError(
-        'Trial $trialNumber not found in topic "$topic"',
-      );
+      throw StateError('Trial $trialNumber not found in topic "$topic"');
     }
     trialDir.deleteSync(recursive: true);
   }
@@ -327,7 +326,9 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, meta.trialNumber);
     if (!trialDir.existsSync()) trialDir.createSync(recursive: true);
     // Write meta JSON.
-    final metaFile = File('${trialDir.path}/session_${meta.sessionId}_meta.json');
+    final metaFile = File(
+      '${trialDir.path}/session_${meta.sessionId}_meta.json',
+    );
     metaFile.writeAsStringSync(jsonEncode(meta.toJson()));
     // Write the actual CSV with all samples so readSamples/export works.
     final csvFile = File('${trialDir.path}/session_${meta.sessionId}.csv');
@@ -335,10 +336,9 @@ class PathProviderStorageRepository implements StorageRepository {
     CsvExporter.writeToSink(buf, samples);
     csvFile.writeAsStringSync(buf.toString());
 
-    // Write the Excel file!
-    final xlsxFile = File('${trialDir.path}/session_${meta.sessionId}.xlsx');
-    final xlsxBytes = ExcelExporter.toXlsxBytes(samples);
-    xlsxFile.writeAsBytesSync(xlsxBytes);
+    // XLSX remains readable/importable for legacy sessions, but new sessions
+    // keep one internal recovery CSV plus metadata. Public export schema 2 is
+    // produced on demand and no longer pays the synchronous XLSX write cost.
   }
 
   @override
@@ -351,7 +351,8 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, trialNumber);
     final metaFile = File('${trialDir.path}/session_${sessionId}_meta.json');
     if (!metaFile.existsSync()) return null;
-    final json = jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+    final json =
+        jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
     return SessionMeta.fromJson(json);
   }
 
@@ -363,7 +364,8 @@ class PathProviderStorageRepository implements StorageRepository {
     final metas = <SessionMeta>[];
     for (final entity in trialDir.listSync()) {
       if (entity is File && entity.path.endsWith('_meta.json')) {
-        final json = jsonDecode(entity.readAsStringSync()) as Map<String, dynamic>;
+        final json =
+            jsonDecode(entity.readAsStringSync()) as Map<String, dynamic>;
         metas.add(SessionMeta.fromJson(json));
       }
     }
@@ -380,8 +382,13 @@ class PathProviderStorageRepository implements StorageRepository {
     final trialDir = _trialDir(root, topic, trialNumber);
     final metaFile = File('${trialDir.path}/session_${sessionId}_meta.json');
     final csvFile = File('${trialDir.path}/session_$sessionId.csv');
+    final xlsxFile = File('${trialDir.path}/session_$sessionId.xlsx');
     if (metaFile.existsSync()) metaFile.deleteSync();
     if (csvFile.existsSync()) csvFile.deleteSync();
+    if (xlsxFile.existsSync()) xlsxFile.deleteSync();
+    if (trialDir.existsSync() && trialDir.listSync().isEmpty) {
+      trialDir.deleteSync(recursive: true);
+    }
   }
 
   @override
@@ -589,7 +596,8 @@ class PathProviderStorageRepository implements StorageRepository {
 class InMemoryStorageRepository implements StorageRepository {
   final _topics = <String, TopicEntry>{};
   final _sessions = <String, List<SessionMeta>>{}; // key: "topic/trialNN"
-  final _samples = <String, List<BufferedSample>>{}; // key: "topic/trialNN/sessionId"
+  final _samples =
+      <String, List<BufferedSample>>{}; // key: "topic/trialNN/sessionId"
 
   @override
   Future<List<TopicEntry>> listTopics() async {
@@ -620,9 +628,7 @@ class InMemoryStorageRepository implements StorageRepository {
   Future<void> deleteTrial(String topic, int trialNumber) async {
     final key = '$topic/trial${trialNumber.toString().padLeft(2, '0')}';
     if (!_sessions.containsKey(key)) {
-      throw StateError(
-        'Trial $trialNumber not found in topic "$topic"',
-      );
+      throw StateError('Trial $trialNumber not found in topic "$topic"');
     }
     _sessions.remove(key);
     _samples.removeWhere((k, _) => k.startsWith('$key/'));
@@ -716,6 +722,15 @@ class InMemoryStorageRepository implements StorageRepository {
       utcStartMs: old.utcStartMs,
       tags: old.tags,
       protocolTemplateId: old.protocolTemplateId,
+      recordedSides: old.recordedSides,
+      boardModels: old.boardModels,
+      firmwareVersions: old.firmwareVersions,
+      sequenceGaps: old.sequenceGaps,
+      dropCounts: old.dropCounts,
+      startAcknowledgedUs: old.startAcknowledgedUs,
+      startDeltaUs: old.startDeltaUs,
+      schemaVersion: old.schemaVersion,
+      protocolVersion: old.protocolVersion,
     );
   }
 
@@ -759,6 +774,15 @@ class InMemoryStorageRepository implements StorageRepository {
       utcStartMs: old.utcStartMs,
       tags: List<String>.from(tags),
       protocolTemplateId: old.protocolTemplateId,
+      recordedSides: old.recordedSides,
+      boardModels: old.boardModels,
+      firmwareVersions: old.firmwareVersions,
+      sequenceGaps: old.sequenceGaps,
+      dropCounts: old.dropCounts,
+      startAcknowledgedUs: old.startAcknowledgedUs,
+      startDeltaUs: old.startDeltaUs,
+      schemaVersion: old.schemaVersion,
+      protocolVersion: old.protocolVersion,
     );
   }
 

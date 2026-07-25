@@ -35,10 +35,10 @@ class MarkEventButton extends StatelessWidget {
             width: AppSizing.markButton,
             height: AppSizing.markButton,
             child: Material(
-              color: active ? scheme.primaryContainer : scheme.surfaceContainerHigh,
-              shape: CircleBorder(
-                side: BorderSide(color: accent, width: 2),
-              ),
+              color: active
+                  ? scheme.primaryContainer
+                  : scheme.surfaceContainerHigh,
+              shape: CircleBorder(side: BorderSide(color: accent, width: 2)),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: active ? onPressed : null,
@@ -46,10 +46,7 @@ class MarkEventButton extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.flag_rounded, size: 30, color: accent),
-                    Text(
-                      'MARK',
-                      style: AppTypography.eyebrow(accent),
-                    ),
+                    Text('MARK', style: AppTypography.eyebrow(accent)),
                   ],
                 ),
               ),

@@ -94,18 +94,12 @@ void main() {
     });
 
     test('throws ArgumentError when buffer is shorter than 20 bytes', () {
-      expect(
-        () => ImuSample.parse(Uint8List(19)),
-        throwsArgumentError,
-      );
+      expect(() => ImuSample.parse(Uint8List(19)), throwsArgumentError);
     });
 
     test('throws ArgumentError when offset + 20 exceeds buffer length', () {
       final sample = buildSample(seq: 1, tDeviceUs: 1);
-      expect(
-        () => ImuSample.parse(sample, offset: 1),
-        throwsArgumentError,
-      );
+      expect(() => ImuSample.parse(sample, offset: 1), throwsArgumentError);
     });
 
     test('handles uint32 seq wrap (2^32 - 1) without overflow', () {
@@ -134,12 +128,9 @@ void main() {
         accelScale: 1 / 16384, // ±2g
         gyroScale: 1 / 16.4, // ±2000 dps
       );
-      final s = ImuSample.parse(buildSample(
-        seq: 7,
-        tDeviceUs: 123456,
-        ax: 16384,
-        gx: 164,
-      ));
+      final s = ImuSample.parse(
+        buildSample(seq: 7, tDeviceUs: 123456, ax: 16384, gx: 164),
+      );
       final r = s.toReading(info);
 
       expect(r.seq, 7);
@@ -156,12 +147,9 @@ void main() {
 
     test('preserves sign of raw values through scaling', () {
       final info = sampleInfo();
-      final s = ImuSample.parse(buildSample(
-        seq: 0,
-        tDeviceUs: 0,
-        ax: -16384,
-        gx: -164,
-      ));
+      final s = ImuSample.parse(
+        buildSample(seq: 0, tDeviceUs: 0, ax: -16384, gx: -164),
+      );
       final r = s.toReading(info);
       expect(r.ax, closeTo(-1.0, 1e-9));
       expect(r.gx, closeTo(-10.0, 1e-9));
@@ -172,7 +160,9 @@ void main() {
         accelScale: 1 / 8192, // ±4g → 8192 LSB/g
         gyroScale: 1 / 65.5, // ±500 dps → 65.5 LSB/dps (MPU6886 datasheet)
       );
-      final s = ImuSample.parse(buildSample(seq: 0, tDeviceUs: 0, ax: 8192, gx: 655));
+      final s = ImuSample.parse(
+        buildSample(seq: 0, tDeviceUs: 0, ax: 8192, gx: 655),
+      );
       final r = s.toReading(info);
       // 8192 * 1/8192 = 1.0 g
       expect(r.ax, closeTo(1.0, 1e-9));
@@ -183,9 +173,7 @@ void main() {
 
   group('ImuPacketParser.parseBatch', () {
     test('parses a single-sample batch (count=1)', () {
-      final batch = buildBatch([
-        buildSample(seq: 0, tDeviceUs: 100, ax: 1),
-      ]);
+      final batch = buildBatch([buildSample(seq: 0, tDeviceUs: 100, ax: 1)]);
       final samples = ImuPacketParser.parseBatch(batch);
 
       expect(samples, hasLength(1));
@@ -207,7 +195,10 @@ void main() {
     });
 
     test('parses max batch at MTU 247 (count=12, §2.2)', () {
-      final samples = List.generate(12, (i) => buildSample(seq: i, tDeviceUs: i * 10));
+      final samples = List.generate(
+        12,
+        (i) => buildSample(seq: i, tDeviceUs: i * 10),
+      );
       final batch = buildBatch(samples);
       // 1 byte count + 12 * 20 = 241 bytes (≤ MTU-3 = 244)
       expect(batch.length, 1 + 12 * 20);
@@ -224,12 +215,15 @@ void main() {
       );
     });
 
-    test('throws ArgumentError when buffer has only count byte (no samples)', () {
-      expect(
-        () => ImuPacketParser.parseBatch(Uint8List.fromList([1])),
-        throwsArgumentError,
-      );
-    });
+    test(
+      'throws ArgumentError when buffer has only count byte (no samples)',
+      () {
+        expect(
+          () => ImuPacketParser.parseBatch(Uint8List.fromList([1])),
+          throwsArgumentError,
+        );
+      },
+    );
 
     test('throws ArgumentError when buffer is empty', () {
       expect(
@@ -239,32 +233,34 @@ void main() {
     });
 
     test(
-        'throws ArgumentError when count claims more samples than buffer holds '
-        '(truncated batch)', () {
-      // count=3 but only 1 sample present
-      final truncated = Uint8List.fromList([
-        3,
-        ...buildSample(seq: 0, tDeviceUs: 0),
-      ]);
-      expect(
-        () => ImuPacketParser.parseBatch(truncated),
-        throwsArgumentError,
-      );
-    });
+      'throws ArgumentError when count claims more samples than buffer holds '
+      '(truncated batch)',
+      () {
+        // count=3 but only 1 sample present
+        final truncated = Uint8List.fromList([
+          3,
+          ...buildSample(seq: 0, tDeviceUs: 0),
+        ]);
+        expect(
+          () => ImuPacketParser.parseBatch(truncated),
+          throwsArgumentError,
+        );
+      },
+    );
 
-    test('throws ArgumentError when count claims fewer samples than buffer holds '
-        '(trailing bytes)', () {
-      // count=1 but 2 samples present — trailing bytes are not allowed.
-      final trailing = Uint8List.fromList([
-        1,
-        ...buildSample(seq: 0, tDeviceUs: 0),
-        ...buildSample(seq: 1, tDeviceUs: 1),
-      ]);
-      expect(
-        () => ImuPacketParser.parseBatch(trailing),
-        throwsArgumentError,
-      );
-    });
+    test(
+      'throws ArgumentError when count claims fewer samples than buffer holds '
+      '(trailing bytes)',
+      () {
+        // count=1 but 2 samples present — trailing bytes are not allowed.
+        final trailing = Uint8List.fromList([
+          1,
+          ...buildSample(seq: 0, tDeviceUs: 0),
+          ...buildSample(seq: 1, tDeviceUs: 1),
+        ]);
+        expect(() => ImuPacketParser.parseBatch(trailing), throwsArgumentError);
+      },
+    );
   });
 
   group('ImuSeqTracker', () {
@@ -275,15 +271,13 @@ void main() {
     });
 
     test('detects a gap of 3 between seq 5 and seq 9', () {
-      final tracker = ImuSeqTracker()
-        ..gapCount(5); // expectedNext = 6
+      final tracker = ImuSeqTracker()..gapCount(5); // expectedNext = 6
       expect(tracker.gapCount(9), 3); // 6,7,8 missing
       expect(tracker.expectedNext, 10);
     });
 
     test('returns 0 when seq equals expected (no gap)', () {
-      final tracker = ImuSeqTracker()
-        ..gapCount(5);
+      final tracker = ImuSeqTracker()..gapCount(5);
       expect(tracker.gapCount(6), 0);
       expect(tracker.expectedNext, 7);
     });
@@ -297,13 +291,15 @@ void main() {
       expect(tracker.expectedNext, 1);
     });
 
-    test('returns 0 for out-of-order but already-seen seq (no negative gap)', () {
-      final tracker = ImuSeqTracker()
-        ..gapCount(10);
-      // Late/duplicate sample with seq 9 — already past, not a forward gap.
-      expect(tracker.gapCount(9), 0);
-      expect(tracker.expectedNext, 11);
-    });
+    test(
+      'returns 0 for out-of-order but already-seen seq (no negative gap)',
+      () {
+        final tracker = ImuSeqTracker()..gapCount(10);
+        // Late/duplicate sample with seq 9 — already past, not a forward gap.
+        expect(tracker.gapCount(9), 0);
+        expect(tracker.expectedNext, 11);
+      },
+    );
 
     test('cumulative gap count accumulates across multiple gaps', () {
       final tracker = ImuSeqTracker();

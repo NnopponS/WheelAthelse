@@ -22,6 +22,7 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
   late TextEditingController _nameController;
   int? _wheelByte;
   int? _rateHz;
+  bool _beepEnabled = true;
   bool _initialized = false;
 
   @override
@@ -30,11 +31,17 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
     super.dispose();
   }
 
-  void _syncFromConfig(String name, int wheelByte, int rateHz) {
+  void _syncFromConfig(
+    String name,
+    int wheelByte,
+    int rateHz,
+    bool beepEnabled,
+  ) {
     if (!_initialized) {
       _nameController = TextEditingController(text: name);
       _wheelByte = wheelByte;
       _rateHz = rateHz;
+      _beepEnabled = beepEnabled;
       _initialized = true;
     }
   }
@@ -50,36 +57,35 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
         settings.config!.name,
         settings.config!.wheelId.byte,
         settings.config!.rateHz,
+        settings.config!.beepEnabled,
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.side.label} Board Settings'),
-      ),
+      appBar: AppBar(title: Text('${widget.side.label} Board Settings')),
       body: switch (settings.status) {
         BoardSettingsStatus.loading => const Center(
-            child: CircularProgressIndicator(),
-          ),
+          child: CircularProgressIndicator(),
+        ),
         BoardSettingsStatus.error => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline_rounded, size: 48),
-                const SizedBox(height: AppSpacing.md),
-                Text(settings.error ?? 'Unknown error'),
-                const SizedBox(height: AppSpacing.md),
-                FilledButton(
-                  onPressed: () => ref.invalidate(boardSettingsProvider(widget.side)),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 48),
+              const SizedBox(height: AppSpacing.md),
+              Text(settings.error ?? 'Unknown error'),
+              const SizedBox(height: AppSpacing.md),
+              FilledButton(
+                onPressed: () =>
+                    ref.invalidate(boardSettingsProvider(widget.side)),
+                child: const Text('Retry'),
+              ),
+            ],
           ),
+        ),
         BoardSettingsStatus.loaded ||
         BoardSettingsStatus.saving ||
-        BoardSettingsStatus.saved =>
-          _buildForm(context, theme, settings),
+        BoardSettingsStatus.saved => _buildForm(context, theme, settings),
       },
     );
   }
@@ -104,7 +110,7 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
           const SizedBox(height: AppSpacing.xs),
           TextField(
             controller: _nameController,
-            maxLength: 16,
+            maxLength: 24,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               hintText: 'e.g. WheelAthlete-L',
@@ -151,6 +157,21 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
           ),
           const SizedBox(height: AppSpacing.xl),
 
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: _beepEnabled,
+            onChanged: saving
+                ? null
+                : (value) => setState(() => _beepEnabled = value),
+            secondary: const Icon(Icons.volume_up_rounded),
+            title: const Text('Countdown sound'),
+            subtitle: const Text(
+              'Play countdown audio on supported boards and on the phone. '
+              'The visual countdown remains active when sound is off.',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
           // ── Firmware version (read-only) ────────────────────────────
           if (settings.config != null) ...[
             Card(
@@ -158,7 +179,10 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
-                    Icon(Icons.memory_rounded, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.memory_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text('Firmware: ${settings.config!.fwVersion}'),
                   ],
@@ -176,12 +200,12 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: theme.colorScheme.primary),
-                    const SizedBox(width: AppSpacing.sm),
-                    const Expanded(
-                      child: Text('Settings saved to board'),
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: theme.colorScheme.primary,
                     ),
+                    const SizedBox(width: AppSpacing.sm),
+                    const Expanded(child: Text('Settings saved to board')),
                   ],
                 ),
               ),
@@ -191,7 +215,8 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
 
           // ── Save button ─────────────────────────────────────────────
           FilledButton.icon(
-            onPressed: saving ||
+            onPressed:
+                saving ||
                     _nameController.text.isEmpty ||
                     _wheelByte == null ||
                     _rateHz == null
@@ -217,6 +242,7 @@ class _BoardSettingsPageState extends ConsumerState<BoardSettingsPage> {
       name: _nameController.text,
       wheelByte: _wheelByte!,
       rateHz: _rateHz!,
+      beepEnabled: _beepEnabled,
     );
   }
 }

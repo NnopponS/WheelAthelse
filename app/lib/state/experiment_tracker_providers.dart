@@ -31,7 +31,8 @@ class ExperimentProgress {
 
   /// True when the target trial count has been met or exceeded.
   bool get isComplete =>
-      template.targetTrialCount > 0 && sessionCount >= template.targetTrialCount;
+      template.targetTrialCount > 0 &&
+      sessionCount >= template.targetTrialCount;
 }
 
 /// Loads all protocol templates and counts the sessions grouped under each one
@@ -39,8 +40,9 @@ class ExperimentProgress {
 /// null template id fall back to matching by `topicName`. The returned list is
 /// sorted by template name (the same order [ProtocolRepository.listTemplates]
 /// returns).
-final experimentProgressProvider =
-    FutureProvider<List<ExperimentProgress>>((ref) async {
+final experimentProgressProvider = FutureProvider<List<ExperimentProgress>>((
+  ref,
+) async {
   final templates = await ref.read(protocolRepositoryProvider).listTemplates();
   final sessions = await ref.read(storageRepositoryProvider).listAllSessions();
   return computeExperimentProgress(templates, sessions);
@@ -49,12 +51,11 @@ final experimentProgressProvider =
 /// Maps topic names to their [ExperimentProgress] (if a protocol template
 /// exists for that topic). Used by the Browse page's topic list to show
 /// progress bars inline. Topics without a template are absent from the map.
-final topicProgressProvider =
-    FutureProvider<Map<String, ExperimentProgress>>((ref) async {
+final topicProgressProvider = FutureProvider<Map<String, ExperimentProgress>>((
+  ref,
+) async {
   final progressList = await ref.watch(experimentProgressProvider.future);
-  return {
-    for (final p in progressList) p.template.topicName: p,
-  };
+  return {for (final p in progressList) p.template.topicName: p};
 });
 
 /// Pure function that groups [sessions] under [templates] and returns one
@@ -65,9 +66,7 @@ List<ExperimentProgress> computeExperimentProgress(
   List<SessionMeta> sessions,
 ) {
   // Index templates by id and by topicName for O(n) grouping.
-  final byId = <String, ProtocolTemplate>{
-    for (final t in templates) t.id: t,
-  };
+  final byId = <String, ProtocolTemplate>{for (final t in templates) t.id: t};
   // Track counts + last session date per template id.
   final counts = <String, int>{};
   final lastDates = <String, DateTime>{};
@@ -97,10 +96,12 @@ List<ExperimentProgress> computeExperimentProgress(
   final sorted = List<ProtocolTemplate>.from(templates)
     ..sort((a, b) => a.name.compareTo(b.name));
   return sorted
-      .map((t) => ExperimentProgress(
-            template: t,
-            sessionCount: counts[t.id] ?? 0,
-            lastSessionDate: lastDates[t.id],
-          ))
+      .map(
+        (t) => ExperimentProgress(
+          template: t,
+          sessionCount: counts[t.id] ?? 0,
+          lastSessionDate: lastDates[t.id],
+        ),
+      )
       .toList(growable: false);
 }

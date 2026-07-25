@@ -21,7 +21,12 @@ void main() {
   testWidgets('formats a negative value with a leading -', (tester) async {
     await pumpThemed(
       tester,
-      const LiveMetricTile(label: 'gz', value: -42.5, unit: '°/s', fractionDigits: 1),
+      const LiveMetricTile(
+        label: 'gz',
+        value: -42.5,
+        unit: '°/s',
+        fractionDigits: 1,
+      ),
     );
     expect(find.text('-42.5'), findsOneWidget);
   });
@@ -29,7 +34,12 @@ void main() {
   testWidgets('honours fractionDigits', (tester) async {
     await pumpThemed(
       tester,
-      const LiveMetricTile(label: 'ay', value: 0.1, unit: 'g', fractionDigits: 3),
+      const LiveMetricTile(
+        label: 'ay',
+        value: 0.1,
+        unit: 'g',
+        fractionDigits: 3,
+      ),
     );
     expect(find.text('+0.100'), findsOneWidget);
   });

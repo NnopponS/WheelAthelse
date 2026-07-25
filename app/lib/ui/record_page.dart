@@ -94,6 +94,32 @@ class _RecordPageState extends ConsumerState<RecordPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Record')),
+      bottomNavigationBar:
+          recStatus == RecordingStatus.awaitingSamples ||
+              recStatus == RecordingStatus.recording ||
+              recStatus == RecordingStatus.stopping
+          ? SafeArea(
+              minimum: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.md,
+              ),
+              child: PrimaryActionButton(
+                label: recStatus == RecordingStatus.stopping
+                    ? 'Stopping…'
+                    : 'Stop Recording',
+                icon: Icons.stop_rounded,
+                intent: ActionIntent.stop,
+                busy: recStatus == RecordingStatus.stopping,
+                onPressed:
+                    recStatus == RecordingStatus.recording ||
+                        recStatus == RecordingStatus.awaitingSamples
+                    ? _stopRecording
+                    : null,
+              ),
+            )
+          : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
@@ -102,19 +128,33 @@ class _RecordPageState extends ConsumerState<RecordPage> {
             // Countdown states take precedence over the recording state
             // machine while a countdown is in progress.
             switch (countdown.status) {
-              RecordCountdownStatus.syncing =>
-                _buildSyncingView(context, theme),
-              RecordCountdownStatus.counting =>
-                _buildCountingView(context, theme, countdown),
-              RecordCountdownStatus.error when recStatus == RecordingStatus.idle =>
+              RecordCountdownStatus.syncing => _buildSyncingView(
+                context,
+                theme,
+              ),
+              RecordCountdownStatus.counting => _buildCountingView(
+                context,
+                theme,
+                countdown,
+              ),
+              RecordCountdownStatus.error
+                  when recStatus == RecordingStatus.idle =>
                 _buildCountdownErrorView(context, theme, countdown),
               _ => switch (recStatus) {
-                  RecordingStatus.idle => _buildIdleView(context, theme),
-                  RecordingStatus.recording =>
-                    _buildRecordingView(context, theme),
-                  RecordingStatus.stopped =>
-                    _buildStoppedView(context, theme),
-                },
+                RecordingStatus.idle => _buildIdleView(context, theme),
+                RecordingStatus.arming => _buildRecordingView(context, theme),
+                RecordingStatus.awaitingSamples => _buildRecordingView(
+                  context,
+                  theme,
+                ),
+                RecordingStatus.recording => _buildRecordingView(
+                  context,
+                  theme,
+                ),
+                RecordingStatus.stopping => _buildRecordingView(context, theme),
+                RecordingStatus.stopped => _buildStoppedView(context, theme),
+                RecordingStatus.failed => _buildFailedView(context, theme),
+              },
             },
           ],
         ),
@@ -206,8 +246,11 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline_rounded,
-              size: 48, color: theme.colorScheme.error),
+          Icon(
+            Icons.error_outline_rounded,
+            size: 48,
+            color: theme.colorScheme.error,
+          ),
           const SizedBox(height: AppSpacing.md),
           Text(
             countdown.error ?? 'Countdown failed',
@@ -216,8 +259,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           ),
           const SizedBox(height: AppSpacing.md),
           FilledButton(
-            onPressed: () =>
-                ref.read(recordCountdownProvider.notifier).reset(),
+            onPressed: () => ref.read(recordCountdownProvider.notifier).reset(),
             child: const Text('Dismiss'),
           ),
         ],
@@ -230,9 +272,9 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       await ref.read(recordCountdownProvider.notifier).cancel();
     } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cancel failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Cancel failed: $e')));
       }
     }
   }
@@ -296,9 +338,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
             label: 'Start Recording',
             icon: Icons.fiber_manual_record_rounded,
             intent: ActionIntent.start,
-            onPressed: _selectedTopic != null
-                ? () => _startRecording()
-                : null,
+            onPressed: _selectedTopic != null ? () => _startRecording() : null,
           ),
         ] else if (_selectedTemplateId == null) ...[
           Text(
@@ -359,17 +399,15 @@ class _RecordPageState extends ConsumerState<RecordPage> {
     await _refreshTrialNumber();
   }
 
-  Widget _buildRecordingView(
-    BuildContext context,
-    ThemeData theme,
-  ) {
+  Widget _buildRecordingView(BuildContext context, ThemeData theme) {
     // Select only the fields this view uses, so the parent page doesn't
     // rebuild on every sampleCount tick. sampleCount is already throttled to
     // ~10 Hz by RecordingNotifier, but selecting here keeps the scope tight.
     final recConfig = ref.watch(recordingProvider.select((s) => s.config));
-    final recSampleCount =
-        ref.watch(recordingProvider.select((s) => s.sampleCount));
-    final imu = ref.watch(imuStreamProvider);
+    final recSampleCount = ref.watch(
+      recordingProvider.select((s) => s.sampleCount),
+    );
+    final recStatus = ref.watch(recordingProvider.select((s) => s.status));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -396,6 +434,17 @@ class _RecordPageState extends ConsumerState<RecordPage> {
                       label: _elapsedLabelFromConfig(recConfig),
                       icon: Icons.timer_outlined,
                     ),
+                    StatusBadge(
+                      label: switch (recStatus) {
+                        RecordingStatus.arming => 'ARMING',
+                        RecordingStatus.awaitingSamples => 'WAITING FOR DATA',
+                        RecordingStatus.stopping => 'STOPPING',
+                        _ => 'RECORDING',
+                      },
+                      icon: recStatus == RecordingStatus.awaitingSamples
+                          ? Icons.hourglass_top_rounded
+                          : Icons.fiber_manual_record_rounded,
+                    ),
                   ],
                 ),
               ],
@@ -403,22 +452,47 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        _RecordingPreview(imu: imu),
+        const _RecordingPreview(),
         const SizedBox(height: AppSpacing.lg),
-        PrimaryActionButton(
-          label: 'Stop Recording',
-          icon: Icons.stop_rounded,
-          intent: ActionIntent.stop,
-          onPressed: () => _stopRecording(),
-        ),
       ],
     );
   }
 
-  Widget _buildStoppedView(
-    BuildContext context,
-    ThemeData theme,
-  ) {
+  Widget _buildFailedView(BuildContext context, ThemeData theme) {
+    final rec = ref.watch(recordingProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: theme.colorScheme.error,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text('Recording not saved', style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              rec.error ?? 'The recording failed. Reconnect and retry.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: () {
+                ref.read(recordingProvider.notifier).reset();
+                ref.read(recordCountdownProvider.notifier).reset();
+              },
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Back to setup'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStoppedView(BuildContext context, ThemeData theme) {
     // The stopped view is not high-frequency — it renders once when recording
     // ends — so watching the full state here is fine.
     final rec = ref.watch(recordingProvider);
@@ -439,8 +513,10 @@ class _RecordPageState extends ConsumerState<RecordPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text('Session saved', style: theme.textTheme.titleMedium),
                   ],
@@ -510,6 +586,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
 
   Future<void> _startRecording() async {
     if (_selectedTopic == null) return;
+    if (!await _confirmSingleWheelIfNeeded()) return;
     final config = SessionConfig(
       topic: _selectedTopic!,
       trialNumber: _trialNumber,
@@ -520,9 +597,9 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       await ref.read(recordCountdownProvider.notifier).start(config);
     } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to start: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to start: $e')));
       }
     }
   }
@@ -534,6 +611,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
   Future<void> _reRecord(RecordingState rec) async {
     final prevConfig = rec.config;
     if (prevConfig == null) return;
+    if (!await _confirmSingleWheelIfNeeded()) return;
     final storage = ref.read(storageRepositoryProvider);
     final nextTrial = await storage.nextTrialNumber(prevConfig.topic);
     if (!mounted) return;
@@ -544,14 +622,48 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       protocolTemplateId: prevConfig.protocolTemplateId,
     );
     try {
+      ref.read(recordingProvider.notifier).reset();
+      ref.read(recordCountdownProvider.notifier).reset();
       await ref.read(recordCountdownProvider.notifier).start(config);
     } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to start: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to start: $e')));
       }
     }
+  }
+
+  Future<bool> _confirmSingleWheelIfNeeded() async {
+    final connections = ref.read(connectionManagerProvider);
+    final connected = WheelSide.values
+        .where(
+          (side) =>
+              connections.bySide[side]!.status == ConnectionStatus.connected,
+        )
+        .toList();
+    if (connected.length != 1) return true;
+    final side = connected.single == WheelSide.left ? 'LEFT' : 'RIGHT';
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Only one wheel is connected'),
+            content: Text(
+              '$side is connected. Continue with a single-wheel recording?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Continue with one wheel'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   /// Opens the session preview page for the just-stopped session (Phase 4,
@@ -577,9 +689,9 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       await ref.read(recordingProvider.notifier).stopRecording();
     } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to stop: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to stop: $e')));
       }
     }
   }
@@ -620,9 +732,9 @@ class _RecordPageState extends ConsumerState<RecordPage> {
       await _refreshTrialNumber();
     } on Object catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create topic: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create topic: $e')));
     }
   }
 }
@@ -632,35 +744,44 @@ class _RecordPageState extends ConsumerState<RecordPage> {
 /// rolling sparkline so the user sees data and time in realtime, not just a
 /// Stop button.
 class _RecordingPreview extends StatelessWidget {
-  const _RecordingPreview({required this.imu});
-
-  final ImuStreamState imu;
+  const _RecordingPreview();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _RecordingWheelPreview(side: WheelSide.left, imu: imu),
-        const SizedBox(height: AppSpacing.md),
-        _RecordingWheelPreview(side: WheelSide.right, imu: imu),
+        _RecordingWheelPreview(side: WheelSide.left),
+        SizedBox(height: AppSpacing.md),
+        _RecordingWheelPreview(side: WheelSide.right),
       ],
     );
   }
 }
 
-class _RecordingWheelPreview extends StatelessWidget {
-  const _RecordingWheelPreview({required this.side, required this.imu});
+class _RecordingWheelPreview extends ConsumerWidget {
+  const _RecordingWheelPreview({required this.side});
 
   final WheelSide side;
-  final ImuStreamState imu;
 
   @override
-  Widget build(BuildContext context) {
-    final wheelState = imu.bySide[side]!;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wheelState = ref.watch(
+      imuStreamProvider.select((state) => state.bySide[side]!),
+    );
+    final health = ref.watch(
+      recordingProvider.select((state) => state.healthBySide[side]),
+    );
     final wc = context.wheelColors;
     final role = wc.forWheel(side);
-    final axisColors = [role.solid, wc.success.solid, wc.warning.solid];
+    final age = health?.lastSampleAgeMs;
+    final healthLabel = wheelState.error != null
+        ? 'ERROR'
+        : health?.stalled == true
+        ? 'STALLED'
+        : wheelState.latest == null
+        ? 'WAITING'
+        : 'LIVE';
 
     return Card(
       color: role.container,
@@ -673,29 +794,65 @@ class _RecordingWheelPreview extends StatelessWidget {
               children: [
                 StatusBadge(
                   label: side == WheelSide.left ? 'L' : 'R',
-                  tone: side == WheelSide.left ? BadgeTone.left : BadgeTone.right,
+                  tone: side == WheelSide.left
+                      ? BadgeTone.left
+                      : BadgeTone.right,
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   side == WheelSide.left ? 'Left wheel' : 'Right wheel',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: role.onContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: role.onContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const Spacer(),
-                if (wheelState.streaming)
-                  Icon(
-                    Icons.circle,
-                    size: 10,
-                    color: Theme.of(context).colorScheme.error,
-                  )
-                else if (wheelState.error != null)
-                  Icon(
-                    Icons.error_outline_rounded,
-                    color: wc.danger.solid,
-                    size: 20,
-                  ),
+                StatusBadge(
+                  label: healthLabel,
+                  tone: wheelState.error != null || health?.stalled == true
+                      ? BadgeTone.danger
+                      : wheelState.latest == null
+                      ? BadgeTone.warning
+                      : BadgeTone.success,
+                  dense: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                StatusBadge(
+                  label: '${health?.receivedCount ?? 0} saved',
+                  icon: Icons.data_array_rounded,
+                  dense: true,
+                ),
+                StatusBadge(
+                  label:
+                      '${(health?.effectiveRateHz ?? 0).toStringAsFixed(1)} Hz',
+                  icon: Icons.speed_rounded,
+                  dense: true,
+                ),
+                StatusBadge(
+                  label: age == null ? 'no sample' : '$age ms ago',
+                  icon: Icons.schedule_rounded,
+                  tone: age != null && age >= 1000
+                      ? BadgeTone.warning
+                      : BadgeTone.neutral,
+                  dense: true,
+                ),
+                StatusBadge(
+                  label:
+                      'Q ${health?.queueDepth ?? 0} / D ${health?.queueDrops ?? 0} / F ${health?.fifoFaults ?? 0}',
+                  icon: Icons.queue_rounded,
+                  tone:
+                      (health?.queueDrops ?? 0) > 0 ||
+                          (health?.fifoFaults ?? 0) > 0
+                      ? BadgeTone.danger
+                      : BadgeTone.neutral,
+                  dense: true,
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -709,30 +866,12 @@ class _RecordingWheelPreview extends StatelessWidget {
                 title: 'Accelerometer (g)',
                 reading: wheelState.latest!,
                 isAccel: true,
-                axisColors: axisColors,
-                side: side,
               ),
-              const SizedBox(height: AppSpacing.sm),
-              ImuChart(
-                readings: wheelState.recent,
-                isAccel: true,
-                axisColors: axisColors,
-                height: 96,
-              ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.xs),
               _MetricRow(
                 title: 'Gyroscope (°/s)',
                 reading: wheelState.latest!,
                 isAccel: false,
-                axisColors: axisColors,
-                side: side,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              ImuChart(
-                readings: wheelState.recent,
-                isAccel: false,
-                axisColors: axisColors,
-                height: 96,
               ),
             ],
             if (wheelState.error != null)
@@ -741,8 +880,8 @@ class _RecordingWheelPreview extends StatelessWidget {
                 child: Text(
                   wheelState.error!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
           ],
@@ -757,15 +896,11 @@ class _MetricRow extends StatelessWidget {
     required this.title,
     required this.reading,
     required this.isAccel,
-    required this.axisColors,
-    required this.side,
   });
 
   final String title;
   final ImuReading reading;
   final bool isAccel;
-  final List<Color> axisColors;
-  final WheelSide side;
 
   @override
   Widget build(BuildContext context) {
@@ -774,31 +909,31 @@ class _MetricRow extends StatelessWidget {
         : [reading.gx, reading.gy, reading.gz];
     final labels = ['X', 'Y', 'Z'];
     final units = isAccel ? 'g' : '°/s';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+        SizedBox(
+          width: 92,
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-        const SizedBox(height: AppSpacing.xs),
-        Row(
-          children: [
-            for (var i = 0; i < 3; i++) ...[
-              Expanded(
-                child: LiveMetricTile(
-                  label: labels[i],
-                  value: values[i],
-                  unit: units,
-                  side: i == 0 ? side : null,
-                ),
-              ),
-              if (i < 2) const SizedBox(width: AppSpacing.sm),
-            ],
-          ],
+        Expanded(
+          child: Text(
+            [
+              for (var i = 0; i < 3; i++)
+                '${labels[i]} ${values[i].toStringAsFixed(2)}',
+            ].join('   '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ),
+        const SizedBox(width: AppSpacing.xs),
+        Text(units, style: Theme.of(context).textTheme.labelSmall),
       ],
     );
   }
@@ -833,10 +968,10 @@ class _TopicDropdown extends ConsumerWidget {
                 hint: const Text('Select topic'),
                 isExpanded: true,
                 items: topics
-                    .map((t) => DropdownMenuItem(
-                          value: t.name,
-                          child: Text(t.name),
-                        ))
+                    .map(
+                      (t) =>
+                          DropdownMenuItem(value: t.name, child: Text(t.name)),
+                    )
                     .toList(),
                 onChanged: onChanged,
               ),
@@ -905,9 +1040,9 @@ class _NewTopicDialogState extends ConsumerState<_NewTopicDialog> {
               widget.onCreated();
             } on Object catch (e) {
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Failed: $e')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Failed: $e')));
             }
           },
           child: const Text('Create'),

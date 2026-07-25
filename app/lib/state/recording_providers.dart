@@ -2,16 +2,84 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/ble/imu_packet.dart';
+import 'package:wheelathlete/ble/sync_packet.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/browse_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
+import 'package:wheelathlete/state/sample_hub.dart';
+import 'package:wheelathlete/state/session_timeline.dart';
 import 'package:wheelathlete/state/sync_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/connection_card.dart';
 
 /// Recording state machine status.
-enum RecordingStatus { idle, recording, stopped }
+enum RecordingStatus {
+  idle,
+  arming,
+  awaitingSamples,
+  recording,
+  stopping,
+  stopped,
+  failed,
+}
+
+class RecordingWheelHealth {
+  const RecordingWheelHealth({
+    this.receivedCount = 0,
+    this.effectiveRateHz = 0,
+    this.lastSampleAgeMs,
+    this.recoveredSamples = 0,
+    this.unrecoveredSamples = 0,
+    this.firmwareProduced = 0,
+    this.firmwareNotified = 0,
+    this.queueDrops = 0,
+    this.fifoFaults = 0,
+    this.fifoDroppedSamples = 0,
+    this.transportFailures = 0,
+    this.queueDepth = 0,
+    this.stalled = false,
+  });
+
+  final int receivedCount;
+  final double effectiveRateHz;
+  final int? lastSampleAgeMs;
+  final int recoveredSamples;
+  final int unrecoveredSamples;
+  final int firmwareProduced;
+  final int firmwareNotified;
+  final int queueDrops;
+  final int fifoFaults;
+  final int fifoDroppedSamples;
+  final int transportFailures;
+  final int queueDepth;
+  final bool stalled;
+}
+
+enum AcquisitionFailureCause {
+  sampleQueueOverflow,
+  imuFifoFault,
+  bleTransportCongestion,
+}
+
+/// Classifies loss at its source so queue overflow, sensor FIFO faults, and
+/// BLE congestion are never presented as the same failure.
+AcquisitionFailureCause? criticalAcquisitionFailure(AcqHealthEvent health) {
+  if (health.fifoFaults > 0 || health.fifoDroppedSamples > 0) {
+    return AcquisitionFailureCause.imuFifoFault;
+  }
+  if (health.queueDrops > 0) {
+    return AcquisitionFailureCause.sampleQueueOverflow;
+  }
+  if (health.transportFailures >= 3 && health.queueDepth >= 64) {
+    return AcquisitionFailureCause.bleTransportCongestion;
+  }
+  return null;
+}
+
+/// Backward-compatible predicate used by existing recording safety tests.
+bool isCriticalTransportHealth(AcqHealthEvent health) =>
+    criticalAcquisitionFailure(health) != null;
 
 /// Whole recording state surfaced to the UI.
 class RecordingState {
@@ -22,6 +90,7 @@ class RecordingState {
     this.sampleCount = 0,
     this.savedSessionId,
     this.lastMeta,
+    this.healthBySide = const {},
     this.error,
   });
 
@@ -37,6 +106,8 @@ class RecordingState {
   /// without re-reading from disk.
   final SessionMeta? lastMeta;
 
+  final Map<WheelSide, RecordingWheelHealth> healthBySide;
+
   final String? error;
 
   RecordingState copyWith({
@@ -46,21 +117,22 @@ class RecordingState {
     int? sampleCount,
     Object? savedSessionId = _unset,
     Object? lastMeta = _unset,
+    Map<WheelSide, RecordingWheelHealth>? healthBySide,
     Object? error = _unset,
-  }) =>
-      RecordingState(
-        status: status ?? this.status,
-        config: config ?? this.config,
-        startTime: startTime ?? this.startTime,
-        sampleCount: sampleCount ?? this.sampleCount,
-        savedSessionId: identical(savedSessionId, _unset)
-            ? this.savedSessionId
-            : savedSessionId as String?,
-        lastMeta: identical(lastMeta, _unset)
-            ? this.lastMeta
-            : lastMeta as SessionMeta?,
-        error: identical(error, _unset) ? this.error : error as String?,
-      );
+  }) => RecordingState(
+    status: status ?? this.status,
+    config: config ?? this.config,
+    startTime: startTime ?? this.startTime,
+    sampleCount: sampleCount ?? this.sampleCount,
+    savedSessionId: identical(savedSessionId, _unset)
+        ? this.savedSessionId
+        : savedSessionId as String?,
+    lastMeta: identical(lastMeta, _unset)
+        ? this.lastMeta
+        : lastMeta as SessionMeta?,
+    healthBySide: healthBySide ?? this.healthBySide,
+    error: identical(error, _unset) ? this.error : error as String?,
+  );
 
   static const Object _unset = Object();
 }
@@ -80,8 +152,17 @@ class RecordingState {
 /// recordings ([BufferedSample.marker] defaults to `false`).
 class RecordingNotifier extends Notifier<RecordingState> {
   final _buffer = <BufferedSample>[];
-  final _subs = <WheelSide, StreamSubscription<List<int>>>{};
+  final _subs = <WheelSide, StreamSubscription<HubSample>>{};
   final _trackers = <WheelSide, ImuSeqTracker>{};
+  final _receivedBySide = <WheelSide, int>{};
+  final _lastSampleAtMs = <WheelSide, int>{};
+  final _firstSampleSides = <WheelSide>{};
+  final _expectedSides = <WheelSide>{};
+  final _healthAtStart = <WheelSide, AcqHealthEvent?>{};
+  Timer? _firstSampleTimer;
+  Timer? _healthTimer;
+  bool _stallAbortStarted = false;
+  String? _forcedDegradation;
 
   /// Periodic timer for continuous sync refinement during recording.
   /// Sends SYNC_PINGs to both wheels every few seconds so the drift fit
@@ -105,6 +186,8 @@ class RecordingNotifier extends Notifier<RecordingState> {
       _buffer.clear();
       _continuousSyncTimer?.cancel();
       _emitTimer?.cancel();
+      _firstSampleTimer?.cancel();
+      _healthTimer?.cancel();
     });
     return const RecordingState();
   }
@@ -134,27 +217,63 @@ class RecordingNotifier extends Notifier<RecordingState> {
   /// the second wheel's setNotifyValue to race with the first wheel's
   /// active stream, leading to packet drops on the second board.
   Future<void> armStreaming() async {
+    if (_subs.isEmpty) {
+      _buffer.clear();
+      _receivedBySide.clear();
+      _lastSampleAtMs.clear();
+      _firstSampleSides.clear();
+      _expectedSides.clear();
+      if (state.status == RecordingStatus.idle) {
+        state = state.copyWith(status: RecordingStatus.arming, error: null);
+      }
+    }
     final imuNotifier = ref.read(imuStreamProvider.notifier);
     final connState = ref.read(connectionManagerProvider);
+    final sidesToArm = <WheelSide>[];
     final futures = <Future<void>>[];
     for (final side in WheelSide.values) {
       if (_subs.containsKey(side)) continue; // already armed
       final conn = connState.bySide[side]!;
       if (conn.status == ConnectionStatus.connected && conn.deviceId != null) {
-        futures.add((() async {
-          await imuNotifier.start(side);
-          await _subscribeImu(side);
-        })());
+        sidesToArm.add(side);
+        futures.add(
+          (() async {
+            // The lossless recording consumer must be registered before the
+            // presentation consumer opens the raw BLE channel. Some BLE
+            // stacks synchronously replay lastValue on subscription.
+            await _subscribeImu(side);
+            await imuNotifier.start(side);
+          })(),
+        );
       }
     }
     await Future.wait(futures);
+    // Prepare each newly armed link exactly once, after its notification
+    // channel is ready and before countdown/START. A later startRecording()
+    // call sees the existing subscriptions and must not renegotiate either
+    // Android BLE link while START_FIRED samples are already flowing.
+    final connAfterArm = ref.read(connectionManagerProvider);
+    await Future.wait(
+      sidesToArm.map((side) {
+        final deviceId = connAfterArm.bySide[side]!.deviceId;
+        return deviceId == null
+            ? Future<void>.value()
+            : ref.read(bleRepositoryProvider).prepareForStreaming(deviceId);
+      }),
+    );
+    if (state.status == RecordingStatus.arming) {
+      state = state.copyWith(status: RecordingStatus.idle);
+    }
   }
 
   /// Cancels any pre-armed IMU subscriptions without recording anything.
   /// Used when a countdown is aborted before recording actually begins.
   /// No-op while actively recording.
   Future<void> disarmStreaming() async {
-    if (state.status == RecordingStatus.recording) return;
+    if (state.status == RecordingStatus.recording ||
+        state.status == RecordingStatus.awaitingSamples) {
+      return;
+    }
     _stopContinuousSync();
     final imuNotifier = ref.read(imuStreamProvider.notifier);
     // Stop both wheels in parallel.
@@ -167,6 +286,8 @@ class RecordingNotifier extends Notifier<RecordingState> {
     }
     _subs.clear();
     _buffer.clear();
+    _firstSampleTimer?.cancel();
+    _healthTimer?.cancel();
   }
 
   /// Starts a recording session with the given [config].
@@ -175,8 +296,11 @@ class RecordingNotifier extends Notifier<RecordingState> {
   /// connected side not already armed by [armStreaming] and subscribes to
   /// buffer samples. Throws if already recording.
   Future<void> startRecording(SessionConfig config) async {
-    if (state.status == RecordingStatus.recording) {
-      throw StateError('Already recording');
+    if (state.status == RecordingStatus.recording ||
+        state.status == RecordingStatus.awaitingSamples ||
+        state.status == RecordingStatus.arming ||
+        state.status == RecordingStatus.stopping) {
+      throw StateError('Recording operation already in progress');
     }
 
     final startTime = config.startTime ?? DateTime.now();
@@ -195,31 +319,252 @@ class RecordingNotifier extends Notifier<RecordingState> {
     // Normally a no-op — the countdown flow already calls [armStreaming]
     // well before this point — but kept here so startRecording remains safe
     // to call directly (e.g. tests, or a future immediate-start path).
+    state = state.copyWith(status: RecordingStatus.arming, error: null);
     await armStreaming();
+    _expectedSides
+      ..clear()
+      ..addAll(_subs.keys);
+    final healthSnapshot = ref.read(syncEngineProvider);
+    _healthAtStart
+      ..clear()
+      ..addEntries(
+        _expectedSides.map(
+          (side) => MapEntry(side, healthSnapshot.bySide[side]!.acqHealth),
+        ),
+      );
 
-    _buffer.clear();
+    final scheduled = config.utcStartMs != null;
+    if (scheduled) {
+      final syncState = ref.read(syncEngineProvider);
+      final missingAcks = _expectedSides
+          .where((side) => syncState.bySide[side]!.lastStartFiredUs == null)
+          .toList(growable: false);
+      if (missingAcks.isNotEmpty) {
+        await _failBeforeSamples(
+          'START acknowledgement missing from '
+          '${missingAcks.map(_sideLabel).join(', ')}. Reconnect that wheel and retry.',
+        );
+        throw StateError(state.error ?? 'START acknowledgement missing');
+      }
+    }
+
     state = RecordingState(
-      status: RecordingStatus.recording,
+      status: scheduled
+          ? RecordingStatus.awaitingSamples
+          : RecordingStatus.recording,
       config: configWithStart,
       startTime: startTime,
+      sampleCount: _buffer.length,
     );
 
-    // Start continuous sync refinement: send SYNC_PINGs to both wheels
-    // every 3 seconds during recording. This keeps the drift fit accurate
-    // over long sessions by correcting for crystal drift between the phone
-    // and M5StickC clocks. The sync engine's MinRttTracker keeps the best
-    // (lowest-RTT) offset, and the DriftFit is recalculated from all
-    // collected points, so extra pings only improve accuracy.
-    _startContinuousSync();
+    _startHealthMonitor();
+    if (scheduled) {
+      _promoteWhenFirstSamplesReady();
+      if (state.status == RecordingStatus.awaitingSamples) {
+        _firstSampleTimer?.cancel();
+        _firstSampleTimer = Timer(
+          ref.read(firstSampleTimeoutProvider),
+          () => unawaited(_failMissingFirstSamples()),
+        );
+      }
+    }
+
+    // Do not inject control-point GATT traffic while two 100 Hz notification
+    // streams are active. On Android the write to the second peripheral can
+    // stall its notification delivery for almost two seconds, creating the
+    // queue growth and drops seen on the right wheel. The startup sync burst
+    // already supplies the paired clock fit; periodic refinement remains
+    // available for lower-bandwidth single-wheel recordings.
+    if (_expectedSides.length == 1) {
+      _startContinuousSync();
+    }
   }
 
   /// Interval between continuous sync pings during recording.
-  static const _continuousSyncInterval = Duration(seconds: 3);
+  static const _continuousSyncInterval = Duration(seconds: 10);
+
+  static String _sideLabel(WheelSide side) =>
+      side == WheelSide.left ? 'left wheel' : 'right wheel';
+
+  void _promoteWhenFirstSamplesReady() {
+    if (state.status != RecordingStatus.awaitingSamples) return;
+    if (!_expectedSides.every(_firstSampleSides.contains)) return;
+    _firstSampleTimer?.cancel();
+    _firstSampleTimer = null;
+    state = state.copyWith(status: RecordingStatus.recording);
+  }
+
+  Future<void> _failMissingFirstSamples() async {
+    if (!ref.mounted || state.status != RecordingStatus.awaitingSamples) {
+      return;
+    }
+    final missing = _expectedSides
+        .where((side) => !_firstSampleSides.contains(side))
+        .toList(growable: false);
+    if (missing.isEmpty) {
+      _promoteWhenFirstSamplesReady();
+      return;
+    }
+    await _failBeforeSamples(
+      'No samples from ${missing.map(_sideLabel).join(', ')} within 2 seconds. '
+      'Check its connection and battery, then retry.',
+    );
+  }
+
+  Future<void> _failBeforeSamples(String message) async {
+    _firstSampleTimer?.cancel();
+    _stopContinuousSync();
+    _healthTimer?.cancel();
+    final sides = _subs.keys.toList(growable: false);
+    final sync = ref.read(syncEngineProvider.notifier);
+    await Future.wait(
+      sides.map((side) async {
+        try {
+          await sync.sendStop(side);
+        } on Object {
+          // Best effort rollback; the actionable failure is retained below.
+        }
+      }),
+    );
+    final imu = ref.read(imuStreamProvider.notifier);
+    await Future.wait(sides.map(imu.stop));
+    for (final subscription in _subs.values.toList(growable: false)) {
+      await subscription.cancel();
+    }
+    _subs.clear();
+    _buffer.clear();
+    state = RecordingState(status: RecordingStatus.failed, error: message);
+  }
+
+  void _startHealthMonitor() {
+    _healthTimer?.cancel();
+    _stallAbortStarted = false;
+    _healthTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!ref.mounted ||
+          (state.status != RecordingStatus.recording &&
+              state.status != RecordingStatus.awaitingSamples)) {
+        return;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final started = state.startTime?.millisecondsSinceEpoch ?? now;
+      final elapsedSeconds = ((now - started).clamp(1, 1 << 31)) / 1000.0;
+      final syncState = ref.read(syncEngineProvider);
+      final hub = ref.read(imuSampleHubProvider);
+      final health = <WheelSide, RecordingWheelHealth>{};
+      WheelSide? stalledSide;
+      WheelSide? failedSide;
+      AcquisitionFailureCause? failureCause;
+      for (final side in _expectedSides) {
+        final last = _lastSampleAtMs[side];
+        final validLast = (last != null && last >= started) ? last : null;
+        final age = validLast == null ? (now - started) : (now - validLast);
+        final recovery = hub.metrics(side);
+        final firmware = syncState.bySide[side]!.acqHealth;
+        final freshFirmwareHealth =
+            firmware != null && !identical(firmware, _healthAtStart[side]);
+        final currentFailure = freshFirmwareHealth
+            ? criticalAcquisitionFailure(firmware)
+            : null;
+        if (currentFailure != null && failedSide == null) {
+          failedSide = side;
+          failureCause = currentFailure;
+        }
+        final stalled = age >= 1000;
+        if (age >= 3000) stalledSide ??= side;
+        health[side] = RecordingWheelHealth(
+          receivedCount: _receivedBySide[side] ?? 0,
+          effectiveRateHz: (_receivedBySide[side] ?? 0) / elapsedSeconds,
+          lastSampleAgeMs: age,
+          recoveredSamples: recovery.recoveredSamples,
+          unrecoveredSamples: recovery.unrecoveredSamples,
+          firmwareProduced: firmware?.producedSamples ?? 0,
+          firmwareNotified: firmware?.notifiedSamples ?? 0,
+          queueDrops: firmware?.queueDrops ?? syncState.bySide[side]!.dropCount,
+          fifoFaults: firmware?.fifoFaults ?? 0,
+          fifoDroppedSamples: firmware?.fifoDroppedSamples ?? 0,
+          transportFailures: firmware?.transportFailures ?? 0,
+          queueDepth: firmware?.queueDepth ?? 0,
+          stalled: stalled,
+        );
+      }
+      state = state.copyWith(healthBySide: health);
+      if (failedSide != null && failureCause != null && !_stallAbortStarted) {
+        _stallAbortStarted = true;
+        unawaited(_abortForAcquisitionHealth(failedSide, failureCause));
+      } else if (stalledSide != null &&
+          state.status == RecordingStatus.recording &&
+          !_stallAbortStarted) {
+        _stallAbortStarted = true;
+        unawaited(_abortForStall(stalledSide));
+      }
+    });
+  }
+
+  Future<void> _abortForAcquisitionHealth(
+    WheelSide side,
+    AcquisitionFailureCause cause,
+  ) async {
+    final firmware = ref.read(syncEngineProvider).bySide[side]!.acqHealth;
+    _forcedDegradation = switch (cause) {
+      AcquisitionFailureCause.sampleQueueOverflow =>
+        '${_sideLabel(side)} sample queue overflow '
+            '(drops ${firmware?.queueDrops ?? 0}, '
+            'depth ${firmware?.queueDepth ?? 0})',
+      AcquisitionFailureCause.imuFifoFault =>
+        '${_sideLabel(side)} IMU FIFO fault '
+            '(faults ${firmware?.fifoFaults ?? 0}, '
+            'lost samples ${firmware?.fifoDroppedSamples ?? 0})',
+      AcquisitionFailureCause.bleTransportCongestion =>
+        '${_sideLabel(side)} BLE transport congested '
+            '(queue ${firmware?.queueDepth ?? 0}, '
+            'failures ${firmware?.transportFailures ?? 0})',
+    };
+    try {
+      await stopRecording();
+      if (ref.mounted) {
+        state = state.copyWith(
+          status: RecordingStatus.failed,
+          error:
+              'Recording stopped: $_forcedDegradation. '
+              'Reconnect both wheels and retry; partial data was quarantined.',
+        );
+      }
+    } on Object catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(
+          status: RecordingStatus.failed,
+          error: 'Acquisition recovery failed: $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _abortForStall(WheelSide side) async {
+    _forcedDegradation = '${_sideLabel(side)} stalled for at least 3 seconds';
+    try {
+      await stopRecording();
+      if (ref.mounted) {
+        state = state.copyWith(
+          status: RecordingStatus.failed,
+          error: 'Recording stopped: $_forcedDegradation. Trial quarantined.',
+        );
+      }
+    } on Object catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(
+          status: RecordingStatus.failed,
+          error: 'Recording abort failed: $error',
+        );
+      }
+    }
+  }
 
   void _startContinuousSync() {
     _continuousSyncTimer?.cancel();
     _continuousSyncTimer = Timer.periodic(_continuousSyncInterval, (_) {
-      if (!ref.mounted || state.status != RecordingStatus.recording) {
+      if (!ref.mounted ||
+          (state.status != RecordingStatus.recording &&
+              state.status != RecordingStatus.awaitingSamples)) {
         _continuousSyncTimer?.cancel();
         return;
       }
@@ -233,7 +578,15 @@ class RecordingNotifier extends Notifier<RecordingState> {
           futures.add(sync.sendPing(side));
         }
       }
-      Future.wait(futures); // fire-and-forget — errors handled by sync engine
+      unawaited(
+        Future.wait(futures).then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {
+            // Periodic clock refinement is best effort. A transient GATT
+            // rejection must not escape the timer zone or abort recording.
+          },
+        ),
+      );
     });
   }
 
@@ -248,45 +601,67 @@ class RecordingNotifier extends Notifier<RecordingState> {
     final info = conn.info;
     if (deviceId == null || info == null) return;
 
-    final ble = ref.read(bleRepositoryProvider);
     _trackers[side] = ImuSeqTracker();
 
-    _subs[side] = ble.imuData(deviceId).listen(
-      (bytes) {
-        try {
-          final tracker = _trackers[side]!;
-          final result = ImuPacketParser.parseBatchWithGaps(bytes, tracker);
-          final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final hub = ref.read(imuSampleHubProvider);
+    final subscription = hub
+        .samples(side)
+        .listen(
+          (event) {
+            try {
+              final tracker = _trackers[side]!;
+              final sample = event.sample;
+              tracker.gapCount(sample.seq);
 
-          final baseUtcMs = state.config?.utcStartMs ?? state.config?.startTime?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
-          final alignedBaseUtcMs = (baseUtcMs ~/ 1000) * 1000;
-          final sampleRate = state.config?.sampleRateHz ?? 100;
+              final wheelSync = ref.read(syncEngineProvider).bySide[side]!;
+              final reading = sample.toReading(info);
+              final startUs = wheelSync.lastStartFiredUs;
+              final syncedMs = startUs == null
+                  ? sample.tDeviceUs / 1000.0
+                  : SessionTimeline.relativeUs(
+                          timestampUs: sample.tDeviceUs,
+                          startUs: startUs,
+                          driftFit: wheelSync.driftFit,
+                        ) /
+                        1000.0;
+              _buffer.add(
+                BufferedSample(
+                  reading: reading,
+                  wheel: side,
+                  timestampAppMs: event.receivedAtMs,
+                  timestampSyncedMs: syncedMs,
+                ),
+              );
+              _receivedBySide[side] = (_receivedBySide[side] ?? 0) + 1;
+              _lastSampleAtMs[side] = event.receivedAtMs;
+              _firstSampleSides.add(side);
 
-          for (final sample in result.samples) {
-            final reading = sample.toReading(info);
-            final syncedMs = alignedBaseUtcMs + (sample.seq * 1000.0 / sampleRate);
-            _buffer.add(BufferedSample(
-              reading: reading,
-              wheel: side,
-              timestampAppMs: nowMs,
-              timestampSyncedMs: syncedMs,
-            ));
-          }
-
-          if (!ref.mounted) return;
-          _emitSampleCount();
-        } on Object catch (e) {
-          if (!ref.mounted) return;
-          _flushEmit();
-          state = state.copyWith(error: 'IMU buffer error: $e');
-        }
-      },
-      onError: (Object e) {
-        if (!ref.mounted) return;
-        _flushEmit();
-        state = state.copyWith(error: 'IMU stream error: $e');
-      },
-    );
+              if (!ref.mounted) return;
+              _promoteWhenFirstSamplesReady();
+              if (state.status != RecordingStatus.idle &&
+                  state.status != RecordingStatus.arming) {
+                _emitSampleCount();
+              }
+            } on Object catch (e) {
+              if (!ref.mounted) return;
+              _flushEmit();
+              state = state.copyWith(error: 'IMU buffer error: $e');
+            }
+          },
+          onError: (Object e) {
+            if (!ref.mounted) return;
+            _flushEmit();
+            state = state.copyWith(error: 'IMU stream error: $e');
+          },
+        );
+    _subs[side] = subscription;
+    try {
+      await hub.start(side);
+    } on Object {
+      await _subs.remove(side)?.cancel();
+      _trackers.remove(side);
+      rethrow;
+    }
   }
 
   /// Emits `sampleCount` to state, either immediately (when the emit interval
@@ -316,36 +691,146 @@ class RecordingNotifier extends Notifier<RecordingState> {
     }
   }
 
+  Future<void> _disconnectRecordingSideForSafety({
+    required WheelSide side,
+    required ConnectionManagerNotifier connectionManager,
+    required List<String> stopErrors,
+  }) async {
+    try {
+      await connectionManager.disconnect(side);
+      stopErrors.add('${side.name}: STOP failed; disconnected for safety');
+    } on Object catch (error) {
+      stopErrors.add('${side.name}: STOP and safety disconnect failed: $error');
+      state = state.copyWith(
+        status: RecordingStatus.failed,
+        error: 'STOP warning: ${stopErrors.join('; ')}',
+      );
+      throw StateError(stopErrors.last);
+    }
+  }
+
   /// Stops the recording session, saves it to storage, and stops IMU
   /// streaming. Throws if not recording.
   Future<void> stopRecording() async {
+    if (state.status == RecordingStatus.stopping) return;
+    if (state.status == RecordingStatus.awaitingSamples) {
+      state = state.copyWith(status: RecordingStatus.stopping);
+      await _failBeforeSamples(
+        'Recording stopped before every wheel delivered its first sample. '
+        'Nothing was saved.',
+      );
+      return;
+    }
     if (state.status != RecordingStatus.recording) {
       throw StateError('Not recording');
     }
+    if (_buffer.isEmpty) {
+      state = state.copyWith(status: RecordingStatus.stopping);
+      await _failBeforeSamples(
+        'Recording contained 0 samples. Check both wheel connections and retry.',
+      );
+      return;
+    }
+    state = state.copyWith(status: RecordingStatus.stopping);
     // Flush any pending throttled sampleCount so the final state is consistent
     // before we read _buffer.length for the session meta.
     _flushEmit();
     final config = state.config!;
     final startTime = state.startTime!;
     final endTime = DateTime.now();
-    final durationMs = endTime.millisecondsSinceEpoch -
-        startTime.millisecondsSinceEpoch;
+    final durationMs =
+        endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch;
 
     // Stop continuous sync refinement.
     _stopContinuousSync();
+    _firstSampleTimer?.cancel();
+    _healthTimer?.cancel();
+
+    // Ask firmware to stop acquisition and flush its final partial batch.
+    // Keep IMU subscriptions alive until acknowledgements/final notifications
+    // have had time to arrive.
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final stopSides = _subs.keys.toList(growable: false);
+    final previousStopAcks = {
+      for (final side in stopSides)
+        side: ref.read(syncEngineProvider).bySide[side]!.lastStopFiredUs,
+    };
+    final stopErrors = <String>[];
+    final acknowledgedStops = <WheelSide>{};
+    final connectionManager = ref.read(connectionManagerProvider.notifier);
+    final deviceIds = {
+      for (final side in stopSides)
+        side: ref.read(connectionManagerProvider).bySide[side]!.deviceId,
+    };
+    // Stop scheduling replay control writes before STOP enters each device's
+    // serialized GATT queue. The IMU subscriptions remain alive for the final
+    // drained samples and STOP_FIRED acknowledgement.
+    final hub = ref.read(imuSampleHubProvider);
+    await Future.wait(stopSides.map(hub.suspendReplay));
+    // Serialize STOP across boards so Android does not have two control
+    // writes competing with both high-rate notification streams.
+    final writtenStops = <WheelSide>{};
+    for (final side in stopSides) {
+      final result = await syncNotifier.sendStopWithRetry(side);
+      if (result.written) {
+        writtenStops.add(side);
+      } else {
+        await _disconnectRecordingSideForSafety(
+          side: side,
+          connectionManager: connectionManager,
+          stopErrors: stopErrors,
+        );
+      }
+    }
+    final stopResults = await Future.wait(
+      writtenStops.map(
+        (side) async => (
+          side,
+          await syncNotifier.waitForStop(
+            side,
+            previous: previousStopAcks[side],
+            timeout: ref.read(recordingStopAckTimeoutProvider),
+          ),
+        ),
+      ),
+    );
+    for (final (side, wasAcknowledged) in stopResults) {
+      if (wasAcknowledged) {
+        acknowledgedStops.add(side);
+      } else {
+        await _disconnectRecordingSideForSafety(
+          side: side,
+          connectionManager: connectionManager,
+          stopErrors: stopErrors,
+        );
+      }
+    }
+    // A retained final batch may be in the bounded 100 ms congestion
+    // backoff. Keep subscriptions alive long enough for one retry cycle.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (stopErrors.isNotEmpty) {
+      state = state.copyWith(error: 'STOP warning: ${stopErrors.join('; ')}');
+    }
+    final recoveryMetrics = {
+      for (final side in stopSides)
+        side: ref.read(imuSampleHubProvider).metrics(side),
+    };
 
     // Stop IMU streaming on all sides in parallel.
     final imuNotifier = ref.read(imuStreamProvider.notifier);
-    await Future.wait(
-      _subs.keys.map((side) => imuNotifier.stop(side)),
-    );
+    await Future.wait(_subs.keys.map((side) => imuNotifier.stop(side)));
     for (final s in _subs.values) {
       await s.cancel();
     }
     _subs.clear();
+    for (final side in acknowledgedStops) {
+      final deviceId = deviceIds[side];
+      if (deviceId != null) connectionManager.setAcquiring(deviceId, false);
+    }
 
     // Build session meta with sync quality from the sync engine.
     final syncState = ref.read(syncEngineProvider);
+    _finalizeTimeline(syncState);
     final leftOffset = syncState.bySide[WheelSide.left]!.offset?.offsetUs;
     final rightOffset = syncState.bySide[WheelSide.right]!.offset?.offsetUs;
     final leftResidual =
@@ -370,6 +855,95 @@ class RecordingNotifier extends Notifier<RecordingState> {
       driftResidualRmsMsRight: rightResidual,
       notes: config.notes,
       utcStartMs: config.utcStartMs,
+      recordedSides: _trackers.keys
+          .map((side) => side == WheelSide.left ? 'L' : 'R')
+          .toList(growable: false),
+      firmwareVersions: {
+        for (final side in WheelSide.values)
+          if (ref.read(connectionManagerProvider).bySide[side]!.info
+              case final info?)
+            (side == WheelSide.left ? 'L' : 'R'): info.fwVersion,
+      },
+      boardModels: {
+        for (final side in WheelSide.values)
+          if (ref.read(connectionManagerProvider).bySide[side]!.info
+              case final info?)
+            (side == WheelSide.left ? 'L' : 'R'): info.hardwareModel.label,
+      },
+      dropCounts: {
+        'L': syncState.bySide[WheelSide.left]!.dropCount,
+        'R': syncState.bySide[WheelSide.right]!.dropCount,
+      },
+      sampleQueueDrops: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.queueDrops ?? 0,
+      },
+      imuFifoFaults: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.fifoFaults ?? 0,
+      },
+      imuFifoDroppedSamples: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.fifoDroppedSamples ?? 0,
+      },
+      recoveredSamples: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              recoveryMetrics[side]!.recoveredSamples,
+      },
+      unrecoveredSamples: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              recoveryMetrics[side]!.unrecoveredSamples,
+      },
+      replayAttempts: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              recoveryMetrics[side]!.replayAttempts,
+      },
+      degradationReason: _degradationReason(
+        stopSides: stopSides,
+        recoveryMetrics: recoveryMetrics,
+        syncState: syncState,
+      ),
+      sequenceGaps: {
+        for (final entry in _trackers.entries)
+          (entry.key == WheelSide.left ? 'L' : 'R'): entry.value.totalGaps,
+      },
+      startAcknowledgedUs: {
+        // ignore: use_null_aware_elements
+        if (syncState.bySide[WheelSide.left]!.lastStartFiredUs
+            case final value?)
+          'L': value,
+        // ignore: use_null_aware_elements
+        if (syncState.bySide[WheelSide.right]!.lastStartFiredUs
+            case final value?)
+          'R': value,
+      },
+      startDeltaUs: _startDelta(syncState),
+      transportFailures: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.transportFailures ?? 0,
+      },
+      firmwareProducedSamples: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.producedSamples ?? 0,
+      },
+      firmwareNotifiedSamples: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.notifiedSamples ?? 0,
+      },
+      queueDepth: {
+        for (final side in stopSides)
+          side == WheelSide.left ? 'L' : 'R':
+              syncState.bySide[side]!.acqHealth?.queueDepth ?? 0,
+      },
     );
 
     // Save to storage.
@@ -389,6 +963,62 @@ class RecordingNotifier extends Notifier<RecordingState> {
     );
   }
 
+  void _finalizeTimeline(SyncEngineState syncState) {
+    final firstBySide = <WheelSide, int>{};
+    for (final sample in _buffer) {
+      firstBySide.putIfAbsent(sample.wheel, () => sample.reading.tDeviceUs);
+    }
+    for (var index = 0; index < _buffer.length; index++) {
+      final sample = _buffer[index];
+      final wheelSync = syncState.bySide[sample.wheel]!;
+      final anchor = wheelSync.lastStartFiredUs ?? firstBySide[sample.wheel]!;
+      final relativeUs = SessionTimeline.relativeUs(
+        timestampUs: sample.reading.tDeviceUs,
+        startUs: anchor,
+        driftFit: wheelSync.driftFit,
+      );
+      _buffer[index] = sample.copyWith(timestampSyncedMs: relativeUs / 1000.0);
+    }
+  }
+
+  String? _degradationReason({
+    required List<WheelSide> stopSides,
+    required Map<WheelSide, RecoveryMetrics> recoveryMetrics,
+    required SyncEngineState syncState,
+  }) {
+    final reasons = <String>[];
+    if (_forcedDegradation case final forced?) reasons.add(forced);
+    if (stopSides.any(
+      (side) => recoveryMetrics[side]!.unrecoveredSamples > 0,
+    )) {
+      reasons.add('Unrecovered BLE sequence gaps');
+    }
+    if (stopSides.any((side) => syncState.bySide[side]!.driftFit == null)) {
+      reasons.add('Drift fit unavailable; used START-relative device time');
+    }
+    for (final side in stopSides) {
+      final produced = syncState.bySide[side]!.acqHealth?.producedSamples;
+      final saved = _receivedBySide[side] ?? 0;
+      if (produced != null && produced > 0 && produced != saved) {
+        reasons.add(
+          '${_sideLabel(side)} firmware produced $produced but app saved $saved',
+        );
+      }
+    }
+    return reasons.isEmpty ? null : reasons.join('; ');
+  }
+
+  static int? _startDelta(SyncEngineState syncState) {
+    final left = syncState.bySide[WheelSide.left]!;
+    final right = syncState.bySide[WheelSide.right]!;
+    return SessionTimeline.commonStartDeltaUs(
+      leftStartUs: left.lastStartFiredUs,
+      rightStartUs: right.lastStartFiredUs,
+      leftFit: left.driftFit,
+      rightFit: right.driftFit,
+    );
+  }
+
   /// Resets to idle state, clearing all session data. The saved session
   /// remains in storage.
   void reset() {
@@ -396,6 +1026,15 @@ class RecordingNotifier extends Notifier<RecordingState> {
     _emitTimer?.cancel();
     _emitTimer = null;
     _emitPending = false;
+    _firstSampleTimer?.cancel();
+    _healthTimer?.cancel();
+    _firstSampleSides.clear();
+    _expectedSides.clear();
+    _healthAtStart.clear();
+    _receivedBySide.clear();
+    _lastSampleAtMs.clear();
+    _forcedDegradation = null;
+    _stallAbortStarted = false;
     state = const RecordingState();
   }
 
@@ -419,11 +1058,20 @@ class RecordingNotifier extends Notifier<RecordingState> {
 /// (which saturates the main isolate and causes app-side BLE packet drops).
 /// Tests override this to [Duration.zero] for synchronous assertions.
 final recordingEmitIntervalProvider = Provider<Duration>(
-  (ref) => const Duration(milliseconds: 100),
+  (ref) => const Duration(milliseconds: 250),
   name: 'recordingEmitIntervalProvider',
 );
 
-final recordingProvider =
-    NotifierProvider<RecordingNotifier, RecordingState>(
+final firstSampleTimeoutProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 2),
+  name: 'firstSampleTimeoutProvider',
+);
+
+final recordingStopAckTimeoutProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 1),
+  name: 'recordingStopAckTimeoutProvider',
+);
+
+final recordingProvider = NotifierProvider<RecordingNotifier, RecordingState>(
   RecordingNotifier.new,
 );

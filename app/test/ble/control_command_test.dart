@@ -4,6 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/ble/control_command.dart';
 
 void main() {
+  test('REPLAY_RANGE encodes start sequence and bounded count', () {
+    expect(ControlCommand.replayRange(startSeq: 0x12345678, count: 12), [
+      0x0A,
+      0x78,
+      0x56,
+      0x34,
+      0x12,
+      12,
+      0,
+    ]);
+    expect(
+      () => ControlCommand.replayRange(startSeq: 0, count: 129),
+      throwsArgumentError,
+    );
+  });
   group('ControlCommand encode (§3.1)', () {
     test('START with target_start_us → [0x01][u32 LE]', () {
       final bytes = ControlCommand.start(123456789);
@@ -49,10 +64,14 @@ void main() {
     });
 
     test('SET_RANGE throws ArgumentError for out-of-range codes', () {
-      expect(() => ControlCommand.setRange(accelRange: 4, gyroRange: 0),
-          throwsArgumentError);
-      expect(() => ControlCommand.setRange(accelRange: 0, gyroRange: 5),
-          throwsArgumentError);
+      expect(
+        () => ControlCommand.setRange(accelRange: 4, gyroRange: 0),
+        throwsArgumentError,
+      );
+      expect(
+        () => ControlCommand.setRange(accelRange: 0, gyroRange: 5),
+        throwsArgumentError,
+      );
     });
 
     test('BEEP → [0x06][count][period_ms u16 LE]', () {
@@ -62,8 +81,10 @@ void main() {
     });
 
     test('BEEP throws ArgumentError for count=0', () {
-      expect(() => ControlCommand.beep(count: 0, periodMs: 500),
-          throwsArgumentError);
+      expect(
+        () => ControlCommand.beep(count: 0, periodMs: 500),
+        throwsArgumentError,
+      );
     });
 
     test('RESET_SEQ → [0xFF] (1 byte, no payload)', () {
@@ -83,19 +104,24 @@ void main() {
   });
 
   group('ControlCommand new encoders (Phase 2 §3.1)', () {
-    test('SET_NAME → [0x07][16-byte name null-padded]', () {
+    test('SET_BEEP_ENABLED encodes persistent countdown sound state', () {
+      expect(ControlCommand.setBeepEnabled(true), [0x0B, 1]);
+      expect(ControlCommand.setBeepEnabled(false), [0x0B, 0]);
+    });
+
+    test('SET_NAME → [0x07][24-byte name null-padded]', () {
       final bytes = ControlCommand.setName('MyBoard');
       expect(bytes[0], 0x07);
-      expect(bytes.length, 17);
+      expect(bytes.length, 25);
       // 'MyBoard' = 7 chars, rest null.
       expect(bytes.sublist(1, 8), 'MyBoard'.codeUnits);
       expect(bytes.sublist(8), everyElement(0));
     });
 
-    test('SET_NAME truncates to 16 bytes', () {
+    test('SET_NAME truncates to 24 bytes', () {
       final bytes = ControlCommand.setName('A very long board name!');
-      expect(bytes.length, 17);
-      expect(bytes.sublist(1).where((b) => b != 0).length, 16);
+      expect(bytes.length, 25);
+      expect(bytes.sublist(1).where((b) => b != 0).length, 23);
     });
 
     test('SET_NAME with empty string → all nulls after cmd', () {
@@ -129,6 +155,7 @@ void main() {
       expect(ControlCommandId.setName, 0x07);
       expect(ControlCommandId.setWheel, 0x08);
       expect(ControlCommandId.setUtc, 0x09);
+      expect(ControlCommandId.setBeepEnabled, 0x0B);
       expect(ControlCommandId.resetSeq, 0xFF);
     });
   });

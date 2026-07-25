@@ -37,9 +37,10 @@ class QualityBadge {
     final left = meta.driftResidualRmsMsLeft;
     final right = meta.driftResidualRmsMsRight;
     if (left == null && right == null) return SyncQuality.unknown;
-    final max = [left, right]
-        .whereType<double>()
-        .fold<double?>(null, (a, b) => a == null ? b : (a > b ? a : b));
+    final max = [left, right].whereType<double>().fold<double?>(
+      null,
+      (a, b) => a == null ? b : (a > b ? a : b),
+    );
     return fromDriftRms(max);
   }
 

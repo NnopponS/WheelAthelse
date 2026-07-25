@@ -58,17 +58,15 @@ class SessionConfig {
   /// started without a countdown (legacy/immediate start).
   final int? utcStartMs;
 
-  /// Offset in milliseconds to convert relative synced timestamps to absolute
-  /// UTC epoch milliseconds: `timestamp_synced_ms_utc = relativeSyncedMs + offset`.
-  /// Computed as `utcStartMs - tStartRelMs` in the countdown flow. Null for
-  /// legacy/immediate starts where timestamps remain relative.
+  /// Legacy v3 field retained only for backward session compatibility. New
+  /// recordings never add this value to sample timestamps; UTC belongs in
+  /// metadata while samples stay START-relative.
   final int? utcOffsetMs;
 
   /// Optional id of the protocol template this session was recorded under
   /// (Phase 3, §6). When set, the Experiment tracker dashboard groups this
   /// session under that template. Null for "Custom" (manual topic) sessions.
   final String? protocolTemplateId;
-
   final DateTime? _startTime;
 
   /// Start time of the session, or null if not set.
@@ -110,6 +108,26 @@ class SessionMeta {
     this.utcStartMs,
     this.tags = const [],
     this.protocolTemplateId,
+    this.recordedSides = const [],
+    this.boardModels = const {},
+    this.firmwareVersions = const {},
+    this.sequenceGaps = const {},
+    this.dropCounts = const {},
+    this.sampleQueueDrops = const {},
+    this.imuFifoFaults = const {},
+    this.imuFifoDroppedSamples = const {},
+    this.startAcknowledgedUs = const {},
+    this.startDeltaUs,
+    this.recoveredSamples = const {},
+    this.unrecoveredSamples = const {},
+    this.replayAttempts = const {},
+    this.transportFailures = const {},
+    this.firmwareProducedSamples = const {},
+    this.firmwareNotifiedSamples = const {},
+    this.queueDepth = const {},
+    this.degradationReason,
+    this.schemaVersion = 4,
+    this.protocolVersion = '1.7.0',
   });
 
   final String sessionId;
@@ -142,53 +160,135 @@ class SessionMeta {
   /// Experiment tracker dashboard. Null for "Custom" (manual topic) sessions
   /// and old sessions.
   final String? protocolTemplateId;
+  final List<String> recordedSides;
+  final Map<String, String> boardModels;
+  final Map<String, String> firmwareVersions;
+  final Map<String, int> sequenceGaps;
+  final Map<String, int> dropCounts;
+  final Map<String, int> sampleQueueDrops;
+  final Map<String, int> imuFifoFaults;
+  final Map<String, int> imuFifoDroppedSamples;
+  final Map<String, int> startAcknowledgedUs;
+  final int? startDeltaUs;
+  final Map<String, int> recoveredSamples;
+  final Map<String, int> unrecoveredSamples;
+  final Map<String, int> replayAttempts;
+  final Map<String, int> transportFailures;
+  final Map<String, int> firmwareProducedSamples;
+  final Map<String, int> firmwareNotifiedSamples;
+  final Map<String, int> queueDepth;
+  final String? degradationReason;
+  final int schemaVersion;
+  final String protocolVersion;
 
   Map<String, dynamic> toJson() => {
-        'session_id': sessionId,
-        'topic': topic,
-        'trial_number': trialNumber,
-        'athlete_name': athleteName,
-        'sample_rate_hz': sampleRateHz,
-        'start_time': startTime.toUtc().toIso8601String(),
-        'duration_ms': durationMs,
-        'sample_count': sampleCount,
-        'marker_count': markerCount,
-        'offset_us_left': offsetUsLeft,
-        'offset_us_right': offsetUsRight,
-        'drift_residual_rms_ms_left': driftResidualRmsMsLeft,
-        'drift_residual_rms_ms_right': driftResidualRmsMsRight,
-        'notes': notes,
-        'video_file_name': videoFileName,
-        'utc_start_ms': utcStartMs,
-        'tags': tags,
-        'protocol_template_id': protocolTemplateId,
-      };
+    'session_id': sessionId,
+    'topic': topic,
+    'trial_number': trialNumber,
+    'athlete_name': athleteName,
+    'sample_rate_hz': sampleRateHz,
+    'start_time': startTime.toUtc().toIso8601String(),
+    'duration_ms': durationMs,
+    'sample_count': sampleCount,
+    'marker_count': markerCount,
+    'offset_us_left': offsetUsLeft,
+    'offset_us_right': offsetUsRight,
+    'drift_residual_rms_ms_left': driftResidualRmsMsLeft,
+    'drift_residual_rms_ms_right': driftResidualRmsMsRight,
+    'notes': notes,
+    'video_file_name': videoFileName,
+    'utc_start_ms': utcStartMs,
+    'tags': tags,
+    'protocol_template_id': protocolTemplateId,
+    'recorded_sides': recordedSides,
+    'board_models': boardModels,
+    'firmware_versions': firmwareVersions,
+    'sequence_gaps': sequenceGaps,
+    'drop_counts': dropCounts,
+    'sample_queue_drops': sampleQueueDrops,
+    'imu_fifo_faults': imuFifoFaults,
+    'imu_fifo_dropped_samples': imuFifoDroppedSamples,
+    'start_acknowledged_us': startAcknowledgedUs,
+    'start_delta_us': startDeltaUs,
+    'recovered_samples': recoveredSamples,
+    'unrecovered_samples': unrecoveredSamples,
+    'replay_attempts': replayAttempts,
+    'transport_failures': transportFailures,
+    'firmware_produced_samples': firmwareProducedSamples,
+    'firmware_notified_samples': firmwareNotifiedSamples,
+    'queue_depth': queueDepth,
+    'degradation_reason': degradationReason,
+    'schema_version': schemaVersion,
+    'protocol_version': protocolVersion,
+  };
 
   factory SessionMeta.fromJson(Map<String, dynamic> json) => SessionMeta(
-        sessionId: json['session_id'] as String,
-        topic: json['topic'] as String,
-        trialNumber: json['trial_number'] as int,
-        athleteName: json['athlete_name'] as String?,
-        sampleRateHz: json['sample_rate_hz'] as int,
-        startTime: DateTime.parse(json['start_time'] as String),
-        durationMs: json['duration_ms'] as int,
-        sampleCount: json['sample_count'] as int,
-        markerCount: json['marker_count'] as int,
-        offsetUsLeft: json['offset_us_left'] as int?,
-        offsetUsRight: json['offset_us_right'] as int?,
-        driftResidualRmsMsLeft:
-            (json['drift_residual_rms_ms_left'] as num?)?.toDouble(),
-        driftResidualRmsMsRight:
-            (json['drift_residual_rms_ms_right'] as num?)?.toDouble(),
-        notes: json['notes'] as String?,
-        videoFileName: json['video_file_name'] as String?,
-        utcStartMs: json['utc_start_ms'] as int?,
-        tags: (json['tags'] as List?)
-                ?.map((e) => e as String)
-                .toList(growable: false) ??
-            const [],
-        protocolTemplateId: json['protocol_template_id'] as String?,
-      );
+    sessionId: json['session_id'] as String,
+    topic: json['topic'] as String,
+    trialNumber: json['trial_number'] as int,
+    athleteName: json['athlete_name'] as String?,
+    sampleRateHz: json['sample_rate_hz'] as int,
+    startTime: DateTime.parse(json['start_time'] as String),
+    durationMs: json['duration_ms'] as int,
+    sampleCount: json['sample_count'] as int,
+    markerCount: json['marker_count'] as int,
+    offsetUsLeft: json['offset_us_left'] as int?,
+    offsetUsRight: json['offset_us_right'] as int?,
+    driftResidualRmsMsLeft: (json['drift_residual_rms_ms_left'] as num?)
+        ?.toDouble(),
+    driftResidualRmsMsRight: (json['drift_residual_rms_ms_right'] as num?)
+        ?.toDouble(),
+    notes: json['notes'] as String?,
+    videoFileName: json['video_file_name'] as String?,
+    utcStartMs: json['utc_start_ms'] as int?,
+    tags:
+        (json['tags'] as List?)
+            ?.map((e) => e as String)
+            .toList(growable: false) ??
+        const [],
+    protocolTemplateId: json['protocol_template_id'] as String?,
+    recordedSides:
+        (json['recorded_sides'] as List?)?.cast<String>() ?? const [],
+    boardModels:
+        (json['board_models'] as Map?)?.cast<String, String>() ?? const {},
+    firmwareVersions:
+        (json['firmware_versions'] as Map?)?.cast<String, String>() ?? const {},
+    sequenceGaps:
+        (json['sequence_gaps'] as Map?)?.map(
+          (key, value) => MapEntry(key as String, value as int),
+        ) ??
+        const {},
+    dropCounts:
+        (json['drop_counts'] as Map?)?.map(
+          (key, value) => MapEntry(key as String, value as int),
+        ) ??
+        const {},
+    sampleQueueDrops: _intMap(json['sample_queue_drops']),
+    imuFifoFaults: _intMap(json['imu_fifo_faults']),
+    imuFifoDroppedSamples: _intMap(json['imu_fifo_dropped_samples']),
+    startAcknowledgedUs:
+        (json['start_acknowledged_us'] as Map?)?.map(
+          (key, value) => MapEntry(key as String, value as int),
+        ) ??
+        const {},
+    startDeltaUs: json['start_delta_us'] as int?,
+    recoveredSamples: _intMap(json['recovered_samples']),
+    unrecoveredSamples: _intMap(json['unrecovered_samples']),
+    replayAttempts: _intMap(json['replay_attempts']),
+    transportFailures: _intMap(json['transport_failures']),
+    firmwareProducedSamples: _intMap(json['firmware_produced_samples']),
+    firmwareNotifiedSamples: _intMap(json['firmware_notified_samples']),
+    queueDepth: _intMap(json['queue_depth']),
+    degradationReason: json['degradation_reason'] as String?,
+    schemaVersion: json['schema_version'] as int? ?? 1,
+    protocolVersion: json['protocol_version'] as String? ?? '1.1.0',
+  );
+
+  static Map<String, int> _intMap(Object? value) =>
+      (value as Map?)?.map(
+        (key, item) => MapEntry(key as String, (item as num).toInt()),
+      ) ??
+      const {};
 }
 
 /// One IMU sample buffered during recording, enriched with wheel side +
@@ -212,11 +312,18 @@ class BufferedSample {
   /// Phone epoch ms when the batch was received (has BLE jitter).
   final int timestampAppMs;
 
-  /// Synced timeline ms (after offset/drift correction). When `utcOffsetMs` is
-  /// set, this is an absolute UTC epoch millisecond value; otherwise it is
-  /// relative to the sync-engine reference.
+  /// Synced timeline milliseconds from the synchronized START. Absolute UTC
+  /// is stored only in [SessionMeta.utcStartMs].
   final double timestampSyncedMs;
 
   /// True if a Mark Event was active when this sample was buffered.
   final bool marker;
+
+  BufferedSample copyWith({double? timestampSyncedMs}) => BufferedSample(
+    reading: reading,
+    wheel: wheel,
+    timestampAppMs: timestampAppMs,
+    timestampSyncedMs: timestampSyncedMs ?? this.timestampSyncedMs,
+    marker: marker,
+  );
 }

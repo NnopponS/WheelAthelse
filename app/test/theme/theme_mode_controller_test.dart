@@ -80,8 +80,9 @@ void main() {
       ctrl.dispose();
     });
 
-    testWidgets('resolves system mode against platform brightness',
-        (tester) async {
+    testWidgets('resolves system mode against platform brightness', (
+      tester,
+    ) async {
       final ctrl = ThemeModeController(ThemeMode.system);
       late bool result;
       await tester.pumpWidget(

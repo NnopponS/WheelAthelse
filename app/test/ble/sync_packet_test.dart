@@ -21,6 +21,69 @@ Uint8List _syncResponseEvent({
 }
 
 void main() {
+  test('parses protocol 1.3 REPLAY_RESULT', () {
+    final bytes = Uint8List(10);
+    final data = ByteData.sublistView(bytes)
+      ..setUint8(0, SyncEventId.replayResult)
+      ..setUint32(1, 42, Endian.little)
+      ..setUint16(5, 4, Endian.little)
+      ..setUint16(7, 4, Endian.little)
+      ..setUint8(9, 0);
+    final event = SyncEvent.parse(bytes) as ReplayResultEvent;
+    expect(event.startSeq, 42);
+    expect(event.complete, isTrue);
+  });
+
+  test('parses protocol 1.6 ACQ_HEALTH', () {
+    final bytes = Uint8List(20);
+    final data = ByteData.sublistView(bytes)
+      ..setUint8(0, SyncEventId.acqHealth)
+      ..setUint8(1, 2)
+      ..setUint32(2, 1001, Endian.little)
+      ..setUint32(6, 999, Endian.little)
+      ..setUint32(10, 2, Endian.little)
+      ..setUint32(14, 3, Endian.little)
+      ..setUint16(18, 4, Endian.little);
+    final event = SyncEvent.parse(bytes) as AcqHealthEvent;
+    expect(event.acquisitionState, 2);
+    expect(event.producedSamples, 1001);
+    expect(event.notifiedSamples, 999);
+    expect(event.queueDrops, 2);
+    expect(event.transportFailures, 3);
+    expect(event.queueDepth, 4);
+    expect(event.fifoFaults, 0);
+    expect(event.fifoDroppedSamples, 0);
+  });
+
+  test('parses protocol 1.6.1 split queue-drop and FIFO-fault telemetry', () {
+    final bytes = Uint8List(28);
+    final data = ByteData.sublistView(bytes)
+      ..setUint8(0, SyncEventId.acqHealth)
+      ..setUint8(1, 4)
+      ..setUint32(2, 1007, Endian.little)
+      ..setUint32(6, 999, Endian.little)
+      ..setUint32(10, 2, Endian.little)
+      ..setUint32(14, 3, Endian.little)
+      ..setUint16(18, 4, Endian.little)
+      ..setUint32(20, 5, Endian.little)
+      ..setUint32(24, 6, Endian.little);
+
+    final event = SyncEvent.parse(bytes) as AcqHealthEvent;
+    expect(event.queueDrops, 2);
+    expect(event.fifoFaults, 5);
+    expect(event.fifoDroppedSamples, 6);
+  });
+
+  test('keeps legacy 0x60 replay result reader', () {
+    final bytes = Uint8List(10);
+    final data = ByteData.sublistView(bytes)
+      ..setUint8(0, 0x60)
+      ..setUint32(1, 7, Endian.little)
+      ..setUint16(5, 2, Endian.little)
+      ..setUint16(7, 2, Endian.little)
+      ..setUint8(9, 0);
+    expect((SyncEvent.parse(bytes) as ReplayResultEvent).complete, isTrue);
+  });
   group('SyncEvent.parse', () {
     test('parses SYNC_RESPONSE (0x00) with 12B payload at offsets 1/5/9', () {
       final bytes = _syncResponseEvent(
@@ -66,19 +129,22 @@ void main() {
       expect(event.utcStartMs, 0); // legacy 5-byte format → 0
     });
 
-    test('parses extended START_FIRED (v1.1.0) with utc_start_ms at offset 5', () {
-      final bytes = _event(0x30, [
-        ..._u32LE(5000000),
-        ..._u64LE(1719691200456),
-      ]);
-      expect(bytes.length, 13);
+    test(
+      'parses extended START_FIRED (v1.1.0) with utc_start_ms at offset 5',
+      () {
+        final bytes = _event(0x30, [
+          ..._u32LE(5000000),
+          ..._u64LE(1719691200456),
+        ]);
+        expect(bytes.length, 13);
 
-      final event = SyncEvent.parse(bytes);
-      expect(event, isA<StartFiredEvent>());
-      final s = event as StartFiredEvent;
-      expect(s.tDeviceUs, 5000000);
-      expect(s.utcStartMs, 1719691200456);
-    });
+        final event = SyncEvent.parse(bytes);
+        expect(event, isA<StartFiredEvent>());
+        final s = event as StartFiredEvent;
+        expect(s.tDeviceUs, 5000000);
+        expect(s.utcStartMs, 1719691200456);
+      },
+    );
 
     test('parses START_FIRED with utc_start_ms=0 when UTC not set', () {
       final bytes = _event(0x30, [..._u32LE(5000000), ..._u64LE(0)]);
@@ -134,10 +200,7 @@ void main() {
 
     test('throws ArgumentError when DROP_COUNT payload is truncated', () {
       // 0x10 + only 2 bytes instead of 4
-      expect(
-        () => SyncEvent.parse(_event(0x10, [0, 0])),
-        throwsArgumentError,
-      );
+      expect(() => SyncEvent.parse(_event(0x10, [0, 0])), throwsArgumentError);
     });
 
     test('throws ArgumentError when START_FIRED payload is truncated', () {
@@ -183,6 +246,8 @@ void main() {
       expect(SyncEventId.startFired, 0x30);
       expect(SyncEventId.stopFired, 0x40);
       expect(SyncEventId.utcSet, 0x50);
+      expect(SyncEventId.acqHealth, 0x60);
+      expect(SyncEventId.replayResult, 0x61);
     });
   });
 }

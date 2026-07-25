@@ -1,11 +1,11 @@
 # WheelAthlete Wiki — Home
 
-> **Version:** v0.1.0 (Data Collection MVP, pre-release)
+> **Version:** v1.7.0 (Dual-wheel reliability release)
 > **Repo:** [NnopponS/WheelAthelse](https://github.com/NnopponS/WheelAthelse)
 > **Languages:** [English](../README.md) · [ภาษาไทย](../README.th.md)
 
 Welcome to the WheelAthlete wiki. This is the detailed reference for the
-v0.1.0 release. For a quick start, read the [README](../README.md) first.
+v1.7.0 release. For a quick start, read the [README](../README.md) first.
 
 ## Pages
 
@@ -19,19 +19,19 @@ v0.1.0 release. For a quick start, read the [README](../README.md) first.
 | [Build-Guide](Build-Guide.md) | Firmware flash + Flutter app build, troubleshooting |
 | [Field-Protocol](Field-Protocol.md) | Step-by-step data collection procedure |
 | [Testing](Testing.md) | Test strategy, coverage, evidence reports |
-| [Roadmap](Roadmap.md) | What's done in v0.1.0 + planned phases |
+| [Roadmap](Roadmap.md) | Release history + planned phases |
 | [Changelog](Changelog.md) | Per-version change log |
 
-## v0.1.0 at a glance
+## v1.7.0 at a glance
 
-- **Firmware:** 0.2.0 (M5StickCPlus2, ESP32, NimBLE)
-- **App:** 1.0.0+1 (Flutter, iOS + Android, Riverpod)
-- **BLE Protocol:** 1.1.0
-- **Status:** pre-release — data collection only, no ML yet
+- **Firmware:** 1.7.0 (M5StickCPlus2 + Xiao BLE Sense)
+- **App:** 1.7.0+8 (Flutter, iOS + Android, Riverpod)
+- **BLE Protocol:** 1.7.0
+- **Status:** stable data-collection release — no ML training or inference
 
 ## Quick links
 
-- [GitHub Release v0.1.0](https://github.com/NnopponS/WheelAthelse/releases/tag/v0.1.0)
+- [GitHub Release v1.7.0](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.7.0)
 - [BLE protocol spec (canonical)](../ble-protocol.md)
 - [Field data collection protocol](../data-collection-protocol.md)
 - [Architecture — Phase 1](../../.project/architecture.md)

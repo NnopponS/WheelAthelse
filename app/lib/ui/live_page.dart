@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/home_providers.dart';
 import 'package:wheelathlete/state/imu_providers.dart';
+import 'package:wheelathlete/state/live_acquisition_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/record_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart';
@@ -21,22 +22,18 @@ class LivePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(imuStreamProvider.notifier);
+    final live = ref.watch(liveAcquisitionProvider);
 
     // Use `select` so the page shell only rebuilds on connection/streaming
     // status changes, not on every IMU sample. The per-wheel panels subscribe
     // to their own side data below.
     final anyConnected = ref.watch(
       connectionManagerProvider.select(
-        (s) => s.bySide.values.any((c) => c.status == ConnectionStatus.connected),
+        (s) =>
+            s.bySide.values.any((c) => c.status == ConnectionStatus.connected),
       ),
     );
-    final anyStreaming = ref.watch(
-      imuStreamProvider.select(
-        (s) => s.bySide.values.any((v) => v.streaming),
-      ),
-    );
-    final connForToggle = ref.read(connectionManagerProvider);
+    final anyStreaming = live.active;
 
     return Scaffold(
       appBar: AppBar(
@@ -45,64 +42,49 @@ class LivePage extends ConsumerWidget {
           IconButton(
             onPressed: anyConnected
                 ? () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const RecordPage(),
-                      ),
-                    )
+                    MaterialPageRoute<void>(builder: (_) => const RecordPage()),
+                  )
                 : null,
             icon: const Icon(Icons.fiber_manual_record_rounded),
             tooltip: 'Record',
           ),
           IconButton(
-            onPressed: () =>
-                ref.read(homeTabIndexProvider.notifier).setTab(2),
+            onPressed: () => ref.read(homeTabIndexProvider.notifier).setTab(2),
             icon: const Icon(Icons.folder_open_rounded),
             tooltip: 'Browse',
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.md),
+      body: const SingleChildScrollView(
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _WheelPanel(side: WheelSide.left),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             _WheelPanel(side: WheelSide.right),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         key: startButtonKey,
-        onPressed: anyConnected
-            ? () => _toggleAll(notifier, anyStreaming, connForToggle)
+        onPressed: anyConnected && live.canToggle
+            ? () => anyStreaming
+                  ? ref.read(liveAcquisitionProvider.notifier).stop()
+                  : ref.read(liveAcquisitionProvider.notifier).start()
             : null,
-        icon: Icon(anyStreaming ? Icons.stop_rounded : Icons.play_arrow_rounded),
-        label: Text(anyStreaming ? 'Stop' : 'Start'),
+        icon: Icon(
+          anyStreaming || live.status == LiveAcquisitionStatus.stopping
+              ? Icons.stop_rounded
+              : Icons.play_arrow_rounded,
+        ),
+        label: Text(
+          anyStreaming || live.status == LiveAcquisitionStatus.stopping
+              ? 'Stop'
+              : 'Start',
+        ),
       ),
     );
-  }
-
-  Future<void> _toggleAll(
-    ImuStreamNotifier notifier,
-    bool anyStreaming,
-    ConnectionManagerState conn,
-  ) async {
-    // Start/stop both wheels in parallel so the BLE stack sets up both
-    // notification channels at the same time. Sequential start causes the
-    // second wheel's setNotifyValue to race with the first wheel's active
-    // notification stream, leading to packet drops on the second board.
-    final futures = <Future<void>>[];
-    for (final side in WheelSide.values) {
-      if (conn.bySide[side]!.status == ConnectionStatus.connected) {
-        if (anyStreaming) {
-          futures.add(notifier.stop(side));
-        } else {
-          futures.add(notifier.start(side));
-        }
-      }
-    }
-    await Future.wait(futures);
   }
 }
 
@@ -132,7 +114,11 @@ class _WheelPanel extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _PanelHeader(side: side, connection: connection, imuState: imuState),
+            _PanelHeader(
+              side: side,
+              connection: connection,
+              imuState: imuState,
+            ),
             const SizedBox(height: AppSpacing.sm),
             if (connection.status != ConnectionStatus.connected)
               const Padding(
@@ -151,8 +137,8 @@ class _WheelPanel extends ConsumerWidget {
                 child: Text(
                   imuState.error!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ),
           ],
@@ -185,10 +171,13 @@ class _PanelHeader extends StatelessWidget {
           tone: side == WheelSide.left ? BadgeTone.left : BadgeTone.right,
         ),
         const SizedBox(width: AppSpacing.sm),
-        Text(label, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: role.onContainer,
-              fontWeight: FontWeight.bold,
-            )),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: role.onContainer,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const Spacer(),
         if (imuState.streaming)
           const _LiveDot()
@@ -207,7 +196,11 @@ class _LiveDot extends StatelessWidget {
     // Static red dot — a blinking animation would make pumpAndSettle time
     // out in tests (the frame loop never quiesces). The streaming state is
     // already conveyed by the FAB label + sample counter.
-    return Icon(Icons.circle, size: 10, color: Theme.of(context).colorScheme.error);
+    return Icon(
+      Icons.circle,
+      size: 10,
+      color: Theme.of(context).colorScheme.error,
+    );
   }
 }
 
@@ -238,10 +231,7 @@ class _MetricGrid extends StatelessWidget {
       children: [
         // Realtime scrolling line charts: accel above gyro, each with a
         // section label and per-axis legend (x/y/z).
-        _ChartLabel(
-          title: 'Accelerometer (g)',
-          axisColors: axisColors,
-        ),
+        _ChartLabel(title: 'Accelerometer (g)', axisColors: axisColors),
         const SizedBox(height: AppSpacing.xxs),
         ImuChart(
           readings: imuState.recent,
@@ -249,10 +239,7 @@ class _MetricGrid extends StatelessWidget {
           axisColors: axisColors,
         ),
         const SizedBox(height: AppSpacing.xs),
-        _ChartLabel(
-          title: 'Gyroscope (°/s)',
-          axisColors: axisColors,
-        ),
+        _ChartLabel(title: 'Gyroscope (°/s)', axisColors: axisColors),
         const SizedBox(height: AppSpacing.xxs),
         ImuChart(
           readings: imuState.recent,
@@ -265,12 +252,42 @@ class _MetricGrid extends StatelessWidget {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
-            LiveMetricTile(label: 'Accel X', value: r.ax, unit: 'g', side: side),
-            LiveMetricTile(label: 'Accel Y', value: r.ay, unit: 'g', side: side),
-            LiveMetricTile(label: 'Accel Z', value: r.az, unit: 'g', side: side),
-            LiveMetricTile(label: 'Gyro X', value: r.gx, unit: '°/s', side: side),
-            LiveMetricTile(label: 'Gyro Y', value: r.gy, unit: '°/s', side: side),
-            LiveMetricTile(label: 'Gyro Z', value: r.gz, unit: '°/s', side: side),
+            LiveMetricTile(
+              label: 'Accel X',
+              value: r.ax,
+              unit: 'g',
+              side: side,
+            ),
+            LiveMetricTile(
+              label: 'Accel Y',
+              value: r.ay,
+              unit: 'g',
+              side: side,
+            ),
+            LiveMetricTile(
+              label: 'Accel Z',
+              value: r.az,
+              unit: 'g',
+              side: side,
+            ),
+            LiveMetricTile(
+              label: 'Gyro X',
+              value: r.gx,
+              unit: '°/s',
+              side: side,
+            ),
+            LiveMetricTile(
+              label: 'Gyro Y',
+              value: r.gy,
+              unit: '°/s',
+              side: side,
+            ),
+            LiveMetricTile(
+              label: 'Gyro Z',
+              value: r.gz,
+              unit: '°/s',
+              side: side,
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -292,17 +309,17 @@ class _StatsLine extends StatelessWidget {
       children: [
         Text(
           '${imuState.sampleCount} samples',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
         if (imuState.dropCount > 0)
           Text(
             '${imuState.dropCount} dropped',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: Theme.of(context).colorScheme.error,
+              fontWeight: FontWeight.bold,
+            ),
           ),
       ],
     );
@@ -327,9 +344,9 @@ class _ChartLabel extends StatelessWidget {
         Text(
           title,
           style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(width: AppSpacing.sm),
         for (var i = 0; i < 3; i++) ...[
@@ -345,8 +362,8 @@ class _ChartLabel extends StatelessWidget {
           Text(
             axes[i],
             style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+              color: scheme.onSurfaceVariant,
+            ),
           ),
           if (i < 2) const SizedBox(width: AppSpacing.sm),
         ],

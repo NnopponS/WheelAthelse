@@ -58,8 +58,9 @@ void main() {
     expect(find.text('Experiments'), findsNothing);
   });
 
-  testWidgets('starts on Connect tab — shows ConnectionCard content',
-      (tester) async {
+  testWidgets('starts on Connect tab — shows ConnectionCard content', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     // Connect tab is active; ConnectPage shows its two ConnectionCards.
@@ -88,8 +89,7 @@ void main() {
     expect(find.text('Browse'), findsWidgets);
   });
 
-  testWidgets('tapping Browse tab reveals New Template FAB',
-      (tester) async {
+  testWidgets('tapping Browse tab reveals New Template FAB', (tester) async {
     await pumpHome(tester);
 
     await tester.tap(find.text('Browse'));
@@ -100,8 +100,9 @@ void main() {
     expect(find.text('New Template'), findsOneWidget);
   });
 
-  testWidgets('Live page Browse button switches to the bottom-nav Browse tab',
-      (tester) async {
+  testWidgets('Live page Browse button switches to the bottom-nav Browse tab', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.tap(find.text('Live'));
@@ -109,7 +110,9 @@ void main() {
     expect(find.text('Live IMU'), findsOneWidget);
 
     // Tap the folder icon in the Live AppBar (tooltip 'Browse').
-    await tester.tap(find.widgetWithIcon(IconButton, Icons.folder_open_rounded));
+    await tester.tap(
+      find.widgetWithIcon(IconButton, Icons.folder_open_rounded),
+    );
     await tester.pump(const Duration(milliseconds: 100));
 
     // Should now be on the Browse tab: Browse AppBar shows and Live content
@@ -119,8 +122,9 @@ void main() {
     expect(find.text('New Template'), findsOneWidget);
   });
 
-  testWidgets('switching tabs back to Connect restores Connect content',
-      (tester) async {
+  testWidgets('switching tabs back to Connect restores Connect content', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.tap(find.text('Live'));
@@ -147,7 +151,9 @@ void main() {
     expect(find.byTooltip('Theme mode'), findsOneWidget);
   });
 
-  testWidgets('theme toggle opens popup with System/Light/Dark', (tester) async {
+  testWidgets('theme toggle opens popup with System/Light/Dark', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.tap(find.byTooltip('Theme mode'));

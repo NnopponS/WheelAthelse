@@ -15,21 +15,22 @@ void main() {
     int target = 5,
     int sessions = 2,
     DateTime? lastDate,
-  }) =>
-      ExperimentProgress(
-        template: ProtocolTemplate(
-          id: 't1',
-          name: name,
-          description: description,
-          topicName: 'sprint_20m',
-          targetTrialCount: target,
-          createdAt: DateTime(2026, 1, 1),
-        ),
-        sessionCount: sessions,
-        lastSessionDate: lastDate,
-      );
+  }) => ExperimentProgress(
+    template: ProtocolTemplate(
+      id: 't1',
+      name: name,
+      description: description,
+      topicName: 'sprint_20m',
+      targetTrialCount: target,
+      createdAt: DateTime(2026, 1, 1),
+    ),
+    sessionCount: sessions,
+    lastSessionDate: lastDate,
+  );
 
-  testWidgets('renders name, description, progress bar and count', (tester) async {
+  testWidgets('renders name, description, progress bar and count', (
+    tester,
+  ) async {
     await pumpThemed(
       tester,
       ProtocolTemplateCard(
@@ -46,9 +47,7 @@ void main() {
   testWidgets('hides description when null', (tester) async {
     await pumpThemed(
       tester,
-      ProtocolTemplateCard(
-        progress: makeProgress(description: null),
-      ),
+      ProtocolTemplateCard(progress: makeProgress(description: null)),
     );
     expect(find.text('20m Sprint'), findsOneWidget);
     expect(find.text('Max effort from standing start'), findsNothing);

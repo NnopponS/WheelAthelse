@@ -111,6 +111,34 @@ void main() {
   });
 
   group('ConnectionManagerNotifier battery + RSSI', () {
+    test(
+      'connect publishes the initial battery value without waiting for change',
+      () async {
+        final seeded = FakeBleRepository(
+          devices: const [
+            FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+          ],
+          infoFor: const {'L1': _leftInfo},
+          initialBatteryFor: const {'L1': 87},
+        );
+        final c = ProviderContainer(
+          overrides: [
+            bleRepositoryProvider.overrideWith((ref) => seeded),
+            rssiPollIntervalProvider.overrideWith((ref) => null),
+          ],
+        );
+        addTearDown(c.dispose);
+        await c.read(connectionManagerProvider.notifier).connect('L1');
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          c
+              .read(connectionManagerProvider)
+              .bySide[WheelSide.left]!
+              .batteryPercent,
+          87,
+        );
+      },
+    );
     test('connect sets rssi from readRssi immediately', () async {
       final manager = container.read(connectionManagerProvider.notifier);
       await manager.connect('L1');
@@ -119,17 +147,19 @@ void main() {
       expect(s.bySide[WheelSide.left]!.rssi, -42);
     });
 
-    test('connect subscribes to battery stream and updates batteryPercent',
-        () async {
-      final manager = container.read(connectionManagerProvider.notifier);
-      await manager.connect('L1');
-      // Initially null — no battery notification yet.
-      expect(state().bySide[WheelSide.left]!.batteryPercent, isNull);
-      // Push a battery value.
-      ble.batteryController('L1')!.add(92);
-      await Future<void>.delayed(Duration.zero);
-      expect(state().bySide[WheelSide.left]!.batteryPercent, 92);
-    });
+    test(
+      'connect subscribes to battery stream and updates batteryPercent',
+      () async {
+        final manager = container.read(connectionManagerProvider.notifier);
+        await manager.connect('L1');
+        // Initially null — no battery notification yet.
+        expect(state().bySide[WheelSide.left]!.batteryPercent, isNull);
+        // Push a battery value.
+        ble.batteryController('L1')!.add(92);
+        await Future<void>.delayed(Duration.zero);
+        expect(state().bySide[WheelSide.left]!.batteryPercent, 92);
+      },
+    );
 
     test('battery stream updates multiple times', () async {
       final manager = container.read(connectionManagerProvider.notifier);
@@ -180,8 +210,10 @@ void main() {
       final manager = c.read(connectionManagerProvider.notifier);
       await manager.connect('L1');
       // Initial rssi from connect's readRssi.
-      expect(c.read(connectionManagerProvider).bySide[WheelSide.left]!.rssi,
-          -42);
+      expect(
+        c.read(connectionManagerProvider).bySide[WheelSide.left]!.rssi,
+        -42,
+      );
       // Change the rssi that readRssi will return, then fire the timer.
       ble2.rssiValue = -60;
       // Manually trigger the periodic callback by waiting for the timer.

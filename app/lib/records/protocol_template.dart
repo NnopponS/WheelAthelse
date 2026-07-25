@@ -45,14 +45,14 @@ class ProtocolTemplate {
   final DateTime createdAt;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'topic_name': topicName,
-        'target_trial_count': targetTrialCount,
-        'sample_rate_hz': sampleRateHz,
-        'created_at': createdAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'description': description,
+    'topic_name': topicName,
+    'target_trial_count': targetTrialCount,
+    'sample_rate_hz': sampleRateHz,
+    'created_at': createdAt.toUtc().toIso8601String(),
+  };
 
   factory ProtocolTemplate.fromJson(Map<String, dynamic> json) {
     final sampleRate = json['sample_rate_hz'];
@@ -73,14 +73,13 @@ class ProtocolTemplate {
     String? topicName,
     int? targetTrialCount,
     int? sampleRateHz,
-  }) =>
-      ProtocolTemplate(
-        id: id,
-        name: name ?? this.name,
-        description: description ?? this.description,
-        topicName: topicName ?? this.topicName,
-        targetTrialCount: targetTrialCount ?? this.targetTrialCount,
-        sampleRateHz: sampleRateHz ?? this.sampleRateHz,
-        createdAt: createdAt,
-      );
+  }) => ProtocolTemplate(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    topicName: topicName ?? this.topicName,
+    targetTrialCount: targetTrialCount ?? this.targetTrialCount,
+    sampleRateHz: sampleRateHz ?? this.sampleRateHz,
+    createdAt: createdAt,
+  );
 }
