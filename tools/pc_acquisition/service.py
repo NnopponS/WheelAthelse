@@ -268,9 +268,19 @@ class AcquisitionService:
                 struct.pack("<BBB", CMD_SET_RANGE, accel, gyro),
                 response=True,
             )
+            # SET_RANGE changes both the range codes and the raw->physical
+            # conversion scales exposed by the Info characteristic. Re-read
+            # that characteristic before reporting success so every UI and
+            # exported metadata snapshot uses the firmware-authoritative scale
+            # immediately rather than a stale value from connection time.
+            refreshed = _parse_info(await self.transport.read(device_id, INFO_UUID))
+            if _side(refreshed["side"]) is not side:
+                raise RuntimeError(
+                    f"Info wheel changed after SET_RANGE: expected {side.value}, "
+                    f"got {refreshed['side']}"
+                )
             if side in self._device_info:
-                self._device_info[side]["accel_range"] = accel
-                self._device_info[side]["gyro_range"] = gyro
+                self._device_info[side].update(refreshed)
         return {"side": side.value, "configured": True}
 
     async def _cmd_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -291,6 +301,7 @@ class AcquisitionService:
 
     async def _cmd_scheduled_start(self, payload: dict[str, Any]) -> dict[str, Any]:
         sides = self._selected_sides(payload)
+        await self.engine.reset_sequences(sides)
         result = await self.lifecycle.scheduled_start(
             sides,
             lead_time_s=float(payload.get("lead_time_s", 3.0)),
@@ -331,6 +342,9 @@ class AcquisitionService:
         self._metric_baseline = {
             side: dataclasses.replace(self.engine.metrics(side)) for side in sides
         }
+        acceptance = payload.get("acceptance")
+        if acceptance is not None and not isinstance(acceptance, dict):
+            raise ValueError("acceptance metadata must be an object")
         metadata = {
             "athlete": str(payload.get("athlete", "")),
             "topic": str(payload.get("topic", "")),
@@ -339,6 +353,7 @@ class AcquisitionService:
             "sample_rate_hz": int(payload.get("sample_rate_hz", 100)),
             "protocol_template_id": payload.get("protocol_template_id"),
             "tags": [str(item) for item in payload.get("tags", [])],
+            "acceptance": dict(acceptance) if acceptance is not None else None,
             "boards": {side.value: self._device_info.get(side, {}) for side in sides},
         }
         journal.append_metadata(metadata)
@@ -349,6 +364,9 @@ class AcquisitionService:
             for side in sides:
                 model = await self.lifecycle.synchronize(side, count=sync_count)
                 journal.append_json(RecordKind.SYNC, self._clock_payload(side, model))
+            # XIAO firmware resets seq to zero on each START; mirror that epoch
+            # boundary after sync traffic has drained and before scheduling T0.
+            await self.engine.reset_sequences(sides)
             start = await self.lifecycle.scheduled_start(
                 sides,
                 lead_time_s=float(payload.get("lead_time_s", 3.0)),

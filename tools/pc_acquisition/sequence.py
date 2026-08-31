@@ -33,6 +33,12 @@ class SequenceTracker:
         self._recent_order: deque[int] = deque(maxlen=recent_window)
         self._recent: set[int] = set()
 
+    def reset(self) -> None:
+        """Start a new firmware sequence epoch at the next observed sample."""
+        self._last = None
+        self._recent_order.clear()
+        self._recent.clear()
+
     def _remember(self, seq: int) -> None:
         if len(self._recent_order) == self._recent_order.maxlen:
             evicted = self._recent_order[0]

@@ -329,11 +329,16 @@ class JournalReader:
             finalized=finalized,
         )
 
-    def read_all(self) -> list[JournalRecord]:
+    def iter_records(self):
+        """Yield validated records without retaining the whole journal in RAM.
+
+        Physical acceptance can contain hundreds of thousands of samples. A
+        streaming iterator keeps evidence summarization bounded while still
+        validating the complete CRC-framed file before yielding any record.
+        """
         validation = self.validate()
         if validation.truncated_tail or validation.checksum_error:
             raise JournalFormatError("journal contains an invalid tail; recover it first")
-        records: list[JournalRecord] = []
         with self.path.open("rb") as handle:
             handle.seek(_HEADER.size)
             for _ in range(validation.valid_records):
@@ -343,8 +348,10 @@ class JournalReader:
                 payload = handle.read(payload_len)
                 handle.read(_CRC.size)
                 kind = RecordKind(kind_raw)
-                records.append(self._decode_record(kind, payload))
-        return records
+                yield self._decode_record(kind, payload)
+
+    def read_all(self) -> list[JournalRecord]:
+        return list(self.iter_records())
 
     def _decode_record(self, kind: RecordKind, payload: bytes) -> JournalRecord:
         if kind is RecordKind.SAMPLE:

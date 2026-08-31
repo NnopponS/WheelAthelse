@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "case_id": "50hz-120s-0p5m",
+      "cycles": 1,
+      "description": "50 Hz rate validation at close range",
+      "distance_m": 0.5,
+      "duration_s": 120,
+      "rate_hz": 50
+    },
+    {
+      "case_id": "100hz-120s-0p5m",
+      "cycles": 1,
+      "description": "100 Hz short baseline",
+      "distance_m": 0.5,
+      "duration_s": 120,
+      "rate_hz": 100
+    },
+    {
+      "case_id": "200hz-120s-0p5m",
+      "cycles": 1,
+      "description": "200 Hz high-rate validation",
+      "distance_m": 0.5,
+      "duration_s": 120,
+      "rate_hz": 200
+    },
+    {
+      "case_id": "100hz-120s-2m",
+      "cycles": 1,
+      "description": "100 Hz medium-distance RF validation",
+      "distance_m": 2.0,
+      "duration_s": 120,
+      "rate_hz": 100
+    },
+    {
+      "case_id": "100hz-120s-5m",
+      "cycles": 1,
+      "description": "100 Hz maximum planned-distance RF validation",
+      "distance_m": 5.0,
+      "duration_s": 120,
+      "rate_hz": 100
+    },
+    {
+      "case_id": "100hz-600s-0p5m",
+      "cycles": 1,
+      "description": "100 Hz ten-minute sustained acquisition",
+      "distance_m": 0.5,
+      "duration_s": 600,
+      "rate_hz": 100
+    },
+    {
+      "case_id": "100hz-startstop-20x-0p5m",
+      "cycles": 20,
+      "description": "20 synchronized Start/Stop lifecycle cycles",
+      "distance_m": 0.5,
+      "duration_s": 10,
+      "rate_hz": 100
+    },
+    {
+      "case_id": "100hz-1800s-0p5m",
+      "cycles": 1,
+      "description": "100 Hz thirty-minute sustained acceptance run",
+      "distance_m": 0.5,
+      "duration_s": 1800,
+      "rate_hz": 100
+    }
+  ],
+  "desired_requirements": {
+    "start_skew_ns_max": 5000000
+  },
+  "hard_requirements": {
+    "duplicates": 0,
+    "effective_rate_error_fraction_max": 0.05,
+    "fifo_dropped_samples": 0,
+    "fifo_faults": 0,
+    "final_quality": "GOOD",
+    "firmware_queue_drops": 0,
+    "host_queue_overflow": 0,
+    "malformed_packets": 0,
+    "minimum_mtu": 185,
+    "out_of_order": 0,
+    "produced_equals_notified_equals_received_equals_journal": true,
+    "sequence_gaps": 0,
+    "start_skew_less_than_one_sample_period": true,
+    "transport_failures": 0,
+    "two_xiao_boards": true
+  },
+  "planned_recording_s": 3200,
+  "schema_version": 1,
+  "type": "wheelathlete_physical_acceptance_plan"
+}

@@ -67,6 +67,21 @@ class BoardIngestor:
     def set_sync_sink(self, sink: SyncSink | None) -> None:
         self._sync_sink = sink
 
+    def reset_sequence(self) -> None:
+        """Reset host sequence classification at a firmware START boundary.
+
+        Firmware resets its IMU sequence counter on every START. The host must
+        begin a matching sequence epoch only after all notifications from the
+        previous acquisition have drained; otherwise a real late packet could
+        be mistaken for the first sample of the next recording.
+        """
+        if not self._queue.empty():
+            raise RuntimeError(
+                f"cannot reset {self.side.value} sequence with pending notifications"
+            )
+        self._sequence.reset()
+        self._last_preview_ns = None
+
     async def start(self) -> None:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(
@@ -258,6 +273,13 @@ class DualBoardEngine:
 
     async def join(self) -> None:
         await asyncio.gather(*(ing.join() for ing in self._ingestors.values()))
+
+    async def reset_sequences(self, sides: tuple[WheelSide, ...]) -> None:
+        # Drain first so a packet from the previous firmware sequence epoch can
+        # never cross the reset boundary.
+        await self.join()
+        for side in sides:
+            self._ingestors[side].reset_sequence()
 
     async def stop(self) -> None:
         for side in list(self._device_by_side):

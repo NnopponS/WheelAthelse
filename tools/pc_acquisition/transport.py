@@ -60,21 +60,36 @@ class BleakTransport:
         self._callbacks: dict[tuple[str, str], object] = {}
 
     async def scan(self, timeout_s: float = 5.0) -> list[DeviceCandidate]:
-        devices = await self._BleakScanner.discover(timeout=timeout_s)
+        # Bleak >=0.22 can return AdvertisementData alongside BLEDevice. RSSI
+        # belongs to AdvertisementData on current releases; reading device.rssi
+        # alone silently loses the measurement needed by physical acceptance.
+        discovered = await self._BleakScanner.discover(
+            timeout=timeout_s, return_adv=True
+        )
         result: list[DeviceCandidate] = []
-        for device in devices:
-            name = getattr(device, "name", None) or ""
-            # Some Windows advertisements do not expose service UUIDs through
-            # the simple discover() object, so name filtering is only the first
-            # pass; connect/probe remains authoritative.
-            if name.startswith("WheelAthlete"):
-                result.append(
-                    DeviceCandidate(
-                        device_id=str(device.address),
-                        name=name,
-                        rssi=getattr(device, "rssi", None),
-                    )
+        for device, advertisement in discovered.values():
+            name = (
+                getattr(device, "name", None)
+                or getattr(advertisement, "local_name", None)
+                or ""
+            )
+            service_uuids = {
+                str(value).lower()
+                for value in (getattr(advertisement, "service_uuids", None) or [])
+            }
+            if not (
+                name.startswith("WheelAthlete")
+                or SERVICE_UUID.lower() in service_uuids
+            ):
+                continue
+            rssi = getattr(advertisement, "rssi", None)
+            result.append(
+                DeviceCandidate(
+                    device_id=str(device.address),
+                    name=name or "WheelAthlete",
+                    rssi=int(rssi) if rssi is not None else None,
                 )
+            )
         return result
 
     async def connect(self, device_id: str) -> None:
