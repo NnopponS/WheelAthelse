@@ -25,6 +25,13 @@ class LifecycleError(RuntimeError):
     pass
 
 
+# Windows timer scheduling can overshoot a short asyncio sleep/wait deadline by
+# a few tens of milliseconds under concurrent Flutter/Gradle/test load. This is
+# host scheduling tolerance only; it does not alter the shared device T0 or the
+# measured START_FIRED timestamp used for synchronization/QC.
+_HOST_TIMER_SLACK_S = 0.05
+
+
 @dataclass(slots=True)
 class _PendingPing:
     t1_ns: int
@@ -157,12 +164,16 @@ class SyncLifecycleController:
         mapped: dict[WheelSide, int] = {}
         acknowledged: set[WheelSide] = set()
         # START_FIRED is expected at T0 rather than immediately after the write.
-        # Give the device all remaining lead time plus the caller's post-start
-        # acknowledgement margin before declaring a lifecycle failure.
+        # Give the device all remaining lead time, the caller's post-start ACK
+        # margin, and a small bounded host-scheduler tolerance. The tolerance
+        # only prevents a local timer race; actual mapped start time still comes
+        # from START_FIRED and therefore cannot make sync quality look better.
         remaining_to_start_s = max(
             0.0, (pc_start_ns - time.monotonic_ns()) / 1_000_000_000
         )
-        start_wait_timeout_s = remaining_to_start_s + ack_timeout_s
+        start_wait_timeout_s = (
+            remaining_to_start_s + ack_timeout_s + _HOST_TIMER_SLACK_S
+        )
         for side in selected:
             try:
                 event = await asyncio.wait_for(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import dataclasses
+import json
+import os
 import struct
 import time
 from pathlib import Path
@@ -9,11 +11,11 @@ from typing import Any, Callable
 from .clock_sync import ClockModel
 from .control import CMD_SET_RANGE, CMD_SET_RATE
 from .engine import DualBoardEngine
-from .journal import JournalRecorder, RecordKind, recover_open_journal
+from .journal import JournalReader, JournalRecorder, RecordKind, recover_open_journal
 from .models import IngestionMetrics, ReceivedSample, WheelSide
 from .qc import BoardQcInput, SessionQcInput, evaluate_session_qc
 from .transport import BleTransport
-from .uuids import CONTROL_UUID, INFO_UUID
+from .uuids import BATTERY_LEVEL_UUID, CONFIG_UUID, CONTROL_UUID, INFO_UUID
 from .lifecycle import StartResult, SyncLifecycleController
 
 
@@ -26,6 +28,17 @@ def _side(value: Any) -> WheelSide:
     if value in ("R", "right", "RIGHT"):
         return WheelSide.RIGHT
     raise ValueError(f"invalid wheel side: {value!r}")
+
+
+def _parse_config(payload: bytes) -> dict[str, Any]:
+    if len(payload) < 27:
+        raise ValueError(f"Config characteristic must be at least 27 bytes, got {len(payload)}")
+    name = payload[:24].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+    wheel = payload[24]
+    if wheel not in (0x4C, 0x52):
+        raise ValueError(f"invalid config wheel id 0x{wheel:02X}")
+    rate_hz = struct.unpack_from("<H", payload, 25)[0]
+    return {"name": name, "wheel": chr(wheel), "sample_rate_hz": rate_hz}
 
 
 def _parse_info(payload: bytes) -> dict[str, Any]:
@@ -86,6 +99,9 @@ class AcquisitionService:
         self._metric_baseline: dict[WheelSide, IngestionMetrics] = {}
         self._device_info: dict[WheelSide, dict[str, Any]] = {}
         self._last_preview: dict[WheelSide, ReceivedSample] = {}
+        self._scan_cache: dict[str, dict[str, Any]] = {}
+        self._status_rate_baseline: dict[WheelSide, tuple[int, int, int]] = {}
+        self._record_metadata: dict[str, Any] | None = None
         self.engine = DualBoardEngine(
             transport,
             sample_sink=self._on_sample,
@@ -160,6 +176,9 @@ class AcquisitionService:
             "start_record": self._cmd_start_record,
             "end_record": self._cmd_end_record,
             "recover": self._cmd_recover,
+            "list_sessions": self._cmd_list_sessions,
+            "export_session": self._cmd_export_session,
+            "diagnostic_report": self._cmd_diagnostic_report,
         }
         try:
             handler = handlers[command]
@@ -173,6 +192,7 @@ class AcquisitionService:
             raise ValueError("scan timeout_s must be between 0.1 and 30")
         devices = await self.transport.scan(timeout_s)
         result = [dataclasses.asdict(device) for device in devices]
+        self._scan_cache = {str(device["device_id"]): dict(device) for device in result}
         for device in result:
             self._emit("device_found", device)
         return {"devices": result}
@@ -191,6 +211,21 @@ class AcquisitionService:
             info = dict(info)
             info["device_id"] = device_id
             info["mtu"] = self.transport.negotiated_mtu(device_id)
+            candidate = self._scan_cache.get(device_id, {})
+            info["advertised_name"] = candidate.get("name")
+            info["rssi"] = candidate.get("rssi")
+            try:
+                config = _parse_config(await self.transport.read(device_id, CONFIG_UUID))
+            except Exception:
+                config = {}
+            info.update(config)
+            try:
+                battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
+                info["battery_percent"] = int(battery[0]) if battery else None
+            except Exception:
+                info["battery_percent"] = None
+            info.setdefault("sample_rate_hz", 100)
+            info.setdefault("name", info.get("advertised_name") or f"WheelAthlete-{side.value}")
             self._device_info[side] = info
             self._emit("connection_state", {**info, "state": "connected"})
             return info
@@ -220,6 +255,8 @@ class AcquisitionService:
             await self.transport.write(
                 device_id, CONTROL_UUID, struct.pack("<BH", CMD_SET_RATE, rate), response=True
             )
+            if side in self._device_info:
+                self._device_info[side]["sample_rate_hz"] = rate
         if "accel_range" in payload or "gyro_range" in payload:
             accel = int(payload.get("accel_range", self._device_info.get(side, {}).get("accel_range", 1)))
             gyro = int(payload.get("gyro_range", self._device_info.get(side, {}).get("gyro_range", 3)))
@@ -231,6 +268,9 @@ class AcquisitionService:
                 struct.pack("<BBB", CMD_SET_RANGE, accel, gyro),
                 response=True,
             )
+            if side in self._device_info:
+                self._device_info[side]["accel_range"] = accel
+                self._device_info[side]["gyro_range"] = gyro
         return {"side": side.value, "configured": True}
 
     async def _cmd_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -297,9 +337,13 @@ class AcquisitionService:
             "trial_number": int(payload.get("trial_number", 1)),
             "notes": str(payload.get("notes", "")),
             "sample_rate_hz": int(payload.get("sample_rate_hz", 100)),
+            "protocol_template_id": payload.get("protocol_template_id"),
+            "tags": [str(item) for item in payload.get("tags", [])],
             "boards": {side.value: self._device_info.get(side, {}) for side in sides},
         }
         journal.append_metadata(metadata)
+        self._record_metadata = dict(metadata)
+        self._record_metadata["session_id"] = journal.session_id
         try:
             sync_count = int(payload.get("sync_count", 10))
             for side in sides:
@@ -327,6 +371,7 @@ class AcquisitionService:
             self._record_sides = ()
             self._record_started_ns = None
             self._start_result = None
+            self._record_metadata = None
             raise
 
     async def _cmd_end_record(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -424,10 +469,23 @@ class AcquisitionService:
         }
         final_path = journal.finalize(summary)
         session_id = journal.session_id
+        metadata = dict(self._record_metadata or {})
+        manifest = {
+            **metadata,
+            **summary,
+            "session_id": session_id,
+            "journal_path": str(final_path),
+            "sample_counts": {
+                item.side.value: item.host_metrics.samples_received for item in board_qc
+            },
+            "finalized_utc_ms": int(time.time() * 1000),
+        }
+        self._write_json_atomic(final_path.with_suffix(".summary.json"), manifest)
         self._journal = None
         self._record_sides = ()
         self._record_started_ns = None
         self._start_result = None
+        self._record_metadata = None
         self._metric_baseline.clear()
         value = {
             "session_id": session_id,
@@ -445,12 +503,107 @@ class AcquisitionService:
         recovered = recover_open_journal(source)
         return {"source": str(source), "recovered": str(recovered)}
 
+    async def _cmd_list_sessions(self, payload: dict[str, Any]) -> dict[str, Any]:
+        del payload
+        sessions: list[dict[str, Any]] = []
+        for journal_path in sorted(
+            self.journal_root.glob("*.waj"), key=lambda path: path.stat().st_mtime, reverse=True
+        ):
+            manifest_path = journal_path.with_suffix(".summary.json")
+            if manifest_path.exists():
+                try:
+                    value = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    if isinstance(value, dict):
+                        sessions.append(value)
+                        continue
+                except (OSError, json.JSONDecodeError):
+                    pass
+            sessions.append(self._fallback_session_summary(journal_path))
+        return {"sessions": sessions}
+
+    async def _cmd_export_session(self, payload: dict[str, Any]) -> dict[str, Any]:
+        session_id = str(payload["session_id"])
+        source = self._journal_path_for_session(session_id)
+        output_raw = payload.get("output_path")
+        output = Path(str(output_raw)) if output_raw else source.with_suffix(".csv")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        exported = JournalReader(source).export_csv(output)
+        return {"session_id": session_id, "output_path": str(exported)}
+
+    async def _cmd_diagnostic_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        output_raw = payload.get("output_path")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        output = (
+            Path(str(output_raw))
+            if output_raw
+            else self.journal_root / f"diagnostics-{stamp}.json"
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        report = {
+            "generated_utc_ms": int(time.time() * 1000),
+            "journal_root": str(self.journal_root),
+            "status": self.status(),
+        }
+        self._write_json_atomic(output, report)
+        return {"output_path": str(output)}
+
+    def _journal_path_for_session(self, session_id: str) -> Path:
+        if not session_id or any(ch not in "0123456789abcdefABCDEF-" for ch in session_id):
+            raise ValueError("invalid session_id")
+        path = self.journal_root / f"{session_id}.waj"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        return path
+
+    def _fallback_session_summary(self, path: Path) -> dict[str, Any]:
+        records = JournalReader(path).read_all()
+        metadata: dict[str, Any] = {}
+        final: dict[str, Any] = {}
+        sample_counts = {"L": 0, "R": 0}
+        for record in records:
+            if record.kind is RecordKind.SESSION_META and record.json_value:
+                metadata = dict(record.json_value)
+            elif record.kind is RecordKind.FINALIZE and record.json_value:
+                final = dict(record.json_value)
+            elif record.kind is RecordKind.SAMPLE and record.sample is not None:
+                sample_counts[record.sample.side.value] += 1
+        return {
+            **metadata,
+            **final,
+            "session_id": str(metadata.get("session_id") or final.get("session_id") or path.stem),
+            "journal_path": str(path),
+            "sample_counts": sample_counts,
+            "finalized_utc_ms": int(path.stat().st_mtime * 1000),
+        }
+
+    @staticmethod
+    def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+        temp = path.with_name(path.name + ".tmp")
+        with temp.open("w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, path)
+
     def status(self) -> dict[str, Any]:
         boards: dict[str, Any] = {}
+        now_ns = time.monotonic_ns()
         for side in WheelSide:
             device_id = self.engine.device_id(side)
             metrics = self.engine.metrics(side)
             model = self.lifecycle.clock_model(side)
+            previous = self._status_rate_baseline.get(side)
+            notifications_hz = None
+            samples_hz = None
+            if previous is not None and now_ns > previous[0]:
+                elapsed_s = (now_ns - previous[0]) / 1_000_000_000
+                notifications_hz = (metrics.notifications_received - previous[1]) / elapsed_s
+                samples_hz = (metrics.samples_received - previous[2]) / elapsed_s
+            self._status_rate_baseline[side] = (
+                now_ns,
+                metrics.notifications_received,
+                metrics.samples_received,
+            )
             boards[side.value] = {
                 "connected": device_id is not None,
                 "device_id": device_id,
@@ -462,8 +615,11 @@ class AcquisitionService:
                 "duplicates": metrics.duplicate_samples,
                 "out_of_order": metrics.out_of_order_samples,
                 "malformed_packets": metrics.malformed_packets,
+                "queue_depth": self.engine.pending_notifications(side),
                 "queue_high_water": metrics.queue_high_water,
                 "queue_overflow_faults": metrics.queue_overflow_faults,
+                "notifications_hz": notifications_hz,
+                "samples_hz": samples_hz,
                 "fatal_fault": dataclasses.asdict(self.engine.fatal_fault(side))
                 if self.engine.fatal_fault(side)
                 else None,
@@ -476,6 +632,7 @@ class AcquisitionService:
         return {
             "boards": boards,
             "recording": journal is not None,
+            "journal_root": str(self.journal_root),
             "session_id": journal.session_id if journal else None,
             "journal": {
                 "queue_high_water": journal.metrics.queue_high_water,

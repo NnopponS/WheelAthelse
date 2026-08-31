@@ -13,21 +13,18 @@
 | 4 | Clock sync, scheduled start, START/STOP acknowledgements | done (`da6249a`) |
 | 5 | Append-only journal, recovery, QC, exports | done (`118e1bc`) |
 | 6 | Flutter Windows IPC/backend integration | done (`a8927ae`) |
-| 7 | Preserve and regression-test Android behavior | done |
-| 8 | Windows diagnostics and acquisition UI | in progress |
-| 9 | Simulated long-run and fault-injection tests | pending |
+| 7 | Preserve and regression-test Android behavior | done (`4b4aef9`) |
+| 8 | Windows diagnostics and acquisition UI | done |
+| 9 | Simulated long-run and fault-injection tests | in progress |
 | 10 | Physical two-XIAO acceptance | blocked: boards unavailable |
 
 ## Current loop
 
-1. Build the Windows desktop shell around the daemon without moving raw samples
-   onto the Flutter event loop.
-2. Add operator-visible Connect, Live, Record, Experiments, Sessions, and
-   Diagnostics workflows using the versioned localhost IPC contract.
-3. Expose acquisition-health metrics and recovery/export actions through the
-   daemon, with UI rendering limited to throttled preview/status data.
-4. Keep the missing Visual Studio C++ toolchain recorded as an environment
-   blocker for the final Windows release build.
+1. Run accelerated 30-minute-equivalent dual-wheel simulations at 50/100/200 Hz.
+2. Exercise notification bursts, writer backpressure, preview/UI isolation,
+   sequence integrity and fail-closed QC behavior.
+3. Re-run release gates and document exact automated evidence.
+4. Keep physical RF/synchronization claims gated on two real XIAO boards.
 
 ## Phase 2 hardware gate
 

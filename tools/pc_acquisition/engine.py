@@ -267,6 +267,9 @@ class DualBoardEngine:
     def metrics(self, side: WheelSide) -> IngestionMetrics:
         return self._ingestors[side].metrics
 
+    def pending_notifications(self, side: WheelSide) -> int:
+        return self._ingestors[side].pending_notifications
+
     def fatal_fault(self, side: WheelSide) -> AcquisitionFault | None:
         return self._ingestors[side].fatal_fault
 

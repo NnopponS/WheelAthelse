@@ -149,10 +149,11 @@ class FakeBleTransport:
         self.read_values: dict[tuple[str, str], bytes] = {}
         self.writes: list[tuple[str, str, bytes, bool]] = []
         self.mtu: dict[str, int] = {}
+        self.scan_results: list[DeviceCandidate] = []
 
     async def scan(self, timeout_s: float = 5.0) -> list[DeviceCandidate]:
         del timeout_s
-        return []
+        return list(self.scan_results)
 
     async def connect(self, device_id: str) -> None:
         self.connected.add(device_id)
