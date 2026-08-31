@@ -8,9 +8,9 @@
 |---|---|---|
 | 0 | Repository, protocol, firmware, PC-tool, and Flutter audit | done |
 | 1 | Feature-parity matrix, target architecture, baseline tests | done (`b970b69`) |
-| 2 | XIAO timing, BLE link preferences/diagnostics, FIFO investigation | done |
-| 3 | Headless Python/Bleak dual-board engine | in progress |
-| 4 | Clock sync, scheduled start, START/STOP acknowledgements | pending |
+| 2 | XIAO timing, BLE link preferences/diagnostics, FIFO investigation | done (`8d0d0a9`) |
+| 3 | Headless Python/Bleak dual-board engine | done |
+| 4 | Clock sync, scheduled start, START/STOP acknowledgements | in progress |
 | 5 | Append-only journal, recovery, QC, exports | pending |
 | 6 | Flutter Windows IPC/backend integration | pending |
 | 7 | Preserve and regression-test Android behavior | pending |
@@ -20,11 +20,11 @@
 
 ## Current loop
 
-1. Build the smallest headless Python collector core with strict parsing,
-   bounded per-board queues, monotonic arrival timestamps, and no UI dependency.
-2. Keep the BLE transport behind an interface so tests do not require hardware.
-3. Add clock synchronization and deterministic lifecycle only after ingestion
-   is fail-closed and tested.
+1. Add strict Sync-event parsing and a monotonic PC/device clock model.
+2. Collect repeated pre-record round trips, map one future PC T0 to both device
+   clocks, and require START_FIRED acknowledgements.
+3. Implement bounded STOP retry/ack without introducing periodic dual-wheel
+   control traffic during acquisition.
 4. Continue sequentially; stop on unexplained regression or data-loss risk.
 
 ## Phase 2 hardware gate

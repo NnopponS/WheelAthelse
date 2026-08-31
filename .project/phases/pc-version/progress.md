@@ -9,34 +9,34 @@ Updated: 2026-08-31 (Asia/Bangkok)
   async/STOP-ack test fixtures.
 - Flutter baseline: `637 passed`, line coverage `81.83%`, `dart analyze lib`
   clean.
-- Phase 2 XIAO host contracts: `15 passed`.
-- Phase 2 XIAO LEFT and RIGHT release builds: SUCCESS.
-  - RAM: 25,772 bytes / 237,568 bytes.
-  - Flash: 147,128 bytes / 811,008 bytes.
-- XIAO now requests MTU 247 and a 10 ms preferred connection interval, then
-  logs the negotiated MTU, interval, and supervision timeout after connection.
-- XIAO IMU polling now reads gyro+accelerometer in one coherent 12-byte burst
-  with BDU + auto-increment and timestamps the I2C transaction midpoint.
-- I2C burst failures are counted/logged rather than silently returning stale
-  axes.
-- FIFO/INT1 capability was researched against the installed Seeed/ST contract;
-  activation is deliberately hardware-gated rather than implemented from
-  unverified runtime assumptions.
+- Phase 2 commit `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT and
+  RIGHT builds successful at 25,772 bytes RAM / 147,128 bytes flash.
+- Phase 3 headless acquisition core:
+  - strict exact-length IMU batch parser (1..12 samples),
+  - uint32 wrap-aware sequence classification,
+  - immutable notification envelopes with monotonic arrival time,
+  - one bounded non-overwriting queue per wheel,
+  - explicit fatal host-queue-overflow and malformed-packet faults,
+  - authoritative sample sink independent from 10 Hz preview decimation,
+  - dual-board engine with independent workers,
+  - production Bleak adapter imported lazily and deterministic fake transport.
+- Phase 3 tests: `5 passed`; `python -m compileall -q tools/pc_acquisition`
+  successful.
 
 ## Current phase
 
-Phase 3 — headless Python/Bleak dual-board acquisition engine.
+Phase 4 — PC clock synchronization and deterministic START/STOP lifecycle.
 
 Required first slice:
 
-- BLE transport interface with a Bleak/WinRT production adapter.
-- strict IMU/SYNC packet parsing.
-- one bounded ingestion queue per board.
-- callback path limited to immutable payload + `time.monotonic_ns()` enqueue.
-- explicit overflow fault; never overwrite unread packets.
-- sequence classification for contiguous/gap/duplicate/out-of-order/wrap.
-- throttled preview separated from the authoritative stream.
-- automated tests with no physical BLE dependency.
+- strict parser for SYNC_RESPONSE, START_FIRED, STOP_FIRED, ACQ_HEALTH and
+  command failure events.
+- monotonic PC master timeline and uint32 device-clock unwrapping.
+- robust min-RTT / low-RTT clock observations and linear drift fit.
+- one future PC start T0 converted independently into both device clocks.
+- START_FIRED required from both armed wheels.
+- bounded STOP write retry and STOP_FIRED acknowledgement handling.
+- no periodic dual-wheel control writes while recording.
 
 ## Blocked hardware evidence
 
