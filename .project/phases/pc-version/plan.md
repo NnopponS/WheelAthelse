@@ -12,21 +12,22 @@
 | 3 | Headless Python/Bleak dual-board engine | done (`857a164`) |
 | 4 | Clock sync, scheduled start, START/STOP acknowledgements | done (`da6249a`) |
 | 5 | Append-only journal, recovery, QC, exports | done (`118e1bc`) |
-| 6 | Flutter Windows IPC/backend integration | done |
-| 7 | Preserve and regression-test Android behavior | in progress |
-| 8 | Windows diagnostics and acquisition UI | pending |
+| 6 | Flutter Windows IPC/backend integration | done (`a8927ae`) |
+| 7 | Preserve and regression-test Android behavior | done |
+| 8 | Windows diagnostics and acquisition UI | in progress |
 | 9 | Simulated long-run and fault-injection tests | pending |
 | 10 | Physical two-XIAO acceptance | blocked: boards unavailable |
 
 ## Current loop
 
-1. Run the complete Flutter suite/analyzer against the existing Android/mobile
-   state machines, not only desktop tests.
-2. Ensure production mobile BLE construction remains FlutterBluePlus and no
-   desktop daemon dependency is introduced into Android acquisition paths.
-3. Add a platform-boundary regression test before building desktop UI.
-4. Treat the missing Visual Studio C++ toolchain as an environment blocker for
-   `flutter build windows`, not as passing build evidence.
+1. Build the Windows desktop shell around the daemon without moving raw samples
+   onto the Flutter event loop.
+2. Add operator-visible Connect, Live, Record, Experiments, Sessions, and
+   Diagnostics workflows using the versioned localhost IPC contract.
+3. Expose acquisition-health metrics and recovery/export actions through the
+   daemon, with UI rendering limited to throttled preview/status data.
+4. Keep the missing Visual Studio C++ toolchain recorded as an environment
+   blocker for the final Windows release build.
 
 ## Phase 2 hardware gate
 

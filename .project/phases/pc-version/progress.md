@@ -1,6 +1,6 @@
 # PC Version — Progress
 
-Updated: 2026-08-31 (Asia/Bangkok)
+Updated: 2026-09-01 (Asia/Bangkok)
 
 ## Completed
 
@@ -10,23 +10,17 @@ Updated: 2026-08-31 (Asia/Bangkok)
 - Phase 3 `857a164`: strict headless dual-board ingestion core.
 - Phase 4 `da6249a`: monotonic clock mapping and safe synchronized lifecycle.
 - Phase 5 `118e1bc`: crash-safe append-only journal, recovery and fail-closed QC.
-- Phase 6 Windows process boundary:
-  - Python `AcquisitionService` composes transport, dual-board engine,
-    synchronization, lifecycle, recording journal and QC.
-  - commands include scan/connect/disconnect/configure/sync/arm/scheduled_start/
-    stop/status/start_record/end_record/recover.
-  - daemon IPC binds only to `127.0.0.1`, uses protocol v1 NDJSON, 64 KiB
-    bounded messages, hello/version handshake and request-id correlation.
-  - raw sample stream never crosses IPC; only a 10 Hz `sample_preview` plus
-    status/health/sync/recording events are exposed.
-  - Dart `DesktopDaemonClient` implements the same versioned contract and a
-    Riverpod desktop acquisition state is available without replacing the
-    mobile `BleRepository`.
-  - scheduled START timeout was corrected to include remaining lead time to T0
-    plus the post-start ACK margin.
-- Phase 6 Python suite: `18 passed`.
-- Desktop Dart IPC tests: `2 passed`; desktop Dart analysis: no issues.
-- Python compileall: clean.
+- Phase 6 `a8927ae`: versioned localhost Python daemon ↔ Flutter Windows IPC;
+  raw samples remain daemon-owned and only throttled preview/status cross IPC.
+- Phase 6 Python suite: `18 passed`; desktop Dart IPC tests: `2 passed`;
+  Python compileall and desktop Dart analysis clean.
+- Phase 7 mobile regression evidence:
+  - complete Flutter test suite: `641/641 passed`;
+  - production `bleRepositoryProvider` still constructs
+    `FlutterBluePlusBleRepository`;
+  - desktop daemon provider remains opt-in and disconnected until requested;
+  - `dart analyze lib`: no issues;
+  - `flutter build apk --release`: green, generated 52.8 MB APK.
 
 ## Windows build environment blocker
 
@@ -37,7 +31,8 @@ system-wide toolchain was installed automatically during this task.
 
 ## Current phase
 
-Phase 7 — prove Android/mobile behavior remains intact before adding desktop UI.
+Phase 8 — build the desktop operator UI and serious diagnostics around the
+daemon process boundary without altering the lossless raw path.
 
 ## Blocked hardware evidence
 
