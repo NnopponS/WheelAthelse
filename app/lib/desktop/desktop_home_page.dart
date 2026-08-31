@@ -1549,6 +1549,7 @@ class _DesktopDiagnosticsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(desktopAcquisitionProvider);
     final boards = _boards(state.status);
+    final ipc = _map(state.status['ipc']);
     return _DesktopScroll(
       children: [
         _SectionTitle(
@@ -1621,6 +1622,26 @@ class _DesktopDiagnosticsPage extends ConsumerWidget {
                   _formatNs(
                     _map(state.status['journal'])['max_write_latency_ns'],
                   ),
+                ),
+                const Divider(height: AppSpacing.lg),
+                Text(
+                  'IPC / UI isolation',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                _KeyValue('Ready UI clients', ipc['ready_clients']),
+                _KeyValue('Preview events sent', ipc['preview_events_sent']),
+                _KeyValue(
+                  'Preview events dropped',
+                  ipc['preview_events_dropped'],
+                ),
+                _KeyValue(
+                  'Max preview socket buffer',
+                  _formatBytes(ipc['max_preview_write_buffer_bytes']),
+                ),
+                _KeyValue(
+                  'Preview buffer limit',
+                  _formatBytes(ipc['preview_write_buffer_limit_bytes']),
                 ),
               ],
             ),
@@ -2105,6 +2126,16 @@ Map<String, dynamic> _map(Object? value) {
 String _hz(Object? value) {
   if (value is num) return '${value.toStringAsFixed(1)} Hz';
   return '—';
+}
+
+String _formatBytes(Object? value) {
+  if (value is! num) return '—';
+  final bytes = value.toDouble();
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MiB';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+  return '${bytes.toStringAsFixed(0)} B';
 }
 
 String _formatNs(Object? value) {

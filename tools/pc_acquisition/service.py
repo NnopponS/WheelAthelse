@@ -423,6 +423,12 @@ class AcquisitionService:
                     {"type": "post_stop_sync_failure", "side": side.value, "message": str(exc)},
                 )
 
+        # QC must observe the authoritative on-disk writer after every sample
+        # accepted by the journal queue has either committed or produced a
+        # fatal writer fault. Otherwise a fast STOP could inspect stale writer
+        # counters and accidentally certify an incomplete session.
+        journal.wait_until_idle()
+
         board_qc: list[BoardQcInput] = []
         for side in sides:
             current = self.engine.metrics(side)
@@ -452,11 +458,29 @@ class AcquisitionService:
                 boards=tuple(board_qc),
                 start_skew_ns=self._start_result.start_skew_ns if self._start_result else None,
                 journal_queue_overflow=journal.metrics.queue_overflow_faults,
+                journal_samples_written=journal.metrics.samples_written,
+                journal_fault_code=(
+                    journal.fatal_fault.code if journal.fatal_fault is not None else None
+                ),
+                journal_fault_message=(
+                    journal.fatal_fault.message if journal.fatal_fault is not None else None
+                ),
             )
         )
         summary = {
             "quality": qc.level.name,
             "duration_s": duration_s,
+            "journal": {
+                "samples_written": journal.metrics.samples_written,
+                "queue_high_water": journal.metrics.queue_high_water,
+                "queue_overflow_faults": journal.metrics.queue_overflow_faults,
+                "max_write_latency_ns": journal.metrics.max_write_latency_ns,
+                "fatal_fault": (
+                    dataclasses.asdict(journal.fatal_fault)
+                    if journal.fatal_fault is not None
+                    else None
+                ),
+            },
             "reasons": [
                 {
                     "code": reason.code,
@@ -539,10 +563,12 @@ class AcquisitionService:
             else self.journal_root / f"diagnostics-{stamp}.json"
         )
         output.parent.mkdir(parents=True, exist_ok=True)
+        ipc_status = payload.get("_ipc_status")
         report = {
             "generated_utc_ms": int(time.time() * 1000),
             "journal_root": str(self.journal_root),
             "status": self.status(),
+            "ipc": dict(ipc_status) if isinstance(ipc_status, dict) else {},
         }
         self._write_json_atomic(output, report)
         return {"output_path": str(output)}

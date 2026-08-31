@@ -16,6 +16,18 @@ parity with the Flutter mobile app, while prioritizing:
 The detailed user input remains at `pc-version-promt.txt`. The implementation
 branch is `codex/pc-version`.
 
+## Branch safety — hard constraint
+
+- All PC-version implementation, tests, tracker updates, and commits stay on
+  `codex/pc-version`.
+- **Do not merge, rebase, reset, force-update, push, or otherwise modify
+  `main` as part of this task.** The user explicitly prohibited putting this
+  work into `main` on 2026-09-01.
+- Phase commits are local checkpoints on `codex/pc-version` unless the user
+  explicitly asks for a remote action later.
+- Before every phase commit/final verification, confirm the active branch is
+  still `codex/pc-version`.
+
 ## Architecture decision
 
 - A headless Python/Bleak process owns both Windows BLE connections, parses and
@@ -56,3 +68,14 @@ or block on disk. It only captures an immutable notification plus a monotonic
 arrival timestamp and performs a non-overwriting enqueue into that board's
 bounded queue. Overflow is a critical acquisition fault. Downstream consumers
 own strict parsing, sequence validation, journaling, and preview decimation.
+
+## IPC/UI backpressure decision
+
+- Raw IMU samples never cross the Flutter IPC boundary.
+- `sample_preview` is explicitly best-effort telemetry. It may be dropped for a
+  slow/frozen UI when the per-client socket write buffer reaches the bounded
+  preview threshold; this must be counted and visible in Diagnostics.
+- Lifecycle events, errors, and command responses remain reliable/drained IPC
+  traffic and must not be silently dropped.
+- UI/preview loss is therefore isolated from the authoritative BLE → parser →
+  journal acquisition path.

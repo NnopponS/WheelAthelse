@@ -38,6 +38,9 @@ class SessionQcInput:
     boards: tuple[BoardQcInput, ...]
     start_skew_ns: int | None
     journal_queue_overflow: int = 0
+    journal_samples_written: int | None = None
+    journal_fault_code: str | None = None
+    journal_fault_message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +61,29 @@ def evaluate_session_qc(value: SessionQcInput) -> SessionQcResult:
             QualityLevel.INVALID,
             f"journal writer overflowed {value.journal_queue_overflow} time(s)",
         )
+
+    if value.journal_fault_code is not None:
+        detail = value.journal_fault_code
+        if value.journal_fault_message:
+            detail = f"{detail}: {value.journal_fault_message}"
+        add(
+            "journal_writer_fault",
+            QualityLevel.INVALID,
+            detail,
+        )
+
+    if value.journal_samples_written is not None:
+        expected_samples = sum(
+            board.host_metrics.samples_received for board in value.boards
+        )
+        if value.journal_samples_written != expected_samples:
+            add(
+                "journal_count_mismatch",
+                QualityLevel.INVALID,
+                "authoritative journal/host counts differ: "
+                f"written={value.journal_samples_written}, "
+                f"received={expected_samples}",
+            )
 
     for board in value.boards:
         metrics = board.host_metrics

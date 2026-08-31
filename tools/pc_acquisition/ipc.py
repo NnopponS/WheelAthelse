@@ -10,6 +10,7 @@ from .service import AcquisitionService
 
 PROTOCOL_VERSION = 1
 MAX_MESSAGE_BYTES = 64 * 1024
+MAX_PREVIEW_WRITE_BUFFER_BYTES = 256 * 1024
 
 
 class IpcProtocolError(ValueError):
@@ -73,6 +74,9 @@ class AcquisitionIpcServer:
         self._server: asyncio.AbstractServer | None = None
         self._clients: set[_Client] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._preview_events_sent = 0
+        self._preview_events_dropped = 0
+        self._max_preview_write_buffer_bytes = 0
         service.set_event_sink(self._publish_from_service)
 
     @property
@@ -113,10 +117,29 @@ class AcquisitionIpcServer:
     async def publish(self, event_type: str, payload: dict[str, Any]) -> None:
         encoded = encode_message(event_type, payload)
         failed: list[_Client] = []
+        is_preview = event_type == "sample_preview"
         for client in tuple(self._clients):
             if not client.ready:
                 continue
             try:
+                if is_preview:
+                    transport = client.writer.transport
+                    buffered = int(transport.get_write_buffer_size())
+                    self._max_preview_write_buffer_bytes = max(
+                        self._max_preview_write_buffer_bytes, buffered
+                    )
+                    if buffered >= MAX_PREVIEW_WRITE_BUFFER_BYTES:
+                        # Preview is explicitly best-effort. A frozen/slow UI
+                        # must never create unbounded socket backpressure in the
+                        # daemon that owns the lossless raw path.
+                        self._preview_events_dropped += 1
+                        continue
+                    client.writer.write(encoded)
+                    self._preview_events_sent += 1
+                    # Do not await drain for preview telemetry. The bounded
+                    # write-buffer check above makes this non-blocking and
+                    # disposable per client.
+                    continue
                 client.writer.write(encoded)
                 await client.writer.drain()
             except Exception:
@@ -124,6 +147,15 @@ class AcquisitionIpcServer:
         for client in failed:
             self._clients.discard(client)
             client.writer.close()
+
+    def ipc_status(self) -> dict[str, int]:
+        return {
+            "ready_clients": sum(1 for client in self._clients if client.ready),
+            "preview_events_sent": self._preview_events_sent,
+            "preview_events_dropped": self._preview_events_dropped,
+            "max_preview_write_buffer_bytes": self._max_preview_write_buffer_bytes,
+            "preview_write_buffer_limit_bytes": MAX_PREVIEW_WRITE_BUFFER_BYTES,
+        }
 
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -157,9 +189,17 @@ class AcquisitionIpcServer:
                     await self._send_error(writer, None, "missing_request_id", "commands require request_id")
                     continue
                 try:
+                    command_payload = dict(message.get("payload", {}))
+                    if message["type"] == "diagnostic_report":
+                        # The service owns the report file, while the IPC server
+                        # owns socket/UI-isolation counters. Inject a trusted
+                        # internal snapshot so exported diagnostics contain both.
+                        command_payload["_ipc_status"] = self.ipc_status()
                     result = await self.service.handle_command(
-                        message["type"], message.get("payload", {})
+                        message["type"], command_payload
                     )
+                    if message["type"] == "status":
+                        result = {**result, "ipc": self.ipc_status()}
                 except Exception as exc:
                     await self._send_error(
                         writer, request_id, "command_failed", str(exc)

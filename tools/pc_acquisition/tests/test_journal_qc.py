@@ -215,3 +215,20 @@ def test_qc_good_warning_degraded_and_invalid_are_reasoned_not_rssi_based():
     assert "sequence_gap" in codes
     assert "count_mismatch" in codes
     assert "journal_queue_overflow" in codes
+
+
+def test_qc_invalid_when_authoritative_journal_is_incomplete_or_writer_faulted():
+    result = evaluate_session_qc(
+        SessionQcInput(
+            boards=(_board(WheelSide.LEFT, count=1000),),
+            start_skew_ns=0,
+            journal_samples_written=999,
+            journal_fault_code="journal_write_failure",
+            journal_fault_message="simulated disk failure",
+        )
+    )
+    assert result.level is QualityLevel.INVALID
+    codes = {reason.code for reason in result.reasons}
+    assert "journal_writer_fault" in codes
+    assert "journal_count_mismatch" in codes
+

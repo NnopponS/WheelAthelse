@@ -70,7 +70,7 @@ void main() {
     );
   });
 
-  testWidgets('Diagnostics page exposes data-path counters and report export', (
+  testWidgets('Diagnostics exposes data-path and UI-isolation counters', (
     tester,
   ) async {
     await pumpDesktop(tester);
@@ -82,5 +82,19 @@ void main() {
     expect(find.text('Queue high-water'), findsWidgets);
     expect(find.text('FIFO samples lost'), findsWidgets);
     expect(find.text('Export report'), findsOneWidget);
+
+    // The disk/IPC card is intentionally below the two per-wheel diagnostic
+    // cards. Scroll the real ListView so lazy children are built before
+    // asserting the UI-isolation telemetry.
+    final diagnosticsList = find.byType(ListView).last;
+    await tester.drag(diagnosticsList, const Offset(0, -700));
+    await tester.pump();
+    await tester.drag(diagnosticsList, const Offset(0, -700));
+    await tester.pump();
+
+    expect(find.text('IPC / UI isolation'), findsOneWidget);
+    expect(find.text('Preview events sent'), findsOneWidget);
+    expect(find.text('Preview events dropped'), findsOneWidget);
+    expect(find.text('Preview buffer limit'), findsOneWidget);
   });
 }
