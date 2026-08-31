@@ -4,43 +4,40 @@ Updated: 2026-08-31 (Asia/Bangkok)
 
 ## Completed
 
-- Phase 1 commit `b970b69`: parity/architecture baseline.
-- Phase 2 commit `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT/RIGHT
+- Phase 1 `b970b69`: parity/architecture baseline.
+- Phase 2 `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT/RIGHT
   firmware builds green.
-- Phase 3 commit `857a164`: strict headless dual-board ingestion core with
-  independent bounded queues and preview isolation.
-- Phase 4 commit `da6249a`: monotonic clock mapping, synchronized scheduled
-  START, START/STOP acknowledgements, bounded STOP retry and fail-closed
-  disconnect fallback.
-- Phase 5 crash-safe storage/QC:
-  - `WATHJNL1` versioned append-only journal with CRC32 per record,
-  - dedicated bounded writer queue; overflow is a fatal QC fault and never
-    overwrites unread data,
-  - each sample preserves session UUID, side, seq, device-us, PC monotonic-ns,
-    six raw axes, packet id, sequence class and missing-before count,
-  - acquisition uses `.open`; clean finalization fsyncs then atomically renames
-    to `.waj`,
-  - recovery validates to the last checksum-complete record and writes a
-    separate `.recovered.waj` while preserving the forensic `.open` original,
-  - CSV is generated only as a derived artifact after journal reading,
-  - QC levels GOOD/WARNING/DEGRADED/INVALID carry machine-readable reasons and
-    reconcile host loss, writer overflow, final firmware counts/health,
-    effective rate and synchronized-start skew.
-- Phase 5 PC suite: `15 passed`; Python compileall clean.
+- Phase 3 `857a164`: strict headless dual-board ingestion core.
+- Phase 4 `da6249a`: monotonic clock mapping and safe synchronized lifecycle.
+- Phase 5 `118e1bc`: crash-safe append-only journal, recovery and fail-closed QC.
+- Phase 6 Windows process boundary:
+  - Python `AcquisitionService` composes transport, dual-board engine,
+    synchronization, lifecycle, recording journal and QC.
+  - commands include scan/connect/disconnect/configure/sync/arm/scheduled_start/
+    stop/status/start_record/end_record/recover.
+  - daemon IPC binds only to `127.0.0.1`, uses protocol v1 NDJSON, 64 KiB
+    bounded messages, hello/version handshake and request-id correlation.
+  - raw sample stream never crosses IPC; only a 10 Hz `sample_preview` plus
+    status/health/sync/recording events are exposed.
+  - Dart `DesktopDaemonClient` implements the same versioned contract and a
+    Riverpod desktop acquisition state is available without replacing the
+    mobile `BleRepository`.
+  - scheduled START timeout was corrected to include remaining lead time to T0
+    plus the post-start ACK margin.
+- Phase 6 Python suite: `18 passed`.
+- Desktop Dart IPC tests: `2 passed`; desktop Dart analysis: no issues.
+- Python compileall: clean.
+
+## Windows build environment blocker
+
+`flutter build windows --release` currently cannot run on this machine because
+Flutter reports: `Unable to find suitable Visual Studio toolchain.` A supported
+Visual Studio installation with Desktop development with C++ is required. No
+system-wide toolchain was installed automatically during this task.
 
 ## Current phase
 
-Phase 6 — versioned localhost IPC and Flutter Windows backend integration.
-
-Required slice:
-
-- Python daemon can run without Flutter and owns BLE/journal/lifecycle state.
-- localhost-only TCP NDJSON with version handshake and bounded message size.
-- commands/events use `protocol_version`, `type`, optional `request_id`, and
-  object `payload`; invalid versions/messages fail explicitly.
-- Flutter Windows client receives device/status/preview/health/sync/QC events.
-- raw 50/100/200 Hz samples never cross IPC.
-- Android/mobile repository selection remains unchanged.
+Phase 7 — prove Android/mobile behavior remains intact before adding desktop UI.
 
 ## Blocked hardware evidence
 

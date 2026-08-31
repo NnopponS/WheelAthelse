@@ -156,10 +156,17 @@ class SyncLifecycleController:
 
         mapped: dict[WheelSide, int] = {}
         acknowledged: set[WheelSide] = set()
+        # START_FIRED is expected at T0 rather than immediately after the write.
+        # Give the device all remaining lead time plus the caller's post-start
+        # acknowledgement margin before declaring a lifecycle failure.
+        remaining_to_start_s = max(
+            0.0, (pc_start_ns - time.monotonic_ns()) / 1_000_000_000
+        )
+        start_wait_timeout_s = remaining_to_start_s + ack_timeout_s
         for side in selected:
             try:
                 event = await asyncio.wait_for(
-                    asyncio.shield(waiters[side]), timeout=ack_timeout_s
+                    asyncio.shield(waiters[side]), timeout=start_wait_timeout_s
                 )
             except TimeoutError as exc:
                 raise LifecycleError(f"START_FIRED timeout for {side.value}") from exc
@@ -217,8 +224,8 @@ class SyncLifecycleController:
                         await asyncio.sleep(retry_delay_s * attempt)
             if not write_succeeded[side]:
                 # Disconnect is the firmware failsafe: its disconnect handler
-                # stops acquisition.  Use the engine path so local connection
-                # ownership is cleared as well.
+                # stops acquisition. Use the engine path so local ownership is
+                # cleared as well.
                 await self.engine.disconnect(side)
 
         results: dict[WheelSide, StopResult] = {}
