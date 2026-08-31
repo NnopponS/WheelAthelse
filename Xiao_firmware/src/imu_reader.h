@@ -29,6 +29,7 @@ public:
     float       gyroScale()   const;
     uint32_t    sampleCount() const { return sample_count_; }
     uint32_t    queueDropCount() const { return drop_count_; }
+    uint32_t    readFaultCount() const { return read_fault_count_; }
     uint32_t    dropCount()   const { return drop_count_; }
     uint32_t    fifoOverflowCount() const { return 0; }
     uint32_t    fifoDroppedSampleCount() const { return 0; }
@@ -47,6 +48,7 @@ private:
     bool        running_       = false;
     uint32_t    sample_count_  = 0;
     uint32_t    drop_count_    = 0;
+    uint32_t    read_fault_count_ = 0;
     uint32_t    next_seq_      = 0;
 
     QueueHandle sample_queue_  = nullptr;

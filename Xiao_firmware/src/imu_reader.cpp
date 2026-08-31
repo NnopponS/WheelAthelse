@@ -8,8 +8,11 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
+#include <cstring>
 
 namespace WheelAthlete {
+
+static constexpr uint8_t CTRL3_C_BDU_IF_INC = 0x44;
 
 // Global IMU instance
 static LSM6DS3 lsm_imu(I2C_MODE, 0x6A);
@@ -54,6 +57,7 @@ void ImuReader::start() {
     next_seq_ = 0;
     sample_count_ = 0;
     drop_count_ = 0;
+    read_fault_count_ = 0;
 
     running_ = true;
 
@@ -166,7 +170,18 @@ bool ImuReader::configureImu() {
     lsm_imu.settings.accelSampleRate = sample_rate;
     lsm_imu.settings.gyroSampleRate = sample_rate;
 
-    return (lsm_imu.begin() == 0);
+    if (lsm_imu.begin() != IMU_SUCCESS) {
+        return false;
+    }
+
+    // Block-data-update prevents half-old/half-new axes during a burst;
+    // auto-increment is required to read the contiguous 0x22..0x2D outputs.
+    uint8_t ctrl3_c = 0;
+    if (lsm_imu.readRegister(&ctrl3_c, LSM6DS3_ACC_GYRO_CTRL3_C) != IMU_SUCCESS) {
+        return false;
+    }
+    return lsm_imu.writeRegister(
+               LSM6DS3_ACC_GYRO_CTRL3_C, ctrl3_c | CTRL3_C_BDU_IF_INC) == IMU_SUCCESS;
 }
 
 void ImuReader::imuTaskLoop() {
@@ -180,23 +195,30 @@ void ImuReader::imuTaskLoop() {
             break;
         }
 
-        // Read raw data from registers
-        int16_t ax = lsm_imu.readRawAccelX();
-        int16_t ay = lsm_imu.readRawAccelY();
-        int16_t az = lsm_imu.readRawAccelZ();
-        int16_t gx = lsm_imu.readRawGyroX();
-        int16_t gy = lsm_imu.readRawGyroY();
-        int16_t gz = lsm_imu.readRawGyroZ();
+        // One auto-increment burst keeps gyro and accel from the same register
+        // snapshot and cuts six I2C transactions down to one.
+        uint8_t raw[12] = {};
+        const uint32_t read_started_us = micros();
+        const status_t read_status = lsm_imu.readRegisterRegion(
+            raw, LSM6DS3_ACC_GYRO_OUTX_L_G, sizeof(raw));
+        const uint32_t read_finished_us = micros();
+        if (read_status != IMU_SUCCESS) {
+            read_fault_count_++;
+            if (read_fault_count_ == 1 || read_fault_count_ % 100 == 0) {
+                Serial.printf("[IMU] Register burst read faults=%lu\n", read_fault_count_);
+            }
+            continue;
+        }
 
         ImuSample s;
         s.seq = next_seq_++;
-        s.t_device_us = micros();
-        s.ax = ax;
-        s.ay = ay;
-        s.az = az;
-        s.gx = gx;
-        s.gy = gy;
-        s.gz = gz;
+        s.t_device_us = read_started_us + ((read_finished_us - read_started_us) / 2);
+        std::memcpy(&s.gx, raw + 0, sizeof(s.gx));
+        std::memcpy(&s.gy, raw + 2, sizeof(s.gy));
+        std::memcpy(&s.gz, raw + 4, sizeof(s.gz));
+        std::memcpy(&s.ax, raw + 6, sizeof(s.ax));
+        std::memcpy(&s.ay, raw + 8, sizeof(s.ay));
+        std::memcpy(&s.az, raw + 10, sizeof(s.az));
 
         if (sample_queue_) {
             if (xQueueSend(sample_queue_, &s, 0) == pdTRUE) {
@@ -217,6 +239,7 @@ void ImuReader::resetQueueAndSeq() {
     next_seq_ = 0;
     sample_count_ = 0;
     drop_count_ = 0;
+    read_fault_count_ = 0;
 }
 
 void ImuReader::imuTaskThunk(void* arg) {

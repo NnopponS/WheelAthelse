@@ -88,6 +88,9 @@ public:
     char       wheel_id_         = 'L';
     BleState   state_            = BleState::Idle;
     uint16_t   mtu_              = 23;       // default BLE MTU
+    uint16_t   conn_handle_      = 0xFFFF;
+    uint32_t   connected_at_ms_  = 0;
+    bool       link_reported_    = false;
     uint32_t   sync_ping_count_  = 0;
     uint32_t   notify_count_     = 0;
     uint32_t   notified_samples_ = 0;

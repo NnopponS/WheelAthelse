@@ -10,6 +10,10 @@
 
 namespace WheelAthlete {
 
+// BLE connection intervals use 1.25 ms units; 8 requests 10 ms.
+static constexpr uint16_t PREFERRED_CONN_INTERVAL_UNITS = 8;
+static constexpr uint16_t SUPERVISION_TIMEOUT_UNITS = 400; // 4 seconds
+
 // Global BLE Characteristic/Service instances
 static BLEService        s_service(SERVICE_UUID);
 static BLECharacteristic s_char_imu(CHAR_IMU_DATA_UUID);
@@ -98,7 +102,8 @@ void BleService::begin(char wheel_id) {
         device_name = default_name;
     }
 
-    // Configure connection parameters for maximum MTU
+    // Configure max MTU, SoftDevice event length, HVN queue, and write queue.
+    // The second argument is not a connection interval.
     Bluefruit.configPrphConn(247, 10, 10, 10);
     Bluefruit.begin();
 
@@ -227,20 +232,30 @@ void BleService::updateBatteryLevel() {
 }
 
 void BleService::onConnect(uint16_t conn_handle) {
-    (void)conn_handle;
+    conn_handle_ = conn_handle;
+    connected_at_ms_ = millis();
+    link_reported_ = false;
     state_ = BleState::Connected;
     last_battery_ms_ = 0;
     updateBatteryLevel();
     if (imu().running()) imu().stop();
     imu().resetQueueAndSeq();
     restoreLeds();
-    Serial.println("[BLE] Central connected (Direct to Recording)");
+    BLEConnection* conn = Bluefruit.Connection(conn_handle_);
+    const bool mtu_requested = conn && conn->requestMtuExchange(247);
+    const bool interval_requested = conn && conn->requestConnectionParameter(
+        PREFERRED_CONN_INTERVAL_UNITS, 0, SUPERVISION_TIMEOUT_UNITS);
+    Serial.printf("[BLE] Central connected; MTU request=%s, 10 ms interval request=%s\n",
+                  mtu_requested ? "ok" : "failed",
+                  interval_requested ? "ok" : "failed");
 }
 
 void BleService::onDisconnect(uint16_t conn_handle, uint8_t reason) {
     (void)conn_handle;
     (void)reason;
     state_ = BleState::Advertising;
+    conn_handle_ = 0xFFFF;
+    link_reported_ = false;
     pending_start_ = false;
     stop_finalization_pending_ = false;
     stop_empty_since_ms_ = 0;
@@ -625,6 +640,20 @@ void BleService::restoreLeds() {
 void BleService::tick() {
     restoreLeds();
 
+    if (connected() && !link_reported_ && millis() - connected_at_ms_ >= 1000) {
+        BLEConnection* conn = Bluefruit.Connection(conn_handle_);
+        if (conn) {
+            mtu_ = conn->getMtu();
+            const uint16_t interval_units = conn->getConnectionInterval();
+            const uint32_t interval_hundredths_ms = interval_units * 125UL / 100;
+            Serial.printf("[BLE] Link MTU=%u interval=%lu.%02lu ms supervision=%u ms\n",
+                          mtu_, interval_hundredths_ms / 100,
+                          interval_hundredths_ms % 100,
+                          conn->getSupervisionTimeout() * 10);
+        }
+        link_reported_ = true;
+    }
+
     if (pending_start_) {
         const uint32_t now = micros();
 
@@ -695,7 +724,7 @@ void BleService::bleTask() {
     if (!connected()) return;
 
     uint16_t conn_mtu = 23;
-    BLEConnection* conn = Bluefruit.Connection(0);
+    BLEConnection* conn = Bluefruit.Connection(conn_handle_);
     if (conn) {
         conn_mtu = conn->getMtu();
     }

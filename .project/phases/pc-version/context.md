@@ -23,6 +23,8 @@ branch is `codex/pc-version`.
   mapping/QC, and exposes localhost IPC.
 - Flutter Windows is the UI and workflow layer; UI rendering is never in the
   lossless ingestion path.
+- IPC is versioned localhost TCP with NDJSON so Python asyncio and Dart `dart:io`
+  can communicate without a WebSocket or named-pipe dependency.
 - Android keeps its existing native Flutter BLE backend.
 - Existing Tkinter/matplotlib tools remain developer diagnostics only.
 
@@ -33,7 +35,7 @@ source-code verification may proceed, but flash, negotiated-link, interrupt,
 FIFO, radio-throughput, and two-board acceptance claims remain blocked until
 real hardware is available.
 
-## Firmware decisions so far
+## Firmware decisions
 
 - Bluefruit `configPrphConn(247, 10, 10, 10)` is MTU/event-length/queue
   configuration; its second argument is not a 10 ms connection interval.
@@ -41,6 +43,16 @@ real hardware is available.
   slave latency, and a 4 second supervision timeout.
 - Read gyro + accelerometer output registers in one 12-byte burst with BDU and
   auto-increment enabled; use the I2C transaction midpoint as `t_device_us`.
+- Count/log burst read failures instead of returning stale component values.
 - The LSM6DS3TR-C and XIAO wiring support FIFO/INT1, but FIFO pattern alignment,
-  watermark routing, timestamp reconstruction, and overflow accounting must be
-  implemented from the ST register contract and remain physically unverified.
+  watermark routing, timestamp reconstruction, and overflow accounting are
+  hardware-gated. Do not enable FIFO acquisition until these are observed on
+  the real board.
+
+## Data-path decision
+
+The PC BLE callback is not allowed to parse samples, update UI, write exports,
+or block on disk. It only captures an immutable notification plus a monotonic
+arrival timestamp and performs a non-overwriting enqueue into that board's
+bounded queue. Overflow is a critical acquisition fault. Downstream consumers
+own strict parsing, sequence validation, journaling, and preview decimation.
