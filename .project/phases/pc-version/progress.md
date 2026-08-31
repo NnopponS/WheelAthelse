@@ -4,45 +4,43 @@ Updated: 2026-08-31 (Asia/Bangkok)
 
 ## Completed
 
-- Created branch `codex/pc-version` from release `v1.7.0` (`f6ad7d2`).
-- Phase 1 commit `b970b69`: parity/architecture baseline and corrected stale
-  async/STOP-ack test fixtures.
-- Flutter baseline: `637 passed`, line coverage `81.83%`, `dart analyze lib`
-  clean.
-- Phase 2 commit `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT and
-  RIGHT builds successful at 25,772 bytes RAM / 147,128 bytes flash.
+- Phase 1 commit `b970b69`: parity/architecture baseline.
+- Phase 2 commit `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT/RIGHT
+  firmware builds green.
 - Phase 3 commit `857a164`: strict headless dual-board ingestion core with
   independent bounded queues and preview isolation.
-- Phase 4 synchronization/lifecycle:
-  - strict Sync parser for v1.7 + compatible legacy event sizes,
-  - uint32 `micros()` unwrapping,
-  - low-RTT affine PC/device clock fit with drift/RTT/residual metrics,
-  - common future PC T0 converted to independent device START targets,
-  - required START_FIRED mapping and measured Left/Right start skew,
-  - serialized bounded STOP retries,
-  - STOP_FIRED required before success,
-  - persistent STOP-write failure or ACK timeout disconnects through the engine
-    to trigger firmware failsafe and clear local ownership,
-  - no periodic dual-wheel control traffic is introduced during recording.
-- PC acquisition tests: `11 passed`.
+- Phase 4 commit `da6249a`: monotonic clock mapping, synchronized scheduled
+  START, START/STOP acknowledgements, bounded STOP retry and fail-closed
+  disconnect fallback.
+- Phase 5 crash-safe storage/QC:
+  - `WATHJNL1` versioned append-only journal with CRC32 per record,
+  - dedicated bounded writer queue; overflow is a fatal QC fault and never
+    overwrites unread data,
+  - each sample preserves session UUID, side, seq, device-us, PC monotonic-ns,
+    six raw axes, packet id, sequence class and missing-before count,
+  - acquisition uses `.open`; clean finalization fsyncs then atomically renames
+    to `.waj`,
+  - recovery validates to the last checksum-complete record and writes a
+    separate `.recovered.waj` while preserving the forensic `.open` original,
+  - CSV is generated only as a derived artifact after journal reading,
+  - QC levels GOOD/WARNING/DEGRADED/INVALID carry machine-readable reasons and
+    reconcile host loss, writer overflow, final firmware counts/health,
+    effective rate and synchronized-start skew.
+- Phase 5 PC suite: `15 passed`; Python compileall clean.
 
 ## Current phase
 
-Phase 5 — append-only journal, crash recovery, QC, and derived exports.
+Phase 6 — versioned localhost IPC and Flutter Windows backend integration.
 
-Required first slice:
+Required slice:
 
-- versioned binary journal with magic/header and checksum per record.
-- `.open` during acquisition, fsync checkpoints, atomic rename to `.waj` only
-  after successful finalization.
-- raw sample records preserve side, seq, device us, PC monotonic ns, six raw
-  axes, packet id and sequence classification.
-- recovery scans incomplete `.open` files, validates to last complete checksum,
-  and preserves partial data.
-- QC reconciles final firmware produced/notified/received counts, host gaps,
-  queue overflow, malformed data, FIFO loss, transport failures, effective rate
-  and synchronized-start skew.
-- CSV export is derived from the journal after acquisition.
+- Python daemon can run without Flutter and owns BLE/journal/lifecycle state.
+- localhost-only TCP NDJSON with version handshake and bounded message size.
+- commands/events use `protocol_version`, `type`, optional `request_id`, and
+  object `payload`; invalid versions/messages fail explicitly.
+- Flutter Windows client receives device/status/preview/health/sync/QC events.
+- raw 50/100/200 Hz samples never cross IPC.
+- Android/mobile repository selection remains unchanged.
 
 ## Blocked hardware evidence
 

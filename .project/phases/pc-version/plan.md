@@ -10,9 +10,9 @@
 | 1 | Feature-parity matrix, target architecture, baseline tests | done (`b970b69`) |
 | 2 | XIAO timing, BLE link preferences/diagnostics, FIFO investigation | done (`8d0d0a9`) |
 | 3 | Headless Python/Bleak dual-board engine | done (`857a164`) |
-| 4 | Clock sync, scheduled start, START/STOP acknowledgements | done |
-| 5 | Append-only journal, recovery, QC, exports | in progress |
-| 6 | Flutter Windows IPC/backend integration | pending |
+| 4 | Clock sync, scheduled start, START/STOP acknowledgements | done (`da6249a`) |
+| 5 | Append-only journal, recovery, QC, exports | done |
+| 6 | Flutter Windows IPC/backend integration | in progress |
 | 7 | Preserve and regression-test Android behavior | pending |
 | 8 | Windows diagnostics and acquisition UI | pending |
 | 9 | Simulated long-run and fault-injection tests | pending |
@@ -20,13 +20,13 @@
 
 ## Current loop
 
-1. Make the authoritative recording artifact an append-only, checksummed binary
-   journal; CSV/XLSX remain derived outputs only.
-2. Add crash recovery for incomplete `.open` journals without deleting partial
-   data.
-3. Reconcile host metrics + final firmware health + sync quality into
-   GOOD/WARNING/DEGRADED/INVALID QC with machine-readable reasons.
-4. Continue sequentially; stop on unexplained regression or data-loss risk.
+1. Define and test a versioned localhost TCP NDJSON protocol with strict size,
+   type, request-id, and protocol-version validation.
+2. Run the Python acquisition daemon independently from Flutter rendering.
+3. Add a Dart desktop client/backend selected only on Windows while Android
+   continues to use the existing FlutterBluePlus path.
+4. Raw IMU samples stay inside the daemon; Flutter receives only throttled
+   preview and telemetry/status events.
 
 ## Phase 2 hardware gate
 
