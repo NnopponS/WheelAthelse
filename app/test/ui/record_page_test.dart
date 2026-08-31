@@ -13,6 +13,7 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/protocol_providers.dart';
 import 'package:wheelathlete/state/record_countdown_providers.dart';
 import 'package:wheelathlete/state/recording_providers.dart';
+import 'package:wheelathlete/state/sync_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/record_page.dart';
 
@@ -42,6 +43,13 @@ const _rightInfo = DeviceInfo(
 Uint8List _startFiredEvent(int tDeviceUs) {
   final inner = ByteData(4)..setUint32(0, tDeviceUs, Endian.little);
   return Uint8List.fromList([0x30, ...inner.buffer.asUint8List()]);
+}
+
+Uint8List _stopFiredEvent(int tDeviceUs) {
+  final inner = ByteData(8)
+    ..setUint32(0, tDeviceUs, Endian.little)
+    ..setUint32(4, 0, Endian.little);
+  return Uint8List.fromList([0x40, ...inner.buffer.asUint8List()]);
 }
 
 Uint8List _imuBatch({required int seq, required int tDeviceUs}) {
@@ -93,7 +101,10 @@ void main() {
         container: container,
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
+          theme: ThemeData(
+            useMaterial3: true,
+            extensions: const [WheelAthleteColors.light],
+          ),
           home: const RecordPage(),
         ),
       ),
@@ -463,15 +474,62 @@ void main() {
         }) async {
           await pumpPage(tester);
           await tester.runAsync(() async {
+            await Future.wait(
+              WheelSide.values.map(
+                container.read(syncEngineProvider.notifier).startListening,
+              ),
+            );
             await container
                 .read(recordingProvider.notifier)
                 .startRecording(config);
             emitBothSamples();
+            await Future<void>.delayed(Duration.zero);
           });
           await tester.pumpAndSettle();
-          await tester.runAsync(
-            () => container.read(recordingProvider.notifier).stopRecording(),
+          await tester.runAsync(() async {
+            final stopped = container
+                .read(recordingProvider.notifier)
+                .stopRecording();
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            ble.syncController('L1')?.add(_stopFiredEvent(1100000));
+            ble.syncController('R1')?.add(_stopFiredEvent(1100500));
+            await stopped;
+          });
+          await tester.pumpAndSettle();
+        }
+
+        Future<void> reRecordAndAcknowledge(WidgetTester tester) async {
+          final button = tester.widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Re-record'),
           );
+          await tester.runAsync(() async {
+            button.onPressed!();
+            final deadline = DateTime.now().add(const Duration(seconds: 3));
+            while (container.read(recordCountdownProvider).status !=
+                RecordCountdownStatus.counting) {
+              if (DateTime.now().isAfter(deadline)) {
+                fail('Re-record did not start the countdown');
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+            ble.syncController('L1')?.add(_startFiredEvent(1000000));
+            ble.syncController('R1')?.add(_startFiredEvent(1000500));
+            while (container.read(recordingProvider).status !=
+                RecordingStatus.awaitingSamples) {
+              if (DateTime.now().isAfter(deadline)) {
+                fail('Re-record did not arm IMU streaming');
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+            emitBothSamples();
+            while (container.read(recordingProvider).status !=
+                RecordingStatus.recording) {
+              if (DateTime.now().isAfter(deadline)) {
+                fail('Re-record did not receive its first samples');
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+          });
           await tester.pumpAndSettle();
         }
 
@@ -496,41 +554,28 @@ void main() {
           expect(find.text('Accelerometer (g)'), findsOneWidget);
         });
 
-        testWidgets('tapping Re-record starts countdown with next trial number', (
-          tester,
-        ) async {
-          await pumpStopped(tester);
-          // After stopping trial 1, next trial number is 2. Tap Re-record and
-          // drive the countdown to completion by injecting START_FIRED events.
-          await tester.runAsync(() async {
-            await tester.tap(find.text('Re-record'));
-            // Wait for the async nextTrialNumber lookup + sync burst + countdown
-            // start to complete.
-            while (container.read(recordCountdownProvider).status !=
-                RecordCountdownStatus.counting) {
-              await Future<void>.delayed(const Duration(milliseconds: 10));
-            }
-            // Inject START_FIRED from both wheels to trigger recording.
-            ble.syncController('L1')?.add(_startFiredEvent(1000000));
-            ble.syncController('R1')?.add(_startFiredEvent(1000500));
-            emitBothSamples();
-            await Future<void>.delayed(const Duration(milliseconds: 50));
-          });
-          await tester.pumpAndSettle();
+        testWidgets(
+          'tapping Re-record starts countdown with next trial number',
+          (tester) async {
+            await pumpStopped(tester);
+            // After stopping trial 1, next trial number is 2. Tap Re-record and
+            // drive the countdown to completion by injecting START_FIRED events.
+            await reRecordAndAcknowledge(tester);
 
-          // Recording should now be active with the carried-over config.
-          final recState = container.read(recordingProvider);
-          expect(recState.status, RecordingStatus.recording);
-          expect(recState.config?.trialNumber, 2);
-          expect(recState.config?.topic, 'sprint_test');
-          expect(recState.config?.sampleRateHz, 100);
+            // Recording should now be active with the carried-over config.
+            final recState = container.read(recordingProvider);
+            expect(recState.status, RecordingStatus.recording);
+            expect(recState.config?.trialNumber, 2);
+            expect(recState.config?.topic, 'sprint_test');
+            expect(recState.config?.sampleRateHz, 100);
 
-          // Clean up: stop recording so timers/streams are torn down.
-          await tester.runAsync(
-            () => container.read(recordingProvider.notifier).stopRecording(),
-          );
-          await tester.pumpAndSettle();
-        });
+            // Clean up: stop recording so timers/streams are torn down.
+            await tester.runAsync(
+              () => container.read(recordingProvider.notifier).stopRecording(),
+            );
+            await tester.pumpAndSettle();
+          },
+        );
 
         testWidgets('Re-record carries over protocolTemplateId', (
           tester,
@@ -551,18 +596,7 @@ void main() {
             ),
           );
 
-          await tester.runAsync(() async {
-            await tester.tap(find.text('Re-record'));
-            while (container.read(recordCountdownProvider).status !=
-                RecordCountdownStatus.counting) {
-              await Future<void>.delayed(const Duration(milliseconds: 10));
-            }
-            ble.syncController('L1')?.add(_startFiredEvent(1000000));
-            ble.syncController('R1')?.add(_startFiredEvent(1000500));
-            emitBothSamples();
-            await Future<void>.delayed(const Duration(milliseconds: 50));
-          });
-          await tester.pumpAndSettle();
+          await reRecordAndAcknowledge(tester);
 
           final recConfig = container.read(recordingProvider).config;
           expect(recConfig?.protocolTemplateId, template.id);

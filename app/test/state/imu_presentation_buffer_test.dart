@@ -16,13 +16,13 @@ ImuReading _reading(int seq) => ImuReading(
 );
 
 void main() {
-  test('production live presentation refreshes at approximately 30 Hz', () {
+  test('production live presentation refreshes at 10 Hz', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
     expect(
       container.read(imuEmitIntervalProvider),
-      const Duration(milliseconds: 33),
+      const Duration(milliseconds: 100),
     );
   });
 

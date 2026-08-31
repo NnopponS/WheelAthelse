@@ -574,6 +574,7 @@ void main() {
                 );
           }
         }
+        await Future<void>.delayed(Duration.zero);
 
         final buffered = notifier.bufferedSamples;
         expect(buffered, hasLength(samplesPerSide * 2));

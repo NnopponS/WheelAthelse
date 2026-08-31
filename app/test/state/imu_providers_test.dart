@@ -122,6 +122,7 @@ void main() {
             buildSample(seq: 1, tDeviceUs: 1100, ax: 16384),
           ]),
         );
+    await Future<void>.delayed(Duration.zero);
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.streaming, isTrue);
@@ -144,6 +145,7 @@ void main() {
     ble
         .imuController('L1')!
         .add(buildBatch([buildSample(seq: 5, tDeviceUs: 500)]));
+    await Future<void>.delayed(Duration.zero);
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.sampleCount, 2);
@@ -164,6 +166,7 @@ void main() {
       ]),
     );
     ctrl.add(buildBatch([buildSample(seq: 10, tDeviceUs: 100)])); // gap 7
+    await Future<void>.delayed(Duration.zero);
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.sampleCount, 4);
@@ -179,6 +182,7 @@ void main() {
     ble
         .imuController('L1')!
         .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0, ax: 16384)]));
+    await Future<void>.delayed(Duration.zero);
     expect(state().bySide[WheelSide.left]!.sampleCount, 1);
 
     await notifier.stop(WheelSide.left);
@@ -201,6 +205,7 @@ void main() {
     expect(identical(firstCtrl, secondCtrl), isTrue);
 
     secondCtrl.add(buildBatch([buildSample(seq: 0, tDeviceUs: 0)]));
+    await Future<void>.delayed(Duration.zero);
     expect(state().bySide[WheelSide.left]!.sampleCount, 1);
   });
 
@@ -210,6 +215,7 @@ void main() {
     await notifier.start(WheelSide.left);
 
     ble.imuController('L1')!.addError(StateError('BLE link lost'));
+    await Future<void>.delayed(Duration.zero);
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.streaming, isFalse);
@@ -225,6 +231,7 @@ void main() {
     ble
         .imuController('L1')!
         .add(Uint8List.fromList([3, ...buildSample(seq: 0, tDeviceUs: 0)]));
+    await Future<void>.delayed(Duration.zero);
 
     final s = state().bySide[WheelSide.left]!;
     expect(s.streaming, isFalse);
@@ -265,6 +272,7 @@ void main() {
               buildSample(seq: 1, tDeviceUs: 10000, ax: 16384),
             ]),
           );
+      await Future<void>.delayed(Duration.zero);
       var s = state().bySide[WheelSide.left]!;
       expect(s.recent.length, 2);
       expect(s.recent.first.seq, 0);
@@ -274,6 +282,7 @@ void main() {
       ble
           .imuController('L1')!
           .add(buildBatch([buildSample(seq: 2, tDeviceUs: 20000, ax: 16384)]));
+      await Future<void>.delayed(Duration.zero);
       s = state().bySide[WheelSide.left]!;
       expect(s.recent.length, 3);
       expect(s.recent.last.seq, 2);
@@ -290,6 +299,7 @@ void main() {
     for (var i = 0; i < WheelImuState.chartBufferCap + 50; i++) {
       ctrl.add(buildBatch([buildSample(seq: i, tDeviceUs: i * 1000)]));
     }
+    await Future<void>.delayed(Duration.zero);
     final s = state().bySide[WheelSide.left]!;
     expect(s.recent.length, WheelImuState.chartBufferCap);
     // Oldest entries dropped; the buffer holds the most recent readings.
@@ -303,6 +313,7 @@ void main() {
     ble
         .imuController('L1')!
         .add(buildBatch([buildSample(seq: 0, tDeviceUs: 0, ax: 16384)]));
+    await Future<void>.delayed(Duration.zero);
     expect(state().bySide[WheelSide.left]!.recent.length, 1);
 
     // Restart — buffer should be cleared.
