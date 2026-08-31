@@ -9,9 +9,9 @@
 | 0 | Repository, protocol, firmware, PC-tool, and Flutter audit | done |
 | 1 | Feature-parity matrix, target architecture, baseline tests | done (`b970b69`) |
 | 2 | XIAO timing, BLE link preferences/diagnostics, FIFO investigation | done (`8d0d0a9`) |
-| 3 | Headless Python/Bleak dual-board engine | done |
-| 4 | Clock sync, scheduled start, START/STOP acknowledgements | in progress |
-| 5 | Append-only journal, recovery, QC, exports | pending |
+| 3 | Headless Python/Bleak dual-board engine | done (`857a164`) |
+| 4 | Clock sync, scheduled start, START/STOP acknowledgements | done |
+| 5 | Append-only journal, recovery, QC, exports | in progress |
 | 6 | Flutter Windows IPC/backend integration | pending |
 | 7 | Preserve and regression-test Android behavior | pending |
 | 8 | Windows diagnostics and acquisition UI | pending |
@@ -20,11 +20,12 @@
 
 ## Current loop
 
-1. Add strict Sync-event parsing and a monotonic PC/device clock model.
-2. Collect repeated pre-record round trips, map one future PC T0 to both device
-   clocks, and require START_FIRED acknowledgements.
-3. Implement bounded STOP retry/ack without introducing periodic dual-wheel
-   control traffic during acquisition.
+1. Make the authoritative recording artifact an append-only, checksummed binary
+   journal; CSV/XLSX remain derived outputs only.
+2. Add crash recovery for incomplete `.open` journals without deleting partial
+   data.
+3. Reconcile host metrics + final firmware health + sync quality into
+   GOOD/WARNING/DEGRADED/INVALID QC with machine-readable reasons.
 4. Continue sequentially; stop on unexplained regression or data-loss risk.
 
 ## Phase 2 hardware gate

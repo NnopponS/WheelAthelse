@@ -64,6 +64,9 @@ class BoardIngestor:
     def pending_notifications(self) -> int:
         return self._queue.qsize()
 
+    def set_sync_sink(self, sink: SyncSink | None) -> None:
+        self._sync_sink = sink
+
     async def start(self) -> None:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(
@@ -127,7 +130,15 @@ class BoardIngestor:
     def _process(self, envelope: NotificationEnvelope) -> None:
         if envelope.kind is NotificationKind.SYNC:
             if self._sync_sink is not None:
-                self._sync_sink(self.side, envelope)
+                try:
+                    self._sync_sink(self.side, envelope)
+                except PacketFormatError as exc:
+                    self.metrics.malformed_packets += 1
+                    if self.fatal_fault is None:
+                        self.fatal_fault = AcquisitionFault(
+                            code="malformed_sync_packet",
+                            message=f"{self.side.value}: {exc}",
+                        )
             return
 
         try:
@@ -204,6 +215,10 @@ class DualBoardEngine:
             )
             for side in WheelSide
         }
+
+    def set_sync_sink(self, sink: SyncSink | None) -> None:
+        for ingestor in self._ingestors.values():
+            ingestor.set_sync_sink(sink)
 
     async def start(self) -> None:
         await asyncio.gather(*(ing.start() for ing in self._ingestors.values()))

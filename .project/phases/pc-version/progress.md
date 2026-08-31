@@ -11,32 +11,38 @@ Updated: 2026-08-31 (Asia/Bangkok)
   clean.
 - Phase 2 commit `8d0d0a9`: XIAO link/timing hardening; `15 passed`; LEFT and
   RIGHT builds successful at 25,772 bytes RAM / 147,128 bytes flash.
-- Phase 3 headless acquisition core:
-  - strict exact-length IMU batch parser (1..12 samples),
-  - uint32 wrap-aware sequence classification,
-  - immutable notification envelopes with monotonic arrival time,
-  - one bounded non-overwriting queue per wheel,
-  - explicit fatal host-queue-overflow and malformed-packet faults,
-  - authoritative sample sink independent from 10 Hz preview decimation,
-  - dual-board engine with independent workers,
-  - production Bleak adapter imported lazily and deterministic fake transport.
-- Phase 3 tests: `5 passed`; `python -m compileall -q tools/pc_acquisition`
-  successful.
+- Phase 3 commit `857a164`: strict headless dual-board ingestion core with
+  independent bounded queues and preview isolation.
+- Phase 4 synchronization/lifecycle:
+  - strict Sync parser for v1.7 + compatible legacy event sizes,
+  - uint32 `micros()` unwrapping,
+  - low-RTT affine PC/device clock fit with drift/RTT/residual metrics,
+  - common future PC T0 converted to independent device START targets,
+  - required START_FIRED mapping and measured Left/Right start skew,
+  - serialized bounded STOP retries,
+  - STOP_FIRED required before success,
+  - persistent STOP-write failure or ACK timeout disconnects through the engine
+    to trigger firmware failsafe and clear local ownership,
+  - no periodic dual-wheel control traffic is introduced during recording.
+- PC acquisition tests: `11 passed`.
 
 ## Current phase
 
-Phase 4 — PC clock synchronization and deterministic START/STOP lifecycle.
+Phase 5 — append-only journal, crash recovery, QC, and derived exports.
 
 Required first slice:
 
-- strict parser for SYNC_RESPONSE, START_FIRED, STOP_FIRED, ACQ_HEALTH and
-  command failure events.
-- monotonic PC master timeline and uint32 device-clock unwrapping.
-- robust min-RTT / low-RTT clock observations and linear drift fit.
-- one future PC start T0 converted independently into both device clocks.
-- START_FIRED required from both armed wheels.
-- bounded STOP write retry and STOP_FIRED acknowledgement handling.
-- no periodic dual-wheel control writes while recording.
+- versioned binary journal with magic/header and checksum per record.
+- `.open` during acquisition, fsync checkpoints, atomic rename to `.waj` only
+  after successful finalization.
+- raw sample records preserve side, seq, device us, PC monotonic ns, six raw
+  axes, packet id and sequence classification.
+- recovery scans incomplete `.open` files, validates to last complete checksum,
+  and preserves partial data.
+- QC reconciles final firmware produced/notified/received counts, host gaps,
+  queue overflow, malformed data, FIFO loss, transport failures, effective rate
+  and synchronized-start skew.
+- CSV export is derived from the journal after acquisition.
 
 ## Blocked hardware evidence
 
