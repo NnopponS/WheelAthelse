@@ -5,7 +5,7 @@ from typing import Any
 
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QFont, QPainter
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -94,7 +94,7 @@ class BoardSummaryCard(Card):
             grid.addWidget(tile, index // 4, index % 4)
         root.addLayout(grid)
 
-    def update_board(self, board: BoardView) -> None:
+    def update_board(self, board: BoardView, *, active: bool = False) -> None:
         self.title.setText(f"{board.side} wheel")
         accel_names = {0: "±2g", 1: "±4g", 2: "±8g", 3: "±16g"}
         gyro_names = {0: "±250°/s", 1: "±500°/s", 2: "±1000°/s", 3: "±2000°/s"}
@@ -107,7 +107,13 @@ class BoardSummaryCard(Card):
             else "Not connected"
         )
         if board.connected:
-            self.status.setText("HEALTHY" if board.healthy else "CHECK")
+            self.status.setText(
+                "STREAMING"
+                if active and board.healthy
+                else "CONNECTED"
+                if board.healthy
+                else "CHECK"
+            )
             self.status.setProperty("state", "good" if board.healthy else "warning")
         else:
             self.status.setText("OFFLINE")
@@ -181,17 +187,26 @@ class MultiAxisChart(Card):
         title: str,
         y_label: str,
         extractor: Callable[[PreviewSample, str, float, float], float],
+        side: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.extractor = extractor
+        self.side = side
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(2)
+
         self.chart = QChart()
         self.chart.setTitle(title)
+        title_font = QFont()
+        title_font.setPointSize(10)
+        title_font.setBold(True)
+        self.chart.setTitleFont(title_font)
         self.chart.legend().setVisible(True)
         self.chart.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
         self.chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
+
         self.x_axis = QValueAxis()
         self.x_axis.setTitleText("Recent time (s)")
         self.x_axis.setRange(-30, 0)
@@ -201,29 +216,43 @@ class MultiAxisChart(Card):
         self.y_axis.setRange(-1, 1)
         self.chart.addAxis(self.x_axis, Qt.AlignmentFlag.AlignBottom)
         self.chart.addAxis(self.y_axis, Qt.AlignmentFlag.AlignLeft)
+
+        axis_colors = {
+            "X": QColor("#0284c7"),  # Sky Blue
+            "Y": QColor("#16a34a"),  # Emerald Green
+            "Z": QColor("#ea580c"),  # Coral Orange
+        }
+
         self.series: dict[tuple[str, str], QLineSeries] = {}
-        for side in ("L", "R"):
+        sides = (side,) if side in ("L", "R") else ("L", "R")
+        for s in sides:
             for axis in ("X", "Y", "Z"):
                 series = QLineSeries()
-                series.setName(f"{side} {axis}")
+                name = f"{axis}" if side else f"{s} {axis}"
+                series.setName(name)
+                pen = QPen(axis_colors[axis])
+                pen.setWidthF(1.8)
+                series.setPen(pen)
                 self.chart.addSeries(series)
                 series.attachAxis(self.x_axis)
                 series.attachAxis(self.y_axis)
-                self.series[(side, axis)] = series
+                self.series[(s, axis)] = series
         view = QChartView(self.chart)
         view.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        view.setMinimumHeight(260)
+        view.setMinimumHeight(170)
         outer.addWidget(view)
 
     def update_from_controller(self, controller: BaseController) -> None:
         all_values: list[float] = []
-        for side in ("L", "R"):
+        sides = (self.side,) if self.side in ("L", "R") else ("L", "R")
+        for side in sides:
             samples = controller.preview_buffer(side).values()
             board = controller.state.boards[side]
             if not samples:
                 for axis in ("X", "Y", "Z"):
-                    self.series[(side, axis)].replace([])
+                    if (side, axis) in self.series:
+                        self.series[(side, axis)].replace([])
                 continue
             latest_ns = samples[-1].pc_ns
             for axis in ("X", "Y", "Z"):
@@ -233,14 +262,11 @@ class MultiAxisChart(Card):
                     y = self.extractor(sample, axis, board.accel_scale, board.gyro_scale)
                     points.append(QPointF(x, y))
                     all_values.append(y)
-                self.series[(side, axis)].replace(points)
+                if (side, axis) in self.series:
+                    self.series[(side, axis)].replace(points)
         if all_values:
-            low = min(all_values)
-            high = max(all_values)
-            span = max(0.05, high - low)
-            padding = span * 0.12
-            self.y_axis.setRange(low - padding, high + padding)
-
+            limit = max(0.05, max(abs(value) for value in all_values)) * 1.12
+            self.y_axis.setRange(-limit, limit)
 
 def accel_value(sample: PreviewSample, axis: str, accel_scale: float, _gyro_scale: float) -> float:
     raw = {"X": sample.ax, "Y": sample.ay, "Z": sample.az}[axis]

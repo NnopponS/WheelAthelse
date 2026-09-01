@@ -102,6 +102,7 @@ class AcquisitionService:
         self._scan_cache: dict[str, dict[str, Any]] = {}
         self._status_rate_baseline: dict[WheelSide, tuple[int, int, int]] = {}
         self._record_metadata: dict[str, Any] | None = None
+        self._live_sides: tuple[WheelSide, ...] = ()
         self.engine = DualBoardEngine(
             transport,
             sample_sink=self._on_sample,
@@ -173,11 +174,15 @@ class AcquisitionService:
             "scheduled_start": self._cmd_scheduled_start,
             "stop": self._cmd_stop,
             "status": self._cmd_status,
+            "start_live": self._cmd_start_live,
+            "stop_live": self._cmd_stop_live,
             "start_record": self._cmd_start_record,
             "end_record": self._cmd_end_record,
             "recover": self._cmd_recover,
             "list_sessions": self._cmd_list_sessions,
+            "set_journal_root": self._cmd_set_journal_root,
             "export_session": self._cmd_export_session,
+            "delete_session": self._cmd_delete_session,
             "diagnostic_report": self._cmd_diagnostic_report,
         }
         try:
@@ -190,7 +195,16 @@ class AcquisitionService:
         timeout_s = float(payload.get("timeout_s", 5.0))
         if not 0.1 <= timeout_s <= 30.0:
             raise ValueError("scan timeout_s must be between 0.1 and 30")
-        devices = await self.transport.scan(timeout_s)
+        attempts = int(payload.get("attempts", 1))
+        if not 1 <= attempts <= 3:
+            raise ValueError("scan attempts must be between 1 and 3")
+        found = {}
+        for _attempt in range(attempts):
+            for device in await self.transport.scan(timeout_s / attempts):
+                found[device.device_id] = device
+            if len(found) >= 2:
+                break
+        devices = list(found.values())
         result = [dataclasses.asdict(device) for device in devices]
         self._scan_cache = {str(device["device_id"]): dict(device) for device in result}
         for device in result:
@@ -238,6 +252,7 @@ class AcquisitionService:
         side = _side(payload["side"])
         device_id = self.engine.device_id(side)
         await self.engine.disconnect(side)
+        self._live_sides = tuple(item for item in self._live_sides if item is not side)
         self._device_info.pop(side, None)
         self._emit(
             "connection_state",
@@ -248,6 +263,8 @@ class AcquisitionService:
     async def _cmd_configure(self, payload: dict[str, Any]) -> dict[str, Any]:
         side = _side(payload["side"])
         device_id = self._require_device(side)
+        if side in self._live_sides:
+            raise RuntimeError("Stop live preview before changing board settings")
         if "sample_rate_hz" in payload:
             rate = int(payload["sample_rate_hz"])
             if rate not in (50, 100, 200):
@@ -329,9 +346,68 @@ class AcquisitionService:
         del payload
         return self.status()
 
+    async def _cmd_start_live(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._journal is not None:
+            raise RuntimeError("Cannot start live preview while recording")
+        sides = self._selected_sides(payload)
+        if not sides:
+            raise RuntimeError("no wheels are connected")
+        if self._live_sides:
+            return {"live": True, "sides": [side.value for side in self._live_sides]}
+
+        try:
+            sync_count = int(payload.get("sync_count", 5))
+            for side in sides:
+                model = await self.lifecycle.synchronize(side, count=sync_count)
+                self._emit("sync_status", self._clock_payload(side, model))
+            await self.engine.reset_sequences(sides)
+            result = await self.lifecycle.scheduled_start(
+                sides,
+                lead_time_s=float(payload.get("lead_time_s", 1.0)),
+                ack_timeout_s=float(payload.get("ack_timeout_s", 1.0)),
+            )
+        except BaseException:
+            # START can partially succeed if one peripheral drops mid-command.
+            # Stop every selected wheel before surfacing the failure.
+            try:
+                await self.lifecycle.stop_all(sides)
+            except Exception:
+                pass
+            raise
+
+        self._live_sides = sides
+        value = {
+            "live": True,
+            "sides": [side.value for side in sides],
+            **self._start_payload(result),
+        }
+        self._emit("live_state", {"state": "started", **value})
+        return value
+
+    async def _cmd_stop_live(self, payload: dict[str, Any]) -> dict[str, Any]:
+        del payload
+        sides = self._live_sides
+        if not sides:
+            return {"live": False, "sides": [], "wheels": {}}
+        result = await self.lifecycle.stop_all(sides)
+        self._live_sides = ()
+        wheels = {
+            side.value: {
+                "acknowledged": item.acknowledged,
+                "write_attempts": item.write_attempts,
+                "error": item.error,
+            }
+            for side, item in result.items()
+        }
+        value = {"live": False, "sides": [], "wheels": wheels}
+        self._emit("live_state", {"state": "stopped", **value})
+        return value
+
     async def _cmd_start_record(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self._journal is not None:
             raise RuntimeError("a recording is already active")
+        if self._live_sides:
+            await self._cmd_stop_live({})
         sides = self._selected_sides(payload)
         if not sides:
             raise RuntimeError("no wheels are connected")
@@ -367,9 +443,19 @@ class AcquisitionService:
             # XIAO firmware resets seq to zero on each START; mirror that epoch
             # boundary after sync traffic has drained and before scheduling T0.
             await self.engine.reset_sequences(sides)
+            lead_time_s = float(payload.get("lead_time_s", 5.0))
+            pc_start_ns = time.monotonic_ns() + int(lead_time_s * 1_000_000_000)
+            self._emit(
+                "recording_state",
+                {
+                    "state": "countdown",
+                    "seconds": max(1, round(lead_time_s)),
+                    "pc_start_ns": pc_start_ns,
+                },
+            )
             start = await self.lifecycle.scheduled_start(
                 sides,
-                lead_time_s=float(payload.get("lead_time_s", 3.0)),
+                pc_start_ns=pc_start_ns,
                 ack_timeout_s=float(payload.get("ack_timeout_s", 1.0)),
             )
             self._start_result = start
@@ -548,20 +634,42 @@ class AcquisitionService:
     async def _cmd_list_sessions(self, payload: dict[str, Any]) -> dict[str, Any]:
         del payload
         sessions: list[dict[str, Any]] = []
+        fields = (
+            "session_id",
+            "athlete",
+            "topic",
+            "trial_number",
+            "sample_rate_hz",
+            "duration_s",
+            "quality",
+            "sample_counts",
+        )
         for journal_path in sorted(
             self.journal_root.glob("*.waj"), key=lambda path: path.stat().st_mtime, reverse=True
         ):
+            summary: dict[str, Any] | None = None
             manifest_path = journal_path.with_suffix(".summary.json")
             if manifest_path.exists():
                 try:
                     value = json.loads(manifest_path.read_text(encoding="utf-8"))
                     if isinstance(value, dict):
-                        sessions.append(value)
-                        continue
+                        summary = value
                 except (OSError, json.JSONDecodeError):
                     pass
-            sessions.append(self._fallback_session_summary(journal_path))
+            summary = summary or self._fallback_session_summary(journal_path)
+            sessions.append({key: summary.get(key) for key in fields})
         return {"sessions": sessions}
+
+    async def _cmd_set_journal_root(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._recording or self._recording_starting:
+            raise RuntimeError("cannot change session folder while recording is active")
+        path_raw = payload.get("journal_root")
+        if not path_raw:
+            raise ValueError("journal_root is required")
+        new_root = Path(str(path_raw))
+        new_root.mkdir(parents=True, exist_ok=True)
+        self.journal_root = new_root
+        return {"journal_root": str(self.journal_root)}
 
     async def _cmd_export_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         session_id = str(payload["session_id"])
@@ -571,6 +679,18 @@ class AcquisitionService:
         output.parent.mkdir(parents=True, exist_ok=True)
         exported = JournalReader(source).export_csv(output)
         return {"session_id": session_id, "output_path": str(exported)}
+
+    async def _cmd_delete_session(self, payload: dict[str, Any]) -> dict[str, Any]:
+        session_id = str(payload["session_id"])
+        source = self._journal_path_for_session(session_id)
+        if self._journal is not None and self._journal.session_id == session_id:
+            raise RuntimeError("cannot delete an active recording")
+        deleted = []
+        for path in (source, source.with_suffix(".summary.json")):
+            if path.exists():
+                path.unlink()
+                deleted.append(str(path))
+        return {"session_id": session_id, "deleted": deleted}
 
     async def _cmd_diagnostic_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         output_raw = payload.get("output_path")
@@ -675,7 +795,10 @@ class AcquisitionService:
         journal = self._journal
         return {
             "boards": boards,
-            "recording": journal is not None,
+            "recording": journal is not None and self._record_started_ns is not None,
+            "recording_starting": journal is not None and self._record_started_ns is None,
+            "live": bool(self._live_sides),
+            "live_sides": [side.value for side in self._live_sides],
             "journal_root": str(self.journal_root),
             "session_id": journal.session_id if journal else None,
             "journal": {

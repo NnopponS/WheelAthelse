@@ -20,8 +20,8 @@
 | 7 | Preserve and regression-test Android behavior | done (`4b4aef9`) |
 | 8 | Flutter Windows diagnostics/acquisition UI | done (`083d7c8`) |
 | 9 | Simulated long-run and fault-injection tests | done (`f23d1c1`) |
-| 10 | Physical two-XIAO acceptance | harness ready; physical execution BLOCKED until two boards are attached |
-| 11 | Python Research Edition desktop UI | implemented + automated/native smoke green; commit pending |
+| 10 | Physical two-XIAO acceptance | harness ready (`78b4fba`); physical execution BLOCKED until two boards are attached |
+| 11 | Python Research Edition desktop UI | done (`9a96601`); automated/native smoke green |
 
 ## Current architecture
 
@@ -134,7 +134,7 @@ with the installed Python/PySide6/Bleak environment.
 
 ## Final project definition of done
 
-All software work that does not require physical boards is complete when Phase
-11 is committed and the source tree is clean. The project as a physically
-validated acquisition system remains open only for Phase 10's real two-XIAO
-acceptance matrix.
+All software work that does not require physical boards is complete. Phase
+11 is committed and the project remains open only for Phase 10's real two-XIAO
+physical acceptance matrix. The working tree must remain clean after the final
+tracker checkpoint.

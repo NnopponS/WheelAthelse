@@ -82,6 +82,8 @@ def test_app_state_preserves_both_wheels_and_ipc_counters():
     state.apply_status(
         {
             "recording": True,
+            "live": True,
+            "live_sides": ["L"],
             "session_id": "abc",
             "journal_root": "C:/sessions",
             "incomplete_sessions": ["broken.open"],
@@ -93,6 +95,8 @@ def test_app_state_preserves_both_wheels_and_ipc_counters():
         }
     )
     assert state.recording
+    assert state.live
+    assert state.live_sides == ("L",)
     assert state.session_id == "abc"
     assert state.connected_sides() == ("L",)
     assert state.incomplete_sessions == ("broken.open",)

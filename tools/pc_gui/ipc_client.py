@@ -107,6 +107,7 @@ class DaemonClient(QObject):
         return request_id
 
     def _on_connected(self) -> None:
+        self._reconnect.stop()
         self._buffer.clear()
         self.connection_changed.emit(True, "Connected to acquisition daemon")
         request_id = uuid.uuid4().hex
@@ -123,6 +124,12 @@ class DaemonClient(QObject):
     def _on_socket_error(self, _error: QAbstractSocket.SocketError) -> None:
         if self.socket.state() == QAbstractSocket.SocketState.UnconnectedState:
             self.connection_changed.emit(False, self.socket.errorString())
+        if (
+            self.auto_reconnect
+            and not self._closing
+            and not self._reconnect.isActive()
+        ):
+            self._reconnect.start()
 
     def _on_ready_read(self) -> None:
         self._buffer.extend(bytes(self.socket.readAll()))

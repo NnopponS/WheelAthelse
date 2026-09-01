@@ -136,7 +136,8 @@ void BleService::begin(char wheel_id) {
     // Sync (Notify)
     s_char_sync.setProperties(CHR_PROPS_NOTIFY);
     s_char_sync.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-    s_char_sync.setMaxLen(1 + SYNC_RESPONSE_SIZE);
+    // Sync carries the 28-byte ACQ_HEALTH event as well as shorter events.
+    s_char_sync.setMaxLen(ACQ_HEALTH_SIZE);
     s_char_sync.begin();
 
     // Info (Read)

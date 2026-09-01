@@ -46,7 +46,7 @@ mutation of `main` is part of this task.
 
 Detailed evidence: `docs/testing/pc-version-phase-09.tdd.md`.
 
-## Phase 10 — physical acceptance preparation complete
+## Phase 10 `78b4fba` — physical acceptance preparation complete
 
 Physical execution is still blocked because two real XIAO nRF52840 Sense boards
 are not connected, but all preparation that can be done without hardware is in
@@ -71,7 +71,7 @@ the working tree:
 
 No physical success is claimed for this phase yet.
 
-## Phase 11 — Python Research Edition implemented
+## Phase 11 `9a96601` — Python Research Edition implemented
 
 The user requested a second PC application written in Python, prioritizing
 stability, simplicity and complete realtime visibility. The existing Flutter
@@ -232,8 +232,9 @@ These remain Phase 10 and require two physical XIAO boards.
 
 ## Current completion state
 
-All new Python Research Edition software requested by the user is implemented
-and passes automated/native no-hardware verification. Remaining housekeeping:
-commit the Phase 10 preparation + Phase 11 Python application on
-`codex/pc-version`, confirm clean working tree, and leave physical Phase 10
-explicitly BLOCKED rather than fabricating a hardware result.
+All new Python Research Edition software requested by the user is implemented,
+verified, and committed on `codex/pc-version`. Phase 10 preparation is committed
+as `78b4fba`; Phase 11 Python Research Edition is committed as `9a96601`.
+Software work that does not require hardware is complete. Physical Phase 10
+remains explicitly BLOCKED until two real XIAO boards are available; no physical
+result is fabricated. A final tracker-only checkpoint records this state.

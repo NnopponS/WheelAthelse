@@ -201,6 +201,13 @@ class AppViewState:
     daemon_connected: bool = False
     daemon_name: str = "Offline"
     recording: bool = False
+    recording_starting: bool = False
+    countdown: int | None = None
+    live: bool = False
+    live_sides: tuple[str, ...] = ()
+    live_busy: bool = False
+    scanning: bool = False
+    connecting: bool = False
     session_id: str | None = None
     journal_root: str = ""
     incomplete_sessions: tuple[str, ...] = ()
@@ -217,6 +224,12 @@ class AppViewState:
             "R": BoardView.from_status("R", boards.get("R")),
         }
         self.recording = bool(payload.get("recording"))
+        self.recording_starting = bool(payload.get("recording_starting"))
+        self.live = bool(payload.get("live"))
+        live_sides = payload.get("live_sides", [])
+        self.live_sides = tuple(
+            str(side) for side in live_sides if side in {"L", "R"}
+        )
         self.session_id = str(payload["session_id"]) if payload.get("session_id") else None
         self.journal_root = str(payload.get("journal_root", ""))
         incomplete = payload.get("incomplete_sessions", [])
