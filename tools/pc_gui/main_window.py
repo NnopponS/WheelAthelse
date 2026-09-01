@@ -11,6 +11,7 @@ from typing import Any
 from PySide6.QtCore import (
     QAbstractItemModel,
     QEvent,
+    QLocale,
     QModelIndex,
     QPointF,
     QRectF,
@@ -50,6 +51,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -76,6 +78,7 @@ from .widgets import (
     accel_value,
     fmt,
     gyro_value,
+    style_chart_surface,
 )
 
 
@@ -297,10 +300,10 @@ QLabel#topicCountPill {
 QLabel#topicAthletesPill {
     background-color: #f1f5f9;
     color: #334155;
-    padding: 3px 9px;
+    padding: 2px 7px;
     border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 500;
 }
 QPushButton#seeMoreButton {
     min-height: 28px;
@@ -319,8 +322,8 @@ QPushButton#seeMoreButton:hover {
 QPushButton#previewTableBtn {
     min-height: 24px;
     max-height: 26px;
-    min-width: 74px;
-    max-width: 80px;
+    min-width: 82px;
+    max-width: 82px;
     padding: 0 8px;
     border-radius: 6px;
     border: 1px solid #0f766e;
@@ -412,14 +415,14 @@ def _table_action_button(text: str, name: str, callback, *, active: bool = False
     container = QWidget()
     container.setStyleSheet("background: transparent;")
     layout = QHBoxLayout(container)
-    layout.setContentsMargins(4, 2, 4, 2)
+    layout.setContentsMargins(0, 2, 0, 2)
     layout.setSpacing(0)
     layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
     btn = QPushButton(text)
     btn.setObjectName(name)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setFixedHeight(26)
-    btn.setFixedWidth(78)
+    btn.setFixedWidth(82)
     if active:
         btn.setProperty("active", "true")
     btn.clicked.connect(callback)
@@ -811,6 +814,8 @@ class AcquisitionPage(QWidget):
         self.topic.setPlaceholderText("e.g. Sprint, Baseline, Agility")
         self.topic.setAccessibleName("topicInput")
         self.trial = QSpinBox()
+        # Keep research metadata unambiguous across Thai/English Windows locales.
+        self.trial.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
         self.trial.setRange(1, 9999)
         self.trial.setValue(1)
         self.trial.setAccessibleName("trialInput")
@@ -1151,6 +1156,7 @@ class SessionPreviewDrawer(Card):
             gap_scatter.attachAxis(y_axis)
 
             view = QChartView(chart)
+            style_chart_surface(chart, view)
             view.setRenderHint(QPainter.RenderHint.Antialiasing, False)
             view.setMinimumHeight(180)
             return chart, x_axis, y_axis, series_map, gap_scatter, view
@@ -1369,6 +1375,12 @@ class TopicCard(Card):
         athletes_text = f"Athletes: {', '.join(athletes)}" if athletes else "Athletes: —"
         self.athletes_pill = QLabel(athletes_text)
         self.athletes_pill.setObjectName("topicAthletesPill")
+        self.athletes_pill.setSizePolicy(
+            QSizePolicy.Policy.Maximum,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.athletes_pill.setMaximumWidth(220)
+        self.athletes_pill.setToolTip(athletes_text)
         header.addWidget(self.athletes_pill)
 
         total_dur = sum(float(s.get("duration_s", 0) or 0) for s in self.sessions)
@@ -1431,7 +1443,8 @@ class TopicCard(Card):
         self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(7, 85)
         self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(8, 95)
+        self.table.setColumnWidth(8, 110)
+        self.table.horizontalHeaderItem(8).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._active_session_id = ""
         self._populate_table()
@@ -1515,9 +1528,14 @@ class TopicCard(Card):
             row_h = self.table.verticalHeader().defaultSectionSize() or 38
             header_h = self.table.horizontalHeader().height() or 34
             total_h = header_h + row_h * len(self.sessions) + 6
-            self.table.setFixedHeight(min(380, total_h))
+            # Let the frame follow its content, with a bounded table viewport
+            # for unusually large topics.
+            self.table.setMinimumHeight(min(380, total_h))
+            self.table.setMaximumHeight(380)
         else:
             self.toggle_btn.setText(f"View Trials ({trials_count})")
+            self.table.setMinimumHeight(0)
+            self.table.setMaximumHeight(16777215)
 
     def _on_topic_check_toggled(self, checked: bool) -> None:
         if self._block_signals:
@@ -1724,7 +1742,8 @@ class ResultsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(8, 85)
         self.table.horizontalHeader().setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(9, 95)
+        self.table.setColumnWidth(9, 110)
+        self.table.horizontalHeaderItem(9).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setAlternatingRowColors(True)

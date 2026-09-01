@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import tempfile
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QAbstractItemView
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QFrame
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -51,6 +51,12 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     _APP.processEvents()
     assert window.acquisition.current["L"].values["ax"].value.text() != "—"
     assert window.acquisition.current["R"].values["gz"].value.text() != "—"
+    assert window.acquisition.trial.text() == "1"
+    assert window.acquisition.accel_chart_l.view.frameShape() == QFrame.Shape.NoFrame
+    assert (
+        window.acquisition.accel_chart_l.view.backgroundBrush().color().name()
+        == "#ffffff"
+    )
 
     # Dashboard settings configuration
     window.dashboard.settings_rate.setCurrentText("200 Hz")
@@ -93,6 +99,8 @@ def test_results_page_batch_export_and_session_folder():
 
     results = window.results
     assert results.table.rowCount() >= 2
+    assert results.table.columnWidth(9) >= 110
+    assert results._topic_cards[0].table.columnWidth(8) >= 110
     assert results.topic_filter.count() >= 2
     assert len(results._topic_cards) >= 1
 
@@ -176,6 +184,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     _APP.processEvents()
     assert not card.table_container.isHidden()
     assert card.toggle_btn.text() == "Hide Trials"
+    assert card.table.minimumHeight() < 380
 
     # Test topic-level checkbox selection
     card.check.setChecked(True)
@@ -206,4 +215,3 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     window.close()
     window.deleteLater()
     _APP.processEvents()
-

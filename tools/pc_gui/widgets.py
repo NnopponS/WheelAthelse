@@ -5,7 +5,7 @@ from typing import Any
 
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -26,6 +26,16 @@ def fmt(value: Any, suffix: str = "", digits: int = 1) -> str:
     if isinstance(value, float):
         return f"{value:.{digits}f}{suffix}"
     return f"{value}{suffix}"
+
+
+def style_chart_surface(chart: QChart, view: QChartView) -> None:
+    """Keep QtCharts native to the light instrument surface on dark Windows."""
+    white = QBrush(QColor("#ffffff"))
+    chart.setBackgroundBrush(white)
+    chart.setBackgroundPen(QPen(Qt.PenStyle.NoPen))
+    chart.setBackgroundRoundness(0)
+    view.setBackgroundBrush(white)
+    view.setFrameShape(QFrame.Shape.NoFrame)
 
 
 class Card(QFrame):
@@ -237,11 +247,12 @@ class MultiAxisChart(Card):
                 series.attachAxis(self.x_axis)
                 series.attachAxis(self.y_axis)
                 self.series[(s, axis)] = series
-        view = QChartView(self.chart)
-        view.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        view.setMinimumHeight(170)
-        outer.addWidget(view)
+        self.view = QChartView(self.chart)
+        style_chart_surface(self.chart, self.view)
+        self.view.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        self.view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.view.setMinimumHeight(170)
+        outer.addWidget(self.view)
 
     def update_from_controller(self, controller: BaseController) -> None:
         all_values: list[float] = []

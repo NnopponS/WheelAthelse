@@ -17,6 +17,17 @@ From the repository root on Windows:
 run_python_pc_app.bat
 ```
 
+## Windows portable build
+
+From the repository root, run `build_windows.bat`. It creates
+`release\WheelAthlete-1.7.0-portable.zip`, containing the GUI and its bundled
+acquisition daemon. Extract the archive on another Windows PC and run
+`WheelAthlete\WheelAthlete.exe`; the acquisition daemon is bundled and starts
+automatically, so no Python installation or separate daemon setup is required.
+
+For a normal Windows installation with Desktop and Start Menu shortcuts, run
+`release\WheelAthleteSetup.exe`.
+
 The launcher checks for PySide6 and Bleak, installs
 `tools\pc_gui\requirements.txt` if they are missing, and starts the desktop
 app. The UI starts a local acquisition daemon automatically when no daemon is

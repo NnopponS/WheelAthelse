@@ -53,14 +53,32 @@ class DaemonProcessManager(QObject):
             return False
         if self.process.state() != QProcess.ProcessState.NotRunning:
             return self._owns_process
-        args = ["-m", "tools.pc_acquisition.daemon", "--port", str(self.port)]
+        if getattr(sys, "frozen", False):
+            app_dir = Path(sys.executable).parent
+            daemon_candidates = (
+                app_dir / "_internal" / "WheelAthleteDaemon.exe",
+                app_dir / "WheelAthleteDaemon.exe",
+                app_dir.parent / "WheelAthleteDaemon" / "WheelAthleteDaemon.exe",
+            )
+            daemon_exe = next(
+                (path for path in daemon_candidates if path.exists()),
+                daemon_candidates[0],
+            )
+            if not daemon_exe.exists():
+                self.log_line.emit(f"Bundled daemon not found: {daemon_exe}")
+                return False
+            program = str(daemon_exe)
+            args = ["--port", str(self.port)]
+        else:
+            program = sys.executable
+            args = ["-m", "tools.pc_acquisition.daemon", "--port", str(self.port)]
         if self.journal_root is not None:
             args += ["--journal-root", str(self.journal_root)]
         self.process.setWorkingDirectory(str(self.repo_root))
         environment = QProcessEnvironment.systemEnvironment()
         environment.insert("PYTHONUNBUFFERED", "1")
         self.process.setProcessEnvironment(environment)
-        self.process.start(sys.executable, args)
+        self.process.start(program, args)
         self._owns_process = True
         return True
 

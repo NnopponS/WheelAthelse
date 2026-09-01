@@ -7,8 +7,8 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from .controller import AcquisitionController, DemoController
-from .main_window import MainWindow
+from tools.pc_gui.controller import AcquisitionController, DemoController
+from tools.pc_gui.main_window import MainWindow
 
 
 def _configure_logging() -> Path:
