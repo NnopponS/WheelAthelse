@@ -23,7 +23,7 @@ Uint8List _syncResponseEvent({
 void main() {
   test('parses protocol 1.3 REPLAY_RESULT', () {
     final bytes = Uint8List(10);
-    final data = ByteData.sublistView(bytes)
+    ByteData.sublistView(bytes)
       ..setUint8(0, SyncEventId.replayResult)
       ..setUint32(1, 42, Endian.little)
       ..setUint16(5, 4, Endian.little)
@@ -36,7 +36,7 @@ void main() {
 
   test('parses protocol 1.6 ACQ_HEALTH', () {
     final bytes = Uint8List(20);
-    final data = ByteData.sublistView(bytes)
+    ByteData.sublistView(bytes)
       ..setUint8(0, SyncEventId.acqHealth)
       ..setUint8(1, 2)
       ..setUint32(2, 1001, Endian.little)
@@ -57,7 +57,7 @@ void main() {
 
   test('parses protocol 1.6.1 split queue-drop and FIFO-fault telemetry', () {
     final bytes = Uint8List(28);
-    final data = ByteData.sublistView(bytes)
+    ByteData.sublistView(bytes)
       ..setUint8(0, SyncEventId.acqHealth)
       ..setUint8(1, 4)
       ..setUint32(2, 1007, Endian.little)
@@ -76,7 +76,7 @@ void main() {
 
   test('keeps legacy 0x60 replay result reader', () {
     final bytes = Uint8List(10);
-    final data = ByteData.sublistView(bytes)
+    ByteData.sublistView(bytes)
       ..setUint8(0, 0x60)
       ..setUint32(1, 7, Endian.little)
       ..setUint16(5, 2, Endian.little)

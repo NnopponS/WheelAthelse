@@ -1,6 +1,6 @@
 # BLE Protocol
 
-> **Version:** 1.7.0 (dual-wheel lifecycle reliability and acquisition health)
+> **Version:** 1.8.0 (dual-wheel lifecycle reliability and acquisition health)
 > **Canonical source:** [`docs/ble-protocol.md`](../ble-protocol.md)
 > This wiki page is a summary. The canonical doc in the repo is the source
 > of truth — firmware and app must both implement it exactly.
@@ -169,9 +169,9 @@ Config is persisted in NVS by `config_store` and survives power cycles.
 ## Versioning
 
 The BLE protocol version is independent of firmware/app versions:
-- BLE protocol: 1.7.0
-- Firmware: 1.7.0
-- App: 1.7.0+8
+- BLE protocol: 1.8.0
+- Firmware: 1.8.0
+- Mobile app: 1.8.0+9
 
 Any change to packet layout, UUIDs, or command set requires bumping the
 BLE protocol version and updating `docs/ble-protocol.md` first.

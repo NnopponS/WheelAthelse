@@ -1,173 +1,96 @@
 # Build Guide
 
-> v0.1.0 — Data Collection MVP
+Current release line: `v1.8.0`.
 
-## Prerequisites
-
-### Firmware
-- [PlatformIO](https://platformio.org/) — VS Code extension or CLI
-- USB-C cable (data + power)
-- 2× M5StickCPlus2
-
-### App
-- [Flutter](https://flutter.dev/) 3.x (`flutter --version` → SDK `^3.11.5`)
-- For iOS: macOS + Xcode
-- For Android: Android Studio or Android SDK
-- A physical phone (BLE doesn't work on emulators)
-
----
-
-## Firmware — Build & Flash
-
-```bash
-cd firmware
-
-# Build for each wheel
-pio run -e left          # build left wheel firmware
-pio run -e right         # build right wheel firmware
-
-# Flash to M5StickCPlus2 (connect via USB-C first)
-pio run -e left -t upload     # flash left M5
-pio run -e right -t upload    # flash right M5
-
-# Monitor serial debug output (115200 baud)
-pio device monitor
-
-# Run host-side pure-logic tests (no hardware needed)
-pio test -e native
-```
-
-### Environments
-
-| Env | Purpose | `WHEEL_ID` |
-|-----|---------|------------|
-| `left`   | Left wheel firmware   | `0x4C` ('L') |
-| `right`  | Right wheel firmware  | `0x52` ('R') |
-| `native` | Host-side Unity tests  | — |
-
-### Build flags
-
-Defined in `platformio.ini`:
-- `-std=c++17`
-- `-DCORE_DEBUG_LEVEL=3`
-- `-DWheelAthlete_FW_MAJOR=1`
-- `-DWheelAthlete_FW_MINOR=4`
-- `-DWheelAthlete_FW_PATCH=0`
-- `-DWHEEL_ID=0x4C` or `0x52` (per env)
-
-### Libraries
-
-- `m5stack/M5Unified @ ^0.1.16` — IMU + display
-- `h2zero/NimBLE-Arduino @ ^1.4.1` — BLE
-
-### Changing wheel side at runtime
-
-Wheel side can be changed without reflashing via the `SET_WHEEL` BLE
-command from the app's Board Settings page. The change is persisted to
-NVS by `config_store` and survives power cycles.
-
-### Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `pio: command not found` | Install PlatformIO (VS Code extension or `pip install platformio`) |
-| Upload fails | Hold the M5 power button, retry; check USB-C cable is data-capable |
-| `platformio.ini` env not found | Run `pio project init` if migrating |
-| Monitor shows garbage | Check baud rate = 115200 |
-| BLE not advertising | Power-cycle the M5; verify firmware flashed successfully |
-
----
-
-## App — Build & Run
+## Flutter mobile app — Android / iOS
 
 ```bash
 cd app
-
 flutter pub get
-flutter run -d <device-id>          # run on phone
-flutter test                        # all unit + widget tests
-flutter analyze                     # static analysis (strict config)
+flutter run -d <physical-device-id>
+flutter test
+flutter analyze
 
-# Release builds
-flutter build apk --release         # Android APK
-flutter build appbundle --release   # Android App Bundle
-flutter build ios --release         # iOS (requires macOS + Xcode)
+flutter build apk --release
+flutter build appbundle --release
+# macOS + Xcode required:
+flutter build ios --release
 ```
 
-### Find your device ID
+The Flutter product is mobile-only. There is no supported Flutter Windows or Web build target.
+
+## Python Windows app — source
+
+From repository root:
+
+```bat
+run_python_pc_app.bat
+```
+
+Demo mode without hardware:
+
+```bat
+run_python_pc_app.bat --demo
+```
+
+The GUI starts/reuses the local acquisition daemon automatically.
+
+## Python Windows app — portable EXE + installer
+
+Prerequisites:
+
+- Python and WheelAthlete Python dependencies
+- PyInstaller
+- Inno Setup 6
+
+Build from repository root:
+
+```bat
+packaging\windows\build_installer.bat
+```
+
+Outputs:
+
+```text
+release/WheelAthlete-1.8.0-portable.zip
+release/WheelAthleteSetup-1.8.0.exe
+```
+
+The daemon executable is bundled with the GUI distribution. See `packaging/windows/README.md` for packaging details.
+
+## M5StickCPlus2 firmware
 
 ```bash
-flutter devices
+cd M5plus2_firmware
+pio run -e left
+pio run -e right
+pio run -e left -t upload
+pio run -e right -t upload
 ```
 
-Pick the physical phone (not emulators — BLE requires real hardware).
+## XIAO nRF52840 Sense firmware
 
-### Key dependencies
+```bash
+cd Xiao_firmware
+pio run -e left
+pio run -e right
+pio run -e left -t upload
+pio run -e right -t upload
+```
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `flutter_blue_plus` | `^2.3.9` | BLE |
-| `flutter_riverpod` | `^3.3.2` | State management |
-| `fl_chart` | `^1.2.0` | Charts |
-| `csv` | `^8.0.0` | CSV export |
-| `excel` | `^4.0.6` | Excel export |
-| `share_plus` | `^13.2.0` | OS share sheet |
-| `path_provider` | `^2.1.6` | Filesystem paths |
-| `file_picker` | `12.0.0-beta.7` | Directory picker (pinned for share_plus compat) |
-| `google_fonts` | `^8.1.0` | Inter + JetBrains Mono |
+Both targets use firmware version `1.8.0` and implement the canonical BLE contract in `docs/ble-protocol.md`.
 
-> `file_picker` is pinned to `12.0.0-beta.7` because it's the only series
-> compatible with `share_plus 13.x` (win32 ^6). The stable 11.x line
-> conflicts on win32 ^5.
+## Verification
 
-### Strict analysis config
+```bash
+# Mobile
+cd app
+flutter test
+flutter analyze
 
-`analysis_options.yaml` enables:
-- `strict-casts`
-- `strict-inference`
-- `strict-raw-types`
-- `unawaited_futures: error`
-- `always_use_package_imports`
-- Extra lints (const, final, etc.)
+# Windows Python, from repo root
+python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
+python -m compileall -q tools/pc_acquisition tools/pc_gui
+```
 
-`flutter analyze` must be clean before commit.
-
-### iOS-specific
-
-- Requires macOS + Xcode
-- Open `ios/Runner.xcworkspace` in Xcode to set signing team
-- BLE capability requires `NSBluetoothAlwaysUsage` in `Info.plist`
-  (already configured)
-
-### Android-specific
-
-- Min SDK: check `android/app/build.gradle` (flutter_blue_plus requires 21+)
-- BLE permissions: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` (Android 12+)
-  already in `AndroidManifest.xml`
-
-### Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `flutter_blue_plus` not found | `flutter pub get`; check pubspec.yaml |
-| BLE scan finds nothing | Enable Bluetooth on phone; power on M5 modules; move closer |
-| Connect fails | M5 may be connected to another phone — power-cycle it |
-| App crashes on export | Check storage permissions on Android |
-| `flutter analyze` errors | Fix all — strict config treats many as errors |
-| iOS build fails | Check signing team in Xcode; ensure bundle ID is unique |
-
----
-
-## Verifying the build
-
-After flashing firmware and building the app:
-
-1. Power on both M5 modules — LCD should show "WheelAthlete-L" / "-R"
-2. Open the app → Connect tab → Scan
-3. Both modules should appear as `WheelAthlete-L` and `WheelAthlete-R`
-4. Connect both — Live tab should show realtime IMU values
-5. Record a short session → check Browse → preview → export CSV
-6. Open the CSV — verify `timestamp_synced_ms` is populated and L/R data
-   is present
-
-If all of the above works, the build is good.
+Physical BLE throughput and real left/right start skew require hardware acceptance; automated tests do not prove RF behavior.

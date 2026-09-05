@@ -252,9 +252,9 @@ class ExportActions {
           jsonEncode({
             'product': 'WheelAthlete',
             'topic': topic,
-            'app_version': '1.7.0+8',
-            'firmware_version': '1.7.0',
-            'protocol_version': '1.7.0',
+            'app_version': '1.8.0+9',
+            'firmware_version': '1.8.0',
+            'protocol_version': '1.8.0',
             'session_schema_version': 4,
             'export_schema_version': 2,
             'trial_count': trials.length,
@@ -327,9 +327,9 @@ class ExportActions {
     final manifest = utf8.encode(
       jsonEncode({
         'product': 'WheelAthlete',
-        'app_version': '1.7.0+8',
-        'firmware_version': '1.7.0',
-        'protocol_version': '1.7.0',
+        'app_version': '1.8.0+9',
+        'firmware_version': '1.8.0',
+        'protocol_version': '1.8.0',
         'session_schema_version': 4,
         'export_schema_version': 2,
         'topic_count': topics.length,

@@ -253,7 +253,7 @@ void main() {
       container = ProviderContainer(
         overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
       );
-      final source = DiskPreviewSource(
+      const source = DiskPreviewSource(
         topic: 'test-topic',
         trialNumber: 1,
         sessionId: 'deadbeef',
@@ -281,7 +281,7 @@ void main() {
       container = ProviderContainer(
         overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
       );
-      final source = DiskPreviewSource(
+      const source = DiskPreviewSource(
         topic: 'nope',
         trialNumber: 1,
         sessionId: 'missing',
@@ -307,7 +307,7 @@ void main() {
       container = ProviderContainer(
         overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
       );
-      final source = DiskPreviewSource(
+      const source = DiskPreviewSource(
         topic: 'test-topic',
         trialNumber: 1,
         sessionId: 'deadbeef',

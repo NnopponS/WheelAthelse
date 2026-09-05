@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0+9 / Firmware 1.8.0 / BLE 1.8.0 / Windows 1.8.0 — 2026-09-05
+
+- Consolidate the supported product surface to Flutter mobile (iOS/Android) and the Python PySide6 Windows Research Edition.
+- Remove the retired Flutter Windows implementation, Flutter Web scaffold, and legacy Tkinter/Matplotlib desktop GUI.
+- Promote the Python acquisition daemon + `.waj` journal architecture as the sole Windows raw-data path.
+- Organize PyInstaller/Inno Setup source under `packaging/windows/` and drive Windows packaging from the root `VERSION` file.
+- Add versioned portable ZIP and installer outputs.
+- Align mobile, both firmware targets, BLE protocol, Windows acceptance defaults, documentation, and packaging to the 1.8.0 release line.
+- Consolidate `.project` into canonical current-state documents; historical phase prompts remain available through Git history.
 ## 1.7.0+8 / Firmware 1.7.0 / BLE 1.7.0 — 2026-07-25
 
 - Harden dual-wheel BLE connect, start, stop, replay, and recovery flows.

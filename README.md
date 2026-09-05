@@ -1,437 +1,256 @@
 # WheelAthlete
 
-**IMU-based wheelchair motion data collection system** — captures raw accelerometer + gyroscope data from both wheelchair wheels and synchronizes it with a video gold standard, replacing multi-camera 3D motion capture.
+**Dual-wheel IMU data collection for wheelchair sports research.** WheelAthlete captures synchronized accelerometer and gyroscope data from left/right wheel sensors and provides two operator applications: a Flutter mobile app and a reliability-focused Python Windows app.
 
-> **Release:** `v1.7.0` — Dual-wheel reliability release
+> **Current release line:** `v1.8.0`
+> **Mobile:** `1.8.0+9` · **Firmware:** `1.8.0` · **BLE protocol:** `1.8.0` · **Windows package:** `1.8.0`
 > **Languages:** [English](README.md) · [ภาษาไทย](README.th.md)
 
----
+## Current products
 
-## Table of Contents
+WheelAthlete intentionally has **two user-facing applications only**:
 
-- [Overview](#overview)
-- [What's Working in v0.1.0](#whats-working-in-v010)
-- [What's NOT in v0.1.0](#whats-not-in-v010)
-- [Architecture](#architecture)
-- [Hardware Requirements](#hardware-requirements)
-- [Repository Layout](#repository-layout)
-- [Build & Flash — Firmware](#build--flash--firmware)
-- [Build & Run — Mobile App](#build--run--mobile-app)
-- [Data Format](#data-format)
-- [Time Synchronization](#time-synchronization)
-- [BLE Protocol](#ble-protocol)
-- [Field Data Collection Protocol](#field-data-collection-protocol)
-- [Testing](#testing)
-- [Roadmap](#roadmap)
-- [License](#license)
+| Product | Platform | Runtime | BLE ownership | Primary storage |
+|---|---|---|---|---|
+| Mobile App | iOS + Android | Flutter / Dart | App owns BLE directly | Mobile session CSV + metadata |
+| Windows App | Windows 10/11 | Python / PySide6 | Acquisition daemon owns BLE | Append-only `.waj` journal + derived CSV |
 
----
+The retired Flutter Windows application, Flutter Web scaffold, and legacy Tkinter/Matplotlib desktop GUI are not part of the current source tree.
 
-## Overview
+## System overview
 
-WheelAthlete turns two cheap M5StickCPlus2 modules into a research-grade IMU
-acquisition rig for wheelchair sports biomechanics. Each module mounts on one
-wheel and streams synchronized 6-axis IMU data over BLE to a Flutter app. The
-app records sessions, computes quality metrics, and exports CSV/Excel for
-later model training.
+Both clients use the same firmware BLE contract. Use one operator client at a time with a given sensor pair.
 
-The system replaces expensive 3D motion capture setups with a portable,
-battery-powered kit that fits in a small bag. A single phone acts as the
-common time reference for both wheels, eliminating the need for NTP or RTC
-hardware.
-
-```
-  [Left wheel]                [Right wheel]
- M5StickCPlus2 (L)           M5StickCPlus2 (R)
-  MPU6886 IMU                 MPU6886 IMU
-   │ accel xyz, gyro xyz       │ accel xyz, gyro xyz
-   │ @ 50/100/200 Hz           │ @ 50/100/200 Hz
-   └────── BLE GATT ────┐  ┌── BLE GATT ──────┘
-                        ▼  ▼
-                ┌──────────────────────┐
-                │   Flutter App         │
-                │  (iOS + Android)      │
-                │  - BLE manager (x2)   │
-                │  - Clock sync engine  │
-                │  - Recorder + preview │
-                │  - CSV/Excel export   │
-                └───────────┬───────────┘
+```text
+     Left wheel sensor                    Right wheel sensor
+  M5StickCPlus2 / XIAO                 M5StickCPlus2 / XIAO
+           │                                   │
+           └────────────── BLE GATT ───────────┘
                             │
-                            ▼
-                      session_*.csv
-                            │
-              (future phase) ─► Python: train model
-                            ▲
-              Camera (gold standard) recorded separately
-              → aligned later via beep 3-2-1 + mark events
+               ┌────────────┴────────────┐
+               │                         │
+               ▼                         ▼
+      Flutter Mobile App        Python Windows App
+        iOS / Android              PySide6 GUI
+        direct BLE I/O                  │
+               │                  localhost IPC
+               │                        │
+               │                 Acquisition daemon
+               │                 Bleak / WinRT BLE
+               ▼                        ▼
+      CSV + metadata           authoritative .waj journal
+      preview + export         QC + recovery + CSV export
 ```
 
----
+### Firmware
 
-## What's Included in v1.7.0
+Two maintained targets implement the same protocol:
 
-The v1.7.0 release is the stable **data-collection core**. The app captures,
-synchronizes, previews, validates, and exports dual-wheel IMU sessions. It does
-**not** train or run a machine-learning model yet.
+- `M5plus2_firmware/` — M5StickCPlus2 / ESP32
+- `Xiao_firmware/` — Seeed XIAO nRF52840 Sense
 
-### Firmware (M5StickC Plus2 + Xiao BLE Sense)
-- MPU6886 IMU acquisition via hardware data-ready interrupt + FIFO
-- Configurable sampling rate: 50 / 100 / 200 Hz
-- BLE GATT server (NimBLE) with 5 characteristics + standard Battery Service
-- Batched IMU notify (up to 12 samples per packet at MTU 247)
-- Control commands: START, STOP, SET_RATE, SYNC_PING, SET_RANGE, BEEP,
-  SET_NAME, SET_WHEEL, SET_UTC, RESET_SEQ
-- Scheduled synchronized start with countdown beep 3-2-1
-- Bounded replay plus acquisition-health telemetry for BLE queue pressure,
-  transport failures, IMU FIFO faults, and lost samples
-- On-device display: connection state, recording, battery, sample count
-- Board identity (L/R) configurable at build time or at runtime via BLE
-- Persistent config store (name, wheel side, ranges) in NVS
-- Firmware version 1.7.0 (M5StickC Plus2 and Xiao BLE Sense)
+Core capabilities include left/right identity, 50/100/200 Hz sampling, synchronized lifecycle commands, sensor-range configuration, battery information, replay/recovery support, sequence accounting, and acquisition-health telemetry.
 
-### Mobile App (Flutter, iOS + Android)
-- BLE scan + simultaneous left/right connection for supported board targets
-- Automatic L/R side assignment from board Info characteristic
-- Clock sync engine (NTP/PTP-lite over BLE): offset estimation + drift
-  correction → common timeline in UTC milliseconds
-- Realtime IMU display (6 metrics per wheel + sample/drop counts)
-- Recording with synchronized start, countdown, and beep
-- Session storage organized by topic → trial → session
-- Protocol templates with target trial count (experiment tracker dashboard)
-- Session tags + search/filter on Browse
-- Session preview page: scrub slider, accel/gyro charts, summary stats
-- Quality badges (good / fair / poor / unknown) from drift residual RMS
-- Named trial CSV, aligned training CSV, complete-data ZIP, and Excel export
-- Versioned metadata, collision-safe filenames, and non-destructive IMU/C3D
-  processing tools
-- Share exported files via OS share sheet
-- Light + dark theme, designed for outdoor sunlight readability
-- App version 1.7.0+8
+### Flutter mobile app
 
-### Documentation
-- BLE protocol spec (`docs/ble-protocol.md`) — single source of truth
-- Field data collection protocol (`docs/data-collection-protocol.md`)
-- Architecture docs in `.project/` (Phase 1, 3, 4)
+Location: `app/`
 
----
+Key capabilities:
 
-## What's NOT in v1.7.0
+- connect left/right BLE boards simultaneously;
+- realtime Accel XYZ + Gyro XYZ display;
+- clock synchronization and synchronized recording start;
+- topic/trial/session organization;
+- protocol templates, experiment tracking, tags, search/filter;
+- session preview, QC/quality indicators, and statistics;
+- CSV/Excel/ZIP export and OS sharing;
+- mobile-only runtime target: Android + iOS.
 
-- No machine-learning model training or inference
-- No real-time biomechanical feedback to the athlete
-- No cloud sync or server backend (all data stays on-device)
-- No automated video↔IMU alignment (manual via beep + mark events)
-- No multi-athlete/session comparison dashboard
-- Firmware has no OTA update (flash via USB only)
+### Python Windows app
 
-These are planned for later phases — see [Roadmap](#roadmap).
+Locations: `tools/pc_gui/` + `tools/pc_acquisition/`
 
----
+The PySide6 UI is deliberately separated from the authoritative raw-data path. The acquisition daemon owns BLE, strict packet parsing, sequence/loss accounting, synchronization, `.waj` journal writes, final QC, and crash recovery. The GUI receives bounded preview/status traffic over localhost IPC.
 
-## Architecture
+This means a slow chart or restarted GUI cannot silently become the raw BLE storage bottleneck.
 
-The system has three layers:
+Windows UI includes Dashboard, Live, Record, Experiments, Sessions, and Diagnostics. See [`tools/pc_gui/README.md`](tools/pc_gui/README.md) for the detailed workflow.
 
-### 1. Firmware (ESP32, Core 0 + Core 1)
-- **Core 0:** IMU acquisition — data-ready ISR drains MPU6886 FIFO into a
-  FreeRTOS queue. Sampling interval is hardware-timed, immune to BLE jitter.
-- **Core 1:** BLE task batches queue contents and notifies the app. If BLE
-  stalls, the queue fills and `drop_count` is reported via Sync events.
-- Pure logic (packet layout, scale tables, rate math) lives in
-  `imu_types.h` / `ble_types.h` and is host-testable without hardware.
+## Repository layout
 
-### 2. Mobile App (Flutter + Riverpod)
-- **BLE layer** (`lib/ble/`): abstract `BleRepository` + `FlutterBluePlusBleRepository`
-  adapter. Fake implementation for unit tests.
-- **State layer** (`lib/state/`): Riverpod 3.x Notifiers for connection, IMU
-  stream, clock sync, recording, preview, browse, protocol templates.
-- **Records layer** (`lib/records/`): session model, storage repository,
-  protocol templates, session stats, quality badges.
-- **Export layer** (`lib/export/`): CSV + Excel exporters, resampler, share.
-- **UI layer** (`lib/ui/`): Connect, Live, Record, Browse, Session Preview,
-  Experiment Tracker, Board Settings, Tag Editor.
-- **Theme** (`lib/theme/`): custom design system — palette, typography
-  (Inter + JetBrains Mono for tabular metrics), WheelAthleteColors
-  ThemeExtension (L=blue, R=orange), light + dark high-contrast.
-
-### 3. Data
-- Sessions stored on-device under `WheelAthleteData/<topic>/trial_<NN>/`.
-- Each session = one CSV + one `session_<id>_meta.json`.
-- Protocol templates stored in `protocols.json` alongside the data root.
-
-Full architecture docs:
-- `.project/architecture.md` — Phase 1 (data collection core)
-- `.project/architecture-phase3.md` — Phase 3 (browse + protocol templates)
-- `.project/architecture-phase4.md` — Phase 4 (session preview + quality)
-
----
-
-## Hardware Requirements
-
-| Item | Qty | Notes |
-|------|-----|-------|
-| M5StickCPlus2 | 2 | Left + Right wheel |
-| USB-C cable | 2 | For charging + flashing |
-| Power bank | 1 | For sessions longer than ~30 min (M5 battery ~80 mAh) |
-| iOS or Android phone | 1 | Runs the WheelAthlete app |
-| Video camera (gold standard) | 1 | 60+ fps recommended, with microphone |
-| Tripod | 1 | Optional but recommended |
-| 3M VHB double-sided tape or strap | — | To mount M5 on wheel hub/spoke |
-| L/R labels | 2 | Stick on each M5 for clarity |
-
----
-
-## Repository Layout
-
-```
-WheelAthlete/
-├── firmware/                 # PlatformIO project (M5StickCPlus2, ESP32)
-│   ├── platformio.ini        # envs: left, right, native (host tests)
-│   ├── src/
-│   │   ├── main.cpp          # Entry point + task scheduling
-│   │   ├── imu_types.h       # Pure logic: sample struct, scales, rate math
-│   │   ├── imu_reader.{h,cpp}# MPU6886 FIFO + data-ready acquisition
-│   │   ├── ble_types.h       # Pure logic: packet layout, command parsing
-│   │   ├── ble_service.{h,cpp}# NimBLE GATT server
-│   │   ├── config_store.{h,cpp}# NVS persistent config
-│   │   ├── display.{h,cpp}   # M5 LCD status rendering
-│   ├── test/                 # Unity host tests (env: native)
-│   └── README.md
-├── app/                      # Flutter project (iOS + Android)
-│   ├── lib/
-│   │   ├── main.dart
-│   │   ├── ble/              # BLE repository, packet parser, device info
-│   │   ├── state/            # Riverpod providers + clock sync engine
-│   │   ├── records/          # Session model, storage, stats, quality, protocols
-│   │   ├── export/           # CSV + Excel exporters, resampler, share
-│   │   ├── ui/               # Connect, Live, Record, Browse, Preview, etc.
-│   │   ├── widgets/          # Reusable components (chart, cards, badges)
-│   │   └── theme/            # Design system (palette, typography, themes)
-│   ├── test/                 # Unit + widget tests
-│   ├── pubspec.yaml
-│   └── README.md
+```text
+WheelAthelse/
+├── app/                         # Flutter mobile app — iOS + Android
+├── M5plus2_firmware/            # M5StickCPlus2 firmware
+├── Xiao_firmware/               # XIAO nRF52840 Sense firmware
+├── tools/
+│   ├── pc_acquisition/          # Windows authoritative BLE/recording daemon
+│   ├── pc_gui/                  # PySide6 Windows operator UI
+│   ├── check_session.py         # Session validation helper
+│   └── process_dataset.py       # Dataset processing helper
+├── packaging/
+│   └── windows/                 # PyInstaller + Inno Setup build sources
 ├── docs/
-│   ├── ble-protocol.md              # BLE contract (firmware ↔ app)
-│   ├── data-collection-protocol.md # Field procedure
-│   └── testing/                     # TDD evidence reports
-├── tools/                    # Helper scripts
-├── .project/                 # Cross-session plans, architecture, progress
-├── README.md                 # This file (English)
-├── README.th.md              # Thai version
-└── .gitignore
+│   ├── ble-protocol.md          # Canonical BLE contract
+│   ├── data-collection-protocol.md
+│   ├── testing/                 # Verification evidence
+│   └── wiki/                    # Longer-form project documentation
+├── assets/                      # Product icons/logo
+├── .project/                    # Canonical current project state only
+├── run_python_pc_app.bat        # Windows source launcher
+├── VERSION                      # Coordinated semantic product version
+├── README.md
+└── README.th.md
 ```
 
----
+`build/`, `release/`, Flutter generated files, PlatformIO `.pio/`, and collected session data are intentionally untracked.
 
-## Build & Flash — Firmware
+## Quick start — Windows Python app
 
-Requires [PlatformIO](https://platformio.org/) (VS Code extension or CLI).
+From the repository root:
 
-```bash
-cd firmware
-
-# Build for each wheel
-pio run -e left          # build left wheel firmware
-pio run -e right         # build right wheel firmware
-
-# Flash to M5StickCPlus2 (connect via USB-C first)
-pio run -e left -t upload     # flash left M5
-pio run -e right -t upload    # flash right M5
-
-# Monitor serial debug output
-pio device monitor
-
-# Run host-side pure-logic tests (no hardware needed)
-pio run -e native            # build native test env
-pio test -e native           # run Unity tests
+```bat
+run_python_pc_app.bat
 ```
 
-Build flags set `WHEEL_ID` per env:
-- `env:left`  → `WHEEL_ID=0x4C` ('L')
-- `env:right` → `WHEEL_ID=0x52` ('R')
+The launcher checks the Python UI dependencies and starts `tools.pc_gui`. In normal mode the GUI starts or reuses the local acquisition daemon automatically.
 
-Wheel side can also be changed at runtime via the `SET_WHEEL` BLE command
-(persisted to NVS by `config_store`).
+Demo UI without physical boards:
 
-Firmware version is defined in `platformio.ini`:
-`WheelAthlete_FW_MAJOR=1`, `WheelAthlete_FW_MINOR=7`, `WheelAthlete_FW_PATCH=0`.
+```bat
+run_python_pc_app.bat --demo
+```
 
----
+Demo mode is visibly labeled and does not create synthetic research evidence.
 
-## Build & Run — Mobile App
+Default Windows data locations:
 
-Requires [Flutter](https://flutter.dev/) 3.x with a connected device or emulator.
+- Sessions: `~/Documents/WheelAthlete/PC Sessions`
+- GUI log: `~/Documents/WheelAthlete/Logs/python-pc-app.log`
+- Experiment presets: `~/Documents/WheelAthlete/experiments.json`
+
+## Build Windows portable EXE + installer
+
+Prerequisites: Python, PyInstaller, and Inno Setup 6.
+
+```bat
+packaging\windows\build_installer.bat
+```
+
+Outputs are generated under ignored `release/`:
+
+```text
+release/WheelAthlete-1.8.0-portable.zip
+release/WheelAthleteSetup-1.8.0.exe
+```
+
+The distribution bundles `WheelAthleteDaemon.exe`; users do not need to start a separate daemon manually. Packaging source and details live in [`packaging/windows/README.md`](packaging/windows/README.md).
+
+## Build & run — Flutter mobile app
+
+Requires Flutter 3.x and a physical BLE-capable device.
 
 ```bash
 cd app
-
 flutter pub get
-flutter run -d <device-id>          # run on phone/emulator
-flutter test                        # run all unit + widget tests
-flutter analyze                     # static analysis (strict config)
+flutter run -d <device-id>
+flutter test
+flutter analyze
 
-# Build release artifacts
-flutter build apk --release         # Android APK
-flutter build appbundle --release   # Android App Bundle
-flutter build ios --release         # iOS (requires macOS + Xcode)
+# Android release
+flutter build apk --release
+flutter build appbundle --release
+
+# iOS release (macOS + Xcode required)
+flutter build ios --release
 ```
 
-Key dependencies (see `pubspec.yaml` for full list):
-- `flutter_blue_plus ^2.3.9` — BLE
-- `flutter_riverpod ^3.3.2` — state management
-- `fl_chart ^1.2.0` — charts
-- `csv ^8.0.0`, `excel ^4.0.6` — export
-- `share_plus ^13.2.0`, `path_provider ^2.1.6` — file sharing
-- `file_picker 12.0.0-beta.7` — directory picker (pinned for share_plus compat)
+Mobile version is `1.8.0+9` in `app/pubspec.yaml`.
 
-App version: `1.7.0+8` (defined in `pubspec.yaml`).
+## Build & flash firmware
 
----
+### M5StickCPlus2
 
-## Data Format
+```bash
+cd M5plus2_firmware
+pio run -e left
+pio run -e right
+pio run -e left -t upload
+pio run -e right -t upload
+```
 
-Each session produces two files under
-`WheelAthleteData/<topic>/trial_<NN>/`:
+### XIAO nRF52840 Sense
 
-### `session_<id>.csv`
-CSV with separate Left and Right tables. Columns:
+```bash
+cd Xiao_firmware
+pio run -e left
+pio run -e right
+pio run -e left -t upload
+pio run -e right -t upload
+```
 
-| Column | Type | Meaning |
-|--------|------|---------|
-| `seq` | uint32 | Sample sequence from firmware (detects packet loss) |
-| `wheel` | char | `L` or `R` |
-| `timestamp_app_ms` | uint64 | Phone epoch ms when sample received (has BLE jitter) |
-| `timestamp_device_us` | uint32 | `micros()` on M5 when sampled |
-| `timestamp_synced_ms` | uint64 | **UTC epoch ms after offset/drift correction** — primary key for cross-wheel + camera alignment |
-| `ax, ay, az` | float | Acceleration in g (raw × accel_scale) |
-| `gx, gy, gz` | float | Gyro in dps (raw × gyro_scale) |
-| `marker` | 0/1 | 1 = Mark Event pressed (legacy; always 0 in v0.1.0) |
+Both firmware targets use version `1.8.0` and the same left/right BLE contract.
 
-### `session_<id>_meta.json`
-Session metadata: athlete, datetime, sample rate, sync quality
-(offset + drift residual RMS per wheel), drop count, notes, camera video
-filename, tags, `protocolTemplateId`.
+## BLE protocol and synchronization
 
-### `protocols.json`
-Protocol templates with `id`, `name`, `description`, `topicName`,
-`targetTrialCount`, `sampleRateHz`, `createdAt`.
+The canonical contract is [`docs/ble-protocol.md`](docs/ble-protocol.md), version `1.8.0`.
 
----
+Important characteristics include IMU Data, Control, Sync, Info, Config, and the standard Battery Level characteristic. Recording reliability uses explicit lifecycle acknowledgements, sequence accounting, acquisition-health telemetry, and low-RTT clock synchronization/drift mapping.
 
-## Time Synchronization
+The mobile and Windows implementations share the protocol semantics but maintain platform-appropriate storage and runtime architecture.
 
-Two M5StickCPlus2 modules have independent `micros()` clocks that drift.
-BLE notify latency varies per connection. Using raw phone timestamps is not
-accurate enough for cross-wheel alignment.
+## Data
 
-**Solution:** the phone is the common reference (it talks to both wheels
-already). The app runs an NTP/PTP-lite estimation over BLE:
+### Mobile
 
-1. **Offset estimation** — app sends `SYNC_PING` with `t_app_ms`; firmware
-   echoes `t_device_us`. App measures round-trip and keeps the lowest-RTT
-   sample to estimate clock offset.
-2. **Drift correction** — multiple `(t_device_us, t_app_ms)` pairs are fit
-   linearly; slope = drift rate. Every sample is mapped to
-   `timestamp_synced_ms` on the common UTC timeline.
-3. **Scheduled synchronized start** — app computes `T_start = now + 5s`,
-   converts to each wheel's local `micros()`, and sends `START` with
-   `target_start_us`. Both wheels begin acquisition at the same instant on
-   the phone timeline (jitter = offset error only, typically < 1 sample).
-4. **Beep 3-2-1 audio marker** — during countdown, both M5 speakers beep at
-   T-3s, T-2s, T-1s, T-0. The beeps are recorded by the camera and align
-   video↔IMU without needing to tap the wheel.
+Mobile sessions are stored in the app documents area under a topic/trial/session hierarchy and exported as versioned CSV/metadata/Excel/ZIP artifacts.
 
-Sync quality is reported as **drift residual RMS in ms**:
-- `< 2 ms` → good (green)
-- `2–5 ms` → fair (amber)
-- `> 5 ms` → poor (red)
-- `null`  → unknown (grey)
+### Windows
 
----
+The Windows acquisition daemon writes an append-only `.waj` journal as the authoritative record. CSV is derived from the journal. Incomplete `.open` journals are recoverable.
 
-## BLE Protocol
+Do not treat preview/UI values as the authoritative research record.
 
-Full contract: [`docs/ble-protocol.md`](docs/ble-protocol.md) (version 1.7.0).
+## Verification
 
-Summary:
+Core verification includes:
 
-| Characteristic | UUID suffix | Properties | Direction | Purpose |
-|---|---|---|---|---|
-| IMU Data | `a1b3` | Notify | FW → App | Batched IMU samples (20 B each) |
-| Control | `a1b4` | Write | App → FW | Commands (START, STOP, SET_RATE, ...) |
-| Sync | `a1b5` | Notify + Indicate | FW → App | Sync responses + events |
-| Info | `a1b6` | Read | FW → App | Wheel ID, firmware version, ranges, scales |
-| Config | `a1b7` | Read | FW → App | Board name, wheel ID, persisted settings |
-| Battery Level | `2a19` | Read + Notify | FW → App | Standard Battery Service (0x180F) |
+```bash
+# Mobile
+cd app
+flutter test
+flutter analyze
 
-Service UUID: `0000a1b2-0000-1000-8000-00805f9b34fb`
+# Windows Python stack (from repo root)
+python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
+python -m compileall -q tools/pc_acquisition tools/pc_gui
+```
 
-The protocol doc is the single source of truth — firmware and app must both
-implement it exactly. Changes require updating the doc first.
+Firmware has host-side contract/unit tests under each firmware target. Detailed verification evidence is kept under `docs/testing/`.
 
----
+Automated tests/simulation do **not** prove real RF throughput, real physical left/right start skew, or hardware behavior at distance. Those claims require the prepared physical two-XIAO acceptance procedure.
 
-## Field Data Collection Protocol
+## Versioning
 
-Step-by-step field procedure: [`docs/data-collection-protocol.md`](docs/data-collection-protocol.md).
+Current coordinated release:
 
-Quick summary:
-1. Charge both M5 modules and flash latest firmware.
-2. Mount M5 on each wheel hub (Z axis perpendicular to wheel plane).
-3. Open the app → Connect tab → scan + connect both wheels.
-4. Wait for clock sync to settle (residual < 2 ms).
-5. Pick a protocol template (or custom topic) on the Record tab.
-6. Start the camera **before** pressing Start in the app.
-7. Press Start → 5-second countdown + beep 3-2-1 → recording begins.
-8. During recording, watch realtime metrics. (Mark Event is removed in
-   v0.1.0 — beep + camera audio is the sync source.)
-9. Press Stop → session saved → preview page shows stats + charts.
-10. Export CSV/Excel from Browse or the preview page. Share via OS sheet.
+| Component | Version |
+|---|---:|
+| Product | `1.8.0` |
+| Flutter mobile | `1.8.0+9` |
+| M5StickCPlus2 firmware | `1.8.0` |
+| XIAO firmware | `1.8.0` |
+| BLE protocol | `1.8.0` |
+| Python Windows installer | `1.8.0` |
 
----
+`VERSION` is the product/Windows packaging version. Automated consistency tests guard the duplicated platform-specific version declarations.
 
-## Testing
+## Project state
 
-### Firmware
-- Host-side Unity tests (`pio test -e native`) cover pure logic in
-  `imu_types.h` and `ble_types.h`: struct sizes, scale tables, rate math,
-  FIFO byte parsing, timestamp interpolation, packet layout, command parsing.
-- Python unit tests (`firmware/test/test_imu_types.py`,
-  `test_ble_types.py`) mirror the C++ tests for fast iteration.
+Current architecture/decisions/progress are intentionally consolidated under [`.project/`](.project/). Old phase prompts and duplicate trackers were removed because Git history already preserves them.
 
-### App
-- Unit tests for BLE parsing, clock sync, recording, storage, stats, quality
-  badges, protocol templates, export.
-- Widget tests for every reusable component and page.
-- `flutter analyze` runs under strict config (strict-casts, strict-inference,
-  raw-types, unawaited_futures = error).
-- Coverage reports in `docs/testing/`.
-
----
-
-## Roadmap
-
-### Done in v0.1.0
-- Phase 1: Data collection + calibration (firmware + app + CSV export)
-- Phase 3: Browse, protocol templates, experiment tracker, session tags
-- Phase 4: Session preview page, quality badges, Excel export, UTC alignment
-
-### Planned (not in this release)
-- **Phase 5:** Python pipeline — load CSV, feature extraction, train
-  classification/regression model for biomechanical metrics.
-- **Phase 6:** Real-time feedback to athlete during training.
-- **Phase 7:** Cloud sync + multi-athlete dashboard.
-- **Phase 8:** Automated video↔IMU alignment (beep detection + visual marker).
-- **OTA firmware updates** over BLE.
-- **Multi-wheel support** (4 wheels for court sports).
-
----
+Development for the Windows product is currently on `codex/pc-version`. Do not merge/push it into `main` unless explicitly requested.
 
 ## License
 
-Proprietary — all rights reserved. See repository settings on GitHub.
-This is a research project; contact the maintainer before reuse.
-
----
-
-**Release:** `v1.7.0` · **Firmware:** `1.7.0` · **App:** `1.7.0+8`
+Proprietary — all rights reserved. This is a research project; contact the maintainer before reuse.

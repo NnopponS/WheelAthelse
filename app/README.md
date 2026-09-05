@@ -1,52 +1,77 @@
-# Mobile App — WheelAthlete (Flutter)
+# WheelAthlete Mobile App
 
-Flutter app สำหรับ iOS + Android เชื่อม BLE กับ M5StickCPlus2 ทั้ง 2 ตัว
-(ล้อซ้าย + ล้อขวา) แสดงค่า IMU realtime บันทึก session และ export CSV
+Flutter application for **iOS and Android only**. The mobile app connects directly to the left/right WheelAthlete BLE sensors, previews realtime IMU data, records synchronized sessions, manages experiment metadata, and exports research data.
+
+Current version: `1.8.0+9`
+
+## Supported platforms
+
+- Android
+- iOS
+
+The Flutter Windows and Web targets were retired and removed. Windows users should use the Python Research Edition in `../tools/pc_gui/`.
 
 ## Stack
-- **Framework:** Flutter / Dart
-- **BLE:** `flutter_blue_plus`
-- **State:** `riverpod`
-- **Chart:** `fl_chart`
-- **Storage/Export:** `csv`, `path_provider`, `share_plus`
-- **UI:** design system เป็นของตัวเอง (skill: `impeccable` + `ui-ux-pro-max`)
 
-## สถานะปัจจุบัน
-> [subtask #4] design system + theme + reusable components + showcase พร้อมแล้ว
-> หน้า home คือ Showcase (living style guide) — ใช้ `flutter run` ดูได้
-> ถัดไป: subtask #5 (BLE scan + connect) จะนำ theme/components เหล่านี้ไปใช้
+- Flutter / Dart
+- `flutter_blue_plus` — BLE
+- `flutter_riverpod` — state management
+- `fl_chart` — realtime/session charts
+- `path_provider` — app storage
+- `csv` / `excel` / `archive` — export
+- `share_plus` / `file_picker` — sharing and save-to-device workflows
 
-## โครงสร้าง (ปัจจุบัน + เป้าหมาย)
-```
+## Main capabilities
+
+- scan/connect left and right sensor boards;
+- automatic wheel-side/device-info handling;
+- 50/100/200 Hz acquisition configuration;
+- realtime Accel XYZ + Gyro XYZ values/charts;
+- clock synchronization and synchronized recording lifecycle;
+- topic/trial/session organization;
+- protocol templates and experiment progress;
+- tags, search/filter, preview, statistics, and quality indicators;
+- CSV, Excel, and ZIP export workflows.
+
+## Layout
+
+```text
 app/
+├── android/              # Android runner/config
+├── ios/                  # iOS runner/config
 ├── lib/
-│   ├── main.dart            # ✅ root + theme wiring (home = showcase)
-│   ├── theme/               # ✅ design system (subtask #4)
-│   │   ├── app_palette.dart      # color primitives
-│   │   ├── app_dimens.dart       # spacing / radius / sizing
-│   │   ├── app_typography.dart   # Inter + JetBrains Mono (tabular metrics)
-│   │   ├── WheelAthlete_colors.dart# ThemeExtension: L/R + semantic colors
-│   │   ├── wheel_side.dart        # WheelSide enum (L/R)
-│   │   ├── app_theme.dart        # light/dark ThemeData
-│   │   └── theme.dart            # barrel export
-│   ├── widgets/             # ✅ reusable components (subtask #4)
-│   ├── ui/                  # ✅ showcase / preview page
-│   ├── ble/                 # BLE manager + packet parser (#5, #6)
-│   ├── sync/                # clock sync engine (#7)
-│   ├── recording/           # session recorder + mark event (#8)
-│   └── export/              # CSV export + share (#9)
-├── test/                    # unit + widget tests
+│   ├── main.dart         # mobile-only application entry point
+│   ├── ble/              # BLE contract/parsing/adapters
+│   ├── state/            # Riverpod state + sync/recording logic
+│   ├── records/          # session/protocol/storage domain
+│   ├── export/           # CSV/Excel/ZIP/export actions
+│   ├── ui/               # user-facing pages
+│   ├── widgets/          # reusable UI components
+│   └── theme/            # design system
+├── test/                 # unit + widget tests
 └── pubspec.yaml
 ```
 
-## Build (เมื่อ code พร้อม)
+## Run and verify
+
 ```bash
 flutter pub get
-flutter run -d <device-id>
+flutter run -d <physical-device-id>
 flutter test
-flutter build apk      # Android
-flutter build ios      # iOS (ต้องมี macOS + Xcode)
+flutter analyze
 ```
 
-## BLE Protocol
-ดู `../docs/ble-protocol.md` สำหรับ contract เต็ม (UUID, packet layout, control commands)
+BLE integration requires a physical device for real hardware validation.
+
+## Release builds
+
+```bash
+flutter build apk --release
+flutter build appbundle --release
+# macOS + Xcode required:
+flutter build ios --release
+```
+
+## Protocol
+
+The canonical BLE contract is `../docs/ble-protocol.md`. Mobile, both firmware targets, and the Windows acquisition daemon must preserve compatible protocol semantics.

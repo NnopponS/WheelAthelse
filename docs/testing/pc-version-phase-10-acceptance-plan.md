@@ -28,7 +28,7 @@ into `main`.
 
 1. Two Seeed Studio XIAO nRF52840 Sense boards, one flashed as LEFT and one as
    RIGHT from the current `codex/pc-version` source.
-2. Firmware reports hardware model `2` and expected firmware `1.7.0`.
+2. Firmware reports hardware model `2` and expected firmware `1.8.0`.
 3. Both boards are powered and advertising as WheelAthlete devices.
 4. Windows Bluetooth is enabled on the acquisition PC.
 5. No phone/mobile WheelAthlete instance is connected to either board.
@@ -38,10 +38,7 @@ into `main`.
 8. Python dependencies from `tools/pc_acquisition/requirements.txt` are
    installed.
 
-The Flutter Windows UI is not required to execute the headless physical
-acceptance harness. This is useful on the current host because Flutter Windows
-release packaging remains blocked by the missing Visual Studio Desktop C++
-toolchain.
+The Python PySide6 GUI is not required to execute the headless physical`r`nacceptance harness. The acceptance path intentionally uses the production`r`nacquisition service directly so UI rendering cannot influence raw-data evidence.
 
 ## Firmware build / flash
 

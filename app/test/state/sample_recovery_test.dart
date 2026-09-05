@@ -40,7 +40,7 @@ void main() {
     final output = <HubSample>[];
     final buffer = SampleRecoveryBuffer(
       onSample: output.add,
-      onReplay: (_, __) async {},
+      onReplay: (_, _) async {},
     );
     addTearDown(buffer.dispose);
     buffer.add(sample(0xFFFFFFFE), 1);
@@ -63,7 +63,7 @@ void main() {
       final buffer = SampleRecoveryBuffer(
         timeout: const Duration(milliseconds: 10),
         onSample: (_) {},
-        onReplay: (_, __) async {
+        onReplay: (_, _) async {
           writes++;
           await firstWrite.future;
         },
@@ -88,7 +88,7 @@ void main() {
       final buffer = SampleRecoveryBuffer(
         timeout: const Duration(milliseconds: 10),
         onSample: output.add,
-        onReplay: (_, __) => write.future,
+        onReplay: (_, _) => write.future,
       );
       addTearDown(buffer.dispose);
 
@@ -113,7 +113,7 @@ void main() {
       final buffer = SampleRecoveryBuffer(
         timeout: const Duration(milliseconds: 10),
         onSample: (_) {},
-        onReplay: (_, __) {
+        onReplay: (_, _) {
           writes++;
           return write.future;
         },

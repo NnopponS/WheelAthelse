@@ -1,12 +1,12 @@
 # WheelAthlete — BLE Protocol
 
-**Contract ระหว่าง Firmware (M5StickCPlus2) ↔ Mobile App (Flutter)**
+**Contract ระหว่าง WheelAthlete firmware ↔ Flutter Mobile App / Python Windows Acquisition Daemon**
 
-เอกสารนี้เป็น source of truth สำหรับทั้งสองฝั่ง — firmware และ app ต้อง implement
+เอกสารนี้เป็น source of truth สำหรับ firmware และ operator clients ทุกตัว — ทุกฝั่งต้อง implement
 ตามนี้เป๊ะ ห้ามเปลี่ยนโดยไม่ update เอกสารนี้ก่อน
 
-- เวอร์ชัน: `1.7.0` (dual-wheel lifecycle reliability and acquisition-health telemetry)
-- อ้างอิง: `.project/architecture.md` หัวข้อ 4 (Time Sync) และหัวข้อ 5 (Storage)
+- เวอร์ชัน: `1.8.0` (dual-wheel lifecycle reliability and acquisition-health telemetry)
+- อ้างอิงสถาปัตยกรรมปัจจุบัน: `.project/architecture.md`
 
 ---
 
@@ -195,7 +195,7 @@ Sync characteristic ใช้ส่ง event พิเศษด้วย (flag �
 
 > App ใช้ `START_FIRED` / `STOP_FIRED` cross-check ว่า 2 ล้อเริ่ม/หยุดตรงกันจริง
 >
-> **v1.7.0:** `ACQ_HEALTH` is 28 bytes total including the event id. The first
+> **v1.8.0:** `ACQ_HEALTH` is 28 bytes total including the event id. The first
 > 20 bytes retain the v1.6.0 layout, but `sample_queue_drops` now means only
 > application queue overflow. Bytes 20-23 report IMU FIFO fault count and bytes
 > 24-27 report estimated samples lost inside the IMU FIFO. The app still reads
@@ -269,7 +269,7 @@ seq,wheel,timestamp_app_ms,timestamp_device_us,timestamp_synced_ms,ax,ay,az,gx,g
 | `timestamp_synced_ms` | ms    | **absolute UTC epoch milliseconds หลังแก้ offset/drift** — คอลัมน์หลักสำหรับ train model + จับคู่กับเวลากล้องโดยตรง |
 | `ax, ay, az`          | g     | accel 3 แกน (แปลงจาก raw แล้ว) |
 | `gx, gy, gz`          | dps   | gyro 3 แกน (แปลงจาก raw แล้ว) |
-| `marker`              | 0/1   | 1 เมื่อกด Mark Event, 0 ปกติ |
+| `marker`              | 0/1   | Legacy compatibility field; current UI records 0 |
 
 ### 6.1 meta.json (ต่อ session)
 

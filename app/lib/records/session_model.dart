@@ -127,7 +127,7 @@ class SessionMeta {
     this.queueDepth = const {},
     this.degradationReason,
     this.schemaVersion = 4,
-    this.protocolVersion = '1.7.0',
+    this.protocolVersion = '1.8.0',
   });
 
   final String sessionId;

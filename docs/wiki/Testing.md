@@ -1,135 +1,66 @@
 # Testing
 
-> v0.1.0 — Data Collection MVP
+Current release line: `v1.8.0`.
 
-## Strategy
+WheelAthlete separates pure logic from hardware/UI boundaries so most correctness can be tested without physical sensors. Physical BLE behavior remains a separate acceptance gate.
 
-The codebase uses TDD throughout. Pure logic is separated from hardware
-I/O so it can be tested on a host without any physical device.
-
-### Three test layers
-
-1. **Host-side pure-logic tests** (no hardware)
-   - Firmware: Unity tests via `pio test -e native` + Python mirrors
-   - App: Dart unit tests via `flutter test`
-
-2. **Widget tests** (app only)
-   - Every reusable component and every page has widget tests
-   - Use Fake repositories (no real BLE or filesystem)
-
-3. **Field test** (integration, manual)
-   - The real `FlutterBluePlusBleRepository` adapter is excluded from
-     automated coverage because it requires real BLE hardware
-   - The field data collection protocol is the integration test
-
-## Firmware tests
-
-### Unity host tests (`pio test -e native`)
-
-Cover pure logic in:
-- `imu_types.h` — struct size (20 B), scale tables, rate math, FIFO byte
-  parsing, timestamp interpolation
-- `ble_types.h` — packet layout, command parsing, sync event encoding
-
-### Python mirrors
-
-`firmware/test/test_imu_types.py` and `test_ble_types.py` mirror the C++
-tests for fast iteration without PlatformIO.
-
-### Running
-
-```bash
-cd firmware
-pio test -e native          # Unity tests
-pytest test/                # Python mirrors
-```
-
-### Evidence reports
-
-TDD evidence reports live in `docs/testing/`:
-- `subtask-02-fix.tdd.md` — IMU acquisition bugs found + fixed
-- `subtask-03.tdd.md` — BLE GATT implementation evidence
-- (and others per subtask)
-
-## App tests
-
-### Unit tests
-
-Cover:
-- BLE packet parsing (`imu_packet_test.dart`)
-- Device info parsing (`device_info_test.dart`)
-- Wheel ID parsing (`wheel_id_test.dart`)
-- Clock sync engine (`sync_engine_test.dart`)
-- Recording state (`recording_providers_test.dart`)
-- Storage repository (`storage_repository_test.dart`)
-- Session stats (`session_stats_test.dart`)
-- Quality badges (`quality_badge_test.dart`)
-- Protocol templates (`protocol_template_test.dart`)
-- CSV/Excel export (`csv_exporter_test.dart`, `excel_exporter_test.dart`)
-- Resampler (`resampler_test.dart`)
-
-### Widget tests
-
-Cover:
-- Every reusable component in `lib/widgets/`
-- Every page in `lib/ui/`
-- Theme + design system
-
-### Running
+## Flutter mobile
 
 ```bash
 cd app
-flutter test                # all tests
-flutter test --coverage     # with coverage report
-flutter analyze             # static analysis (strict config)
+flutter test
+flutter analyze
 ```
 
-### Coverage
+Coverage includes BLE parsing, synchronization, recording/storage state, session metadata, preview/statistics, export, and widget/UI behavior. Real `flutter_blue_plus` radio behavior still requires a physical phone + sensor boards.
 
-- Testable logic coverage: ~90%+ across most modules
-- `FlutterBluePlusBleRepository` excluded (needs real hardware)
-- Coverage reports generated in `coverage/` after `flutter test --coverage`
+## Python Windows stack
 
-### Strict analysis
+From repository root:
 
-`analysis_options.yaml` enables:
-- `strict-casts`
-- `strict-inference`
-- `strict-raw-types`
-- `unawaited_futures: error`
-- `always_use_package_imports`
-- Extra lints (const, final, etc.)
+```bash
+python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
+python -m compileall -q tools/pc_acquisition tools/pc_gui
+```
 
-`flutter analyze` must be clean before any commit.
+The acquisition suite covers strict parsing, lifecycle, journal/QC/recovery, IPC, queue/backpressure behavior, acceptance evaluation, and fault cases. GUI tests cover state mapping, IPC handling, experiment persistence, and offscreen smoke workflows.
 
-## Bugs caught by TDD (highlights)
+## Firmware
 
-### Firmware
-- All samples in a batch got the same `micros()` → interpolated per-sample
-- FIFO overflow not detected → now checks `INT_STATUS` + byte count ≥ 512
-- Rate validation accepted arbitrary rates → only 50/100/200 Hz
-- `static_assert(sizeof(ImuSample)==20)` added (BLE packet size guarantee)
-- ES.46 narrowing fix in FIFO byte parsing
+### M5StickCPlus2
 
-### App
-- `flutter_blue_plus` 2.x API drift (Guid re-export, License required arg,
-  connecting/disconnecting states removed)
-- `UnmountedRefException` on async state set after dispose → `ref.mounted`
-  guards on every async gap
-- `pumpAndSettle` timeout from infinite spinner animation → removed
-- `asBroadcastStream` swallowing events in tests
-- `BytesBuilder.add` returns void (cascade broke)
-- `servicesStream` deprecated in fbp 2.x → `servicesList + lastValueStream`
-- `FloatingActionButton` vs `FilledButton` API confusion
-- `ListView` off-screen children not built in tests
+```bash
+cd M5plus2_firmware
+python -m pytest test -q
+pio test -e native
+```
 
-## CI
+### XIAO nRF52840 Sense
 
-No CI pipeline is configured in v0.1.0. Tests run locally before commit.
-Future: GitHub Actions for `flutter test` + `flutter analyze` + `pio test`.
+```bash
+cd Xiao_firmware
+python -m pytest test -q
+```
 
-## Test counts (v0.1.0)
+PlatformIO target builds are additional firmware gates where the local toolchain is available.
 
-- Firmware: 62+ host-side tests (Unity + Python)
-- App: 200+ unit + widget tests
-- All passing as of v0.1.0 tag
+## Version consistency
+
+`app/test/version_consistency_test.dart` checks the coordinated release declarations across:
+
+- root `VERSION`;
+- Flutter mobile version;
+- both firmware targets;
+- BLE protocol;
+- root README;
+- Windows packaging scripts.
+
+## Packaging
+
+`packaging/windows/build_installer.bat` is the supported Windows packaging path. A successful package build produces a PyInstaller GUI distribution with the daemon bundled, a portable ZIP, and an Inno Setup installer.
+
+## Physical acceptance
+
+Automated tests and long-run simulations do **not** prove RF performance. Real claims about 0.5/2/5 m behavior, actual dual-wheel equality, negotiated controller behavior, or physical start skew require the prepared two-XIAO hardware acceptance matrix.
+
+Verification evidence and historical test reports are stored in `docs/testing/`.

@@ -110,7 +110,7 @@ void main() {
   group('quality badge tone', () {
     /// Finds the [StatusBadge] whose label starts with `sync` and returns its
     /// [BadgeTone]. Throws if no sync badge is rendered.
-    BadgeTone _syncBadgeTone(WidgetTester tester) {
+    BadgeTone syncBadgeTone(WidgetTester tester) {
       final badges = tester.widgetList<StatusBadge>(
         find.bySubtype<StatusBadge>(),
       );
@@ -131,7 +131,7 @@ void main() {
           qualityLevel: SyncQuality.good,
         ),
       );
-      expect(_syncBadgeTone(tester), BadgeTone.success);
+      expect(syncBadgeTone(tester), BadgeTone.success);
     });
 
     testWidgets('qualityLevel=fair -> warning tone (amber)', (tester) async {
@@ -144,7 +144,7 @@ void main() {
           qualityLevel: SyncQuality.fair,
         ),
       );
-      expect(_syncBadgeTone(tester), BadgeTone.warning);
+      expect(syncBadgeTone(tester), BadgeTone.warning);
     });
 
     testWidgets('qualityLevel=poor -> danger tone (red)', (tester) async {
@@ -157,7 +157,7 @@ void main() {
           qualityLevel: SyncQuality.poor,
         ),
       );
-      expect(_syncBadgeTone(tester), BadgeTone.danger);
+      expect(syncBadgeTone(tester), BadgeTone.danger);
     });
 
     testWidgets('qualityLevel=unknown -> neutral tone (grey)', (tester) async {
@@ -170,7 +170,7 @@ void main() {
           qualityLevel: SyncQuality.unknown,
         ),
       );
-      expect(_syncBadgeTone(tester), BadgeTone.neutral);
+      expect(syncBadgeTone(tester), BadgeTone.neutral);
     });
 
     testWidgets('qualityLevel null but syncQuality set -> neutral tone', (
@@ -184,7 +184,7 @@ void main() {
           syncQuality: '±0.8 ms',
         ),
       );
-      expect(_syncBadgeTone(tester), BadgeTone.neutral);
+      expect(syncBadgeTone(tester), BadgeTone.neutral);
     });
 
     testWidgets('no sync badge when both qualityLevel and syncQuality null', (

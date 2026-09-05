@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:wheelathlete/desktop/desktop_home_page.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/ui/home_page.dart';
 import 'package:wheelathlete/ui/showcase_page.dart';
@@ -18,30 +15,11 @@ Future<void> main() async {
   // rely on explicit acquisition-health counters instead.
   await FlutterBluePlus.setLogLevel(LogLevel.none);
   GoogleFonts.config.allowRuntimeFetching = true;
-  runApp(
-    ProviderScope(
-      child: WheelAthleteApp(
-        desktopMode: Platform.isWindows,
-        desktopAutoConnect: Platform.isWindows,
-      ),
-    ),
-  );
+  runApp(const ProviderScope(child: WheelAthleteApp()));
 }
 
-/// App root.
-///
-/// The default constructor deliberately remains the existing mobile shell so
-/// Android/mobile tests and embeddings do not acquire a daemon dependency.
-/// The real [main] entrypoint opts into [DesktopHomePage] only on Windows.
 class WheelAthleteApp extends StatefulWidget {
-  const WheelAthleteApp({
-    super.key,
-    this.desktopMode = false,
-    this.desktopAutoConnect = false,
-  });
-
-  final bool desktopMode;
-  final bool desktopAutoConnect;
+  const WheelAthleteApp({super.key});
 
   @override
   State<WheelAthleteApp> createState() => _WheelAthleteAppState();
@@ -67,12 +45,7 @@ class _WheelAthleteAppState extends State<WheelAthleteApp> {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: mode,
-          home: widget.desktopMode
-              ? DesktopHomePage(
-                  themeController: _theme,
-                  autoConnect: widget.desktopAutoConnect,
-                )
-              : HomePage(themeController: _theme),
+          home: HomePage(themeController: _theme),
           routes: {'/showcase': (context) => ShowcasePage(controller: _theme)},
         );
       },

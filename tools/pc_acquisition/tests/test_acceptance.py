@@ -60,13 +60,13 @@ def _good_journal(tmp_path: Path, *, inject_gap: bool = False) -> Path:
                 "L": {
                     "device_id": "left",
                     "hardware_model": 2,
-                    "firmware": "1.7.0",
+                    "firmware": "1.8.0",
                     "mtu": 247,
                 },
                 "R": {
                     "device_id": "right",
                     "hardware_model": 2,
-                    "firmware": "1.7.0",
+                    "firmware": "1.8.0",
                     "mtu": 247,
                 },
             },
@@ -169,7 +169,7 @@ def test_acceptance_summary_streams_good_journal_and_passes_all_hard_checks(tmp_
         path,
         expected_rate_hz=100,
         expected_duration_s=2.0,
-        thresholds=AcceptanceThresholds(expected_firmware="1.7.0"),
+        thresholds=AcceptanceThresholds(expected_firmware="1.8.0"),
     )
     assert evidence["passed"]
     assert evidence["sample_counts"] == {"L": 200, "R": 200}

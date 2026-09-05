@@ -1,6 +1,6 @@
 # WheelAthlete Wiki
 
-**v1.7.0** (stable data collection)
+**v1.8.0 development line**
 
 ## Pages
 
@@ -15,15 +15,16 @@
 - [Roadmap](Roadmap.md)
 - [Changelog](Changelog.md)
 
-## External
+## Products
 
-- [README (EN)](../README.md)
-- [README (TH)](../README.th.md)
+- Flutter mobile: `1.8.0+9` — iOS + Android
+- Python Windows package: `1.8.0`
+- Firmware: `1.8.0`
+- BLE protocol: `1.8.0`
+
+## Canonical references
+
+- [README EN](../../README.md)
+- [README TH](../../README.th.md)
 - [BLE protocol spec](../ble-protocol.md)
-- [Release v1.7.0](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.7.0)
-
-## Versions
-
-- App: `1.7.0+8`
-- Firmware: `1.7.0`
-- BLE: `1.7.0`
+- [Current project state](../../.project/README.md)

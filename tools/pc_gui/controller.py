@@ -775,7 +775,7 @@ class DemoController(BaseController):
                 connected=True,
                 device_id=f"DEMO-{side}",
                 name=f"WheelAthlete-{side}",
-                firmware="1.7.0",
+                firmware="1.8.0",
                 battery_percent=92 if side == "L" else 88,
                 rssi=rssi,
                 mtu=247,

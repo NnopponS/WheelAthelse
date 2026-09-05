@@ -261,7 +261,7 @@ final class ReplayResultEvent extends SyncEvent {
   bool get complete => status == 0 && replayed == requested;
 }
 
-/// Protocol 1.7.0 acquisition health snapshot, emitted at 1 Hz and on STOP.
+/// Protocol 1.8.0 acquisition health snapshot, emitted at 1 Hz and on STOP.
 final class AcqHealthEvent extends SyncEvent {
   const AcqHealthEvent({
     required this.acquisitionState,

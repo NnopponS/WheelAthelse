@@ -110,13 +110,13 @@ void main() {
   setUpAll(disableGoogleFontsFetching);
 
   /// Mixed-wheel samples so both L and R charts render in "Both" mode.
-  List<BufferedSample> _mixedSamples(int count) => List.generate(
+  List<BufferedSample> mixedSamples(int count) => List.generate(
     count,
     (i) => _sample(_r(i), wheel: i % 2 == 0 ? WheelSide.left : WheelSide.right),
   );
 
   /// Pumps the page in a tall viewport so both chart sections are visible.
-  Future<void> _pumpPage(WidgetTester tester, Widget child) async {
+  Future<void> pumpPage(WidgetTester tester, Widget child) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -132,11 +132,11 @@ void main() {
   testWidgets(
     'renders loading state then summary + charts for in-memory source',
     (tester) async {
-      final samples = _mixedSamples(100);
+      final samples = mixedSamples(100);
       final meta = _meta();
       final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      await _pumpPage(
+      await pumpPage(
         tester,
         ProviderScope(child: SessionPreviewPage(source: source)),
       );
@@ -177,11 +177,11 @@ void main() {
   testWidgets('selecting Left wheel shows a single chart with L label', (
     tester,
   ) async {
-    final samples = _mixedSamples(100);
+    final samples = mixedSamples(100);
     final meta = _meta();
     final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-    await _pumpPage(
+    await pumpPage(
       tester,
       ProviderScope(child: SessionPreviewPage(source: source)),
     );
@@ -196,11 +196,11 @@ void main() {
   });
 
   testWidgets('scrub slider updates scrub position label', (tester) async {
-    final samples = _mixedSamples(100);
+    final samples = mixedSamples(100);
     final meta = _meta(durationMs: 10000, sampleCount: 100);
     final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-    await _pumpPage(
+    await pumpPage(
       tester,
       ProviderScope(child: SessionPreviewPage(source: source)),
     );
@@ -222,17 +222,17 @@ void main() {
     tester,
   ) async {
     final storage = InMemoryStorageRepository();
-    final source = DiskPreviewSource(
+    const source = DiskPreviewSource(
       topic: 'nope',
       trialNumber: 1,
       sessionId: 'missing',
     );
 
-    await _pumpPage(
+    await pumpPage(
       tester,
       ProviderScope(
         overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
-        child: SessionPreviewPage(source: source),
+        child: const SessionPreviewPage(source: source),
       ),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
@@ -243,20 +243,20 @@ void main() {
 
   testWidgets('renders disk-backed session after async load', (tester) async {
     final storage = InMemoryStorageRepository();
-    final samples = _mixedSamples(50);
+    final samples = mixedSamples(50);
     final meta = _meta(sampleCount: 50);
     await storage.saveSession('test-topic', meta, samples);
-    final source = DiskPreviewSource(
+    const source = DiskPreviewSource(
       topic: 'test-topic',
       trialNumber: 1,
       sessionId: 'deadbeef',
     );
 
-    await _pumpPage(
+    await pumpPage(
       tester,
       ProviderScope(
         overrides: [storageRepositoryProvider.overrideWith((ref) => storage)],
-        child: SessionPreviewPage(source: source),
+        child: const SessionPreviewPage(source: source),
       ),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
@@ -271,11 +271,11 @@ void main() {
       tester,
     ) async {
       final exportActions = _RecordingExportActions();
-      final samples = _mixedSamples(50);
+      final samples = mixedSamples(50);
       final meta = _meta(sampleCount: 50);
       final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      await _pumpPage(
+      await pumpPage(
         tester,
         ProviderScope(
           overrides: [
@@ -299,11 +299,11 @@ void main() {
       tester,
     ) async {
       final exportActions = _RecordingExportActions();
-      final samples = _mixedSamples(50);
+      final samples = mixedSamples(50);
       final meta = _meta(sampleCount: 50);
       final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      await _pumpPage(
+      await pumpPage(
         tester,
         ProviderScope(
           overrides: [
@@ -327,11 +327,11 @@ void main() {
 
     testWidgets('share button is hidden while loading', (tester) async {
       final exportActions = _RecordingExportActions();
-      final samples = _mixedSamples(50);
+      final samples = mixedSamples(50);
       final meta = _meta(sampleCount: 50);
       final source = InMemoryPreviewSource(meta: meta, samples: samples);
 
-      await _pumpPage(
+      await pumpPage(
         tester,
         ProviderScope(
           overrides: [

@@ -39,7 +39,7 @@ def test_board_view_maps_host_firmware_and_sync_metrics():
             "queue_high_water": 7,
             "info": {
                 "name": "WheelAthlete-L",
-                "firmware": "1.7.0",
+                "firmware": "1.8.0",
                 "battery_percent": 91,
                 "rssi": -47,
                 "sample_rate_hz": 100,
