@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import tempfile
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QFrame
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QFrame, QLineEdit, QMessageBox, QPushButton
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -20,9 +20,9 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     window.start()
     _APP.processEvents()
 
-    # 4 clean pages: Dashboard, Acquisition, Results, Diagnostics
-    assert window.nav.count() == 4
-    assert window.stack.count() == 4
+    # 5 clean pages: Dashboard, Acquisition, Results, MODEL, Diagnostics
+    assert window.nav.count() == 5
+    assert window.stack.count() == 5
     assert window.windowTitle() == "WheelAthlete — Python Research Edition"
     assert window.daemon_badge.text() == "DAQ READY"
 
@@ -193,12 +193,42 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
         assert card.table.item(r, 0).checkState() == Qt.CheckState.Checked
         assert card.table.item(r, 0).background().color().name() == "#f0fdfa"
 
+    # Inline rename: there is no Edit button. Trial/Athlete cells are edited
+    # directly by double-click, independent from batch checkbox state.
+    first_actions = card.table.cellWidget(0, 8)
+    assert first_actions is not None
+    assert first_actions.findChild(QPushButton, "editTableBtn") is None
+    row_preview = first_actions.findChild(QPushButton, "previewTableBtn")
+    assert row_preview is not None and row_preview.text() == "Preview"
+    assert card.table.editTriggers() & QAbstractItemView.EditTrigger.DoubleClicked
+    assert card.table.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable
+    assert card.table.item(0, 3).flags() & Qt.ItemFlag.ItemIsEditable
+    assert not (card.table.item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable)
+
     # Test Telemetry Preview Drawer (Lossless session)
     results.preview_session("demo_sprint_01")
     _APP.processEvents()
     assert not results.preview_drawer.isHidden()
     assert "Lossless" in results.preview_drawer.integrity_badge.text()
     assert results.preview_drawer.accel_series["L_X"].count() > 0
+
+    # Regression: clicking the active preview again must not hide the drawer or
+    # replace/delete the cell action widget that emitted the click.
+    active_card = next(c for c in results._topic_cards if c.topic == "Sprint")
+    active_row = next(
+        i for i, s in enumerate(active_card.sessions)
+        if s.get("session_id") == "demo_sprint_01"
+    )
+    action_container = active_card.table.cellWidget(active_row, 8)
+    assert action_container is not None
+    action_button = action_container.findChild(QPushButton)
+    assert action_button is not None
+    assert action_button.text() == "Viewing"
+    results.preview_session("demo_sprint_01")
+    _APP.processEvents()
+    assert not results.preview_drawer.isHidden()
+    assert active_card.table.cellWidget(active_row, 8) is action_container
+    assert action_button.text() == "Viewing"
 
     # Test Telemetry Preview Drawer (Session with Signal Loss gap)
     results.preview_session("demo_sprint_02")
@@ -210,6 +240,144 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     results.preview_drawer.close_btn.click()
     _APP.processEvents()
     assert results.preview_drawer.isHidden()
+
+    controller.close()
+    window.close()
+    window.deleteLater()
+    _APP.processEvents()
+
+
+def test_results_inline_metadata_editing_has_no_edit_buttons(monkeypatch):
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    window.show()
+    window.start()
+    window.stack.setCurrentIndex(2)
+    _APP.processEvents()
+
+    results = window.results
+    assert not hasattr(results, "edit_button")
+
+    # Flat table exposes all user-facing rename fields directly without Qt row
+    # selection; checkbox state owns batch selection so Preview must never be
+    # covered by the dark selected-row overlay while editing.
+    assert results.table.editTriggers() & QAbstractItemView.EditTrigger.DoubleClicked
+    assert results.table.selectionMode() == QAbstractItemView.SelectionMode.NoSelection
+    results.view_tabs.setCurrentIndex(1)
+    results.table.setCurrentCell(0, 4)
+    _APP.processEvents()
+    assert results.table.selectedItems() == []
+    preview_container = results.table.cellWidget(0, 9)
+    assert preview_container is not None
+    preview_button = preview_container.findChild(QPushButton, "previewTableBtn")
+    assert preview_button is not None and preview_button.isVisible()
+    assert results.table.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable  # Topic
+    assert results.table.item(0, 3).flags() & Qt.ItemFlag.ItemIsEditable  # Trial
+    assert results.table.item(0, 4).flags() & Qt.ItemFlag.ItemIsEditable  # Athlete
+    assert not (results.table.item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable)  # Quality
+
+    session_id = str(results._visible[0]["session_id"])
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    results.table.item(0, 4).setText("Inline Athlete")
+    _APP.processEvents()
+    updated = next(s for s in controller.sessions if s.get("session_id") == session_id)
+    assert updated["athlete"] == "Inline Athlete"
+
+    # Grouped view still supports direct Trial/Athlete editing and retains only Preview.
+    grouped = next(c for c in results._topic_cards if any(s.get("session_id") == session_id for s in c.sessions))
+    grouped_row = next(i for i, s in enumerate(grouped.sessions) if s.get("session_id") == session_id)
+    actions = grouped.table.cellWidget(grouped_row, 8)
+    assert actions is not None
+    assert actions.findChild(QPushButton, "editTableBtn") is None
+    assert actions.findChild(QPushButton, "previewTableBtn") is not None
+
+    controller.close()
+    window.close()
+    window.deleteLater()
+    _APP.processEvents()
+
+
+
+def test_inline_metadata_edit_requires_confirmation(monkeypatch):
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    window.show()
+    window.start()
+    window.stack.setCurrentIndex(2)
+    _APP.processEvents()
+
+    results = window.results
+    session_id = str(results._visible[0]["session_id"])
+    old_athlete = str(results._visible[0].get("athlete") or "")
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.No,
+    )
+    results.table.item(0, 4).setText("Should Not Save")
+    _APP.processEvents()
+    _APP.processEvents()
+    unchanged = next(s for s in controller.sessions if s.get("session_id") == session_id)
+    assert unchanged["athlete"] == old_athlete
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    row = next(i for i, s in enumerate(results._visible) if s.get("session_id") == session_id)
+    results.table.item(row, 4).setText("Confirmed Athlete")
+    _APP.processEvents()
+    changed = next(s for s in controller.sessions if s.get("session_id") == session_id)
+    assert changed["athlete"] == "Confirmed Athlete"
+
+    controller.close()
+    window.close()
+    window.deleteLater()
+    _APP.processEvents()
+
+
+def test_group_name_can_be_renamed_with_confirmation(monkeypatch):
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    window.show()
+    window.start()
+    window.stack.setCurrentIndex(2)
+    _APP.processEvents()
+
+    results = window.results
+    card = next(c for c in results._topic_cards if c.topic == "Sprint")
+    assert isinstance(card.title_label, QLineEdit)
+    assert card.title_label.isReadOnly()
+    assert "Double-click" in card.title_label.toolTip()
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.No,
+    )
+    card.topic_rename_requested.emit("Sprint", "Sprint Cancelled")
+    _APP.processEvents()
+    _APP.processEvents()
+    assert any((s.get("topic") or "") == "Sprint" for s in controller.sessions)
+    assert not any((s.get("topic") or "") == "Sprint Cancelled" for s in controller.sessions)
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    current = next(c for c in results._topic_cards if c.topic == "Sprint")
+    current.topic_rename_requested.emit("Sprint", "Sprint Renamed")
+    _APP.processEvents()
+    _APP.processEvents()
+    assert not any((s.get("topic") or "") == "Sprint" for s in controller.sessions)
+    assert any((s.get("topic") or "") == "Sprint Renamed" for s in controller.sessions)
 
     controller.close()
     window.close()

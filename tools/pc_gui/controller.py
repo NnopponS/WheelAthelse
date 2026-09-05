@@ -21,6 +21,44 @@ def sanitize_name(name: Any) -> str:
     return cleaned or "Untitled"
 
 
+def resolve_session_files(root: Path | str, session_id: str) -> tuple[Path, Path, Path]:
+    """Resolve UUID-internal sessions stored under legacy or friendly paths."""
+    root_path = Path(root)
+    legacy_journal = root_path / f"{session_id}.waj"
+    legacy_manifest = root_path / f"{session_id}.summary.json"
+    legacy_csv = root_path / f"{session_id}.csv"
+    if legacy_journal.exists() or legacy_manifest.exists() or legacy_csv.exists():
+        return legacy_journal, legacy_manifest, legacy_csv
+
+    for manifest_path in root_path.rglob("*.summary.json"):
+        try:
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(value, dict) or str(value.get("session_id") or "") != session_id:
+            continue
+        stem = manifest_path.name.removesuffix(".summary.json")
+        journal_path = manifest_path.with_name(stem + ".waj")
+        csv_path = manifest_path.with_name(stem + ".csv")
+        return journal_path, manifest_path, csv_path
+
+    for journal_path in root_path.rglob("*.waj"):
+        try:
+            from tools.pc_acquisition.journal import JournalReader, RecordKind
+
+            for record in JournalReader(journal_path).iter_records():
+                if record.kind is not RecordKind.SESSION_META or not record.json_value:
+                    continue
+                if str(record.json_value.get("session_id") or "") == session_id:
+                    manifest_path = journal_path.with_suffix(".summary.json")
+                    return journal_path, manifest_path, journal_path.with_suffix(".csv")
+                break
+        except Exception:
+            continue
+
+    return legacy_journal, legacy_manifest, legacy_csv
+
+
 def _gui_settings_path() -> Path:
     return Path.home() / "Documents" / "WheelAthlete" / "gui_settings.json"
 
@@ -89,6 +127,10 @@ class BaseController(QObject):
     def load_session_data(self, session_id: str) -> dict[str, Any]: ...
     def delete_session(self, session_id: str) -> None: ...
     def delete_sessions(self, session_ids: list[str]) -> None: ...
+    def update_session_metadata(
+        self, session_id: str, *, topic: str, trial_number: int, athlete: str
+    ) -> None: ...
+    def rename_topic_group(self, old_topic: str, new_topic: str) -> None: ...
     def export_diagnostics(self, output_path: str) -> None: ...
     def recover_session(self, file_name: str) -> None: ...
     def start_record(self, metadata: dict[str, Any]) -> None: ...
@@ -369,14 +411,14 @@ class AcquisitionController(BaseController):
 
     def load_session_data(self, session_id: str) -> dict[str, Any]:
         root = Path(self.state.journal_root or (Path.home() / "Documents" / "WheelAthlete" / "PC Sessions"))
-        journal_path = root / f"{session_id}.waj"
-        manifest_path = root / f"{session_id}.summary.json"
+        journal_path, manifest_path, csv_path = resolve_session_files(root, session_id)
         meta: dict[str, Any] = {}
         if manifest_path.exists():
             try:
                 meta = json.loads(manifest_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
+        manifest_meta = dict(meta)
 
         samples_l: list[dict[str, float]] = []
         samples_r: list[dict[str, float]] = []
@@ -394,7 +436,11 @@ class AcquisitionController(BaseController):
                 first_t_ns = None
                 for record in records:
                     if record.kind is RecordKind.SESSION_META and record.json_value:
-                        meta.update(record.json_value)
+                        # The append-only journal preserves original capture metadata.
+                        # Mutable user-facing names live in the summary sidecar, so only
+                        # fill keys that are absent instead of overwriting renamed values.
+                        for key, value in record.json_value.items():
+                            meta.setdefault(key, value)
                         if "accel_scale" in record.json_value:
                             accel_scale_l = accel_scale_r = float(record.json_value["accel_scale"])
                         if "gyro_scale" in record.json_value:
@@ -432,7 +478,12 @@ class AcquisitionController(BaseController):
             except Exception as exc:
                 self.daemon_log.emit(f"Failed to read journal {journal_path}: {exc}")
 
-        csv_path = root / f"{session_id}.csv"
+        # The binary journal keeps immutable acquisition-time metadata. The finalized
+        # summary sidecar is intentionally the editable user-facing metadata layer.
+        # Re-apply it after reading SESSION_META so rename operations are reflected in
+        # Results, Preview and MODEL without mutating raw research evidence.
+        meta.update(manifest_meta)
+
         if not samples_l and not samples_r and csv_path.exists():
             try:
                 with csv_path.open("r", encoding="utf-8") as handle:
@@ -522,6 +573,73 @@ class AcquisitionController(BaseController):
             )
 
         delete_next()
+
+    def update_session_metadata(
+        self, session_id: str, *, topic: str, trial_number: int, athlete: str
+    ) -> None:
+        self._command(
+            "update_session_metadata",
+            {
+                "session_id": session_id,
+                "topic": topic,
+                "trial_number": int(trial_number),
+                "athlete": athlete,
+            },
+            lambda result: (
+                self.message.emit(
+                    f"Updated recording: {result.get('topic', topic)} · "
+                    f"Trial {result.get('trial_number', trial_number)} · "
+                    f"{result.get('athlete', athlete) or 'No athlete'}"
+                ),
+                self.refresh_sessions(),
+            ),
+            on_error=lambda _message: self.refresh_sessions(),
+        )
+
+    def rename_topic_group(self, old_topic: str, new_topic: str) -> None:
+        old_topic = old_topic.strip()
+        new_topic = new_topic.strip()
+        matching = [
+            s for s in self.sessions
+            if (str(s.get("topic") or "General").strip() or "General") == old_topic
+        ]
+        if not matching:
+            self.message.emit(f'No recordings found in group "{old_topic}"')
+            return
+
+        remaining = list(matching)
+        updated_count = 0
+
+        def update_next() -> None:
+            nonlocal updated_count
+            if not remaining:
+                self.message.emit(
+                    f'Renamed group "{old_topic}" → "{new_topic}" ({updated_count} recording(s))'
+                )
+                self.refresh_sessions()
+                return
+            session = remaining.pop(0)
+            session_id = str(session.get("session_id") or "")
+            trial = int(session.get("trial_number") or 1)
+            athlete = str(session.get("athlete") or "")
+            self._command(
+                "update_session_metadata",
+                {
+                    "session_id": session_id,
+                    "topic": new_topic,
+                    "trial_number": trial,
+                    "athlete": athlete,
+                },
+                lambda _result: _mark_and_continue(),
+                on_error=lambda _message: update_next(),
+            )
+
+        def _mark_and_continue() -> None:
+            nonlocal updated_count
+            updated_count += 1
+            update_next()
+
+        update_next()
 
     def export_diagnostics(self, output_path: str) -> None:
         self._command(
@@ -1025,6 +1143,33 @@ class DemoController(BaseController):
         ids_to_del = set(session_ids)
         self.sessions = [s for s in self.sessions if s.get("session_id") not in ids_to_del]
         self.message.emit(f"Demo deleted {len(ids_to_del)} recording(s)")
+        self.refresh_sessions()
+
+    def update_session_metadata(
+        self, session_id: str, *, topic: str, trial_number: int, athlete: str
+    ) -> None:
+        match = next((s for s in self.sessions if s.get("session_id") == session_id), None)
+        if match is None:
+            self.command_error.emit("update_session_metadata", "Recording not found")
+            return
+        match["topic"] = topic.strip() or "General"
+        match["trial_number"] = int(trial_number)
+        match["athlete"] = athlete.strip()
+        self.message.emit("Demo recording details updated")
+        self.refresh_sessions()
+
+    def rename_topic_group(self, old_topic: str, new_topic: str) -> None:
+        old_topic = old_topic.strip()
+        new_topic = new_topic.strip()
+        count = 0
+        for session in self.sessions:
+            topic = str(session.get("topic") or "General").strip() or "General"
+            if topic == old_topic:
+                session["topic"] = new_topic
+                count += 1
+        self.message.emit(
+            f'Demo renamed group "{old_topic}" → "{new_topic}" ({count} recording(s))'
+        )
         self.refresh_sessions()
 
     def export_diagnostics(self, output_path: str) -> None:

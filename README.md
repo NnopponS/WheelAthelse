@@ -40,6 +40,10 @@ Both clients use the same firmware BLE contract. Use one operator client at a ti
                ▼                        ▼
       CSV + metadata           authoritative .waj journal
       preview + export         QC + recovery + CSV export
+                                      │
+                                      ▼
+                           optional offline MODEL page
+                         PyTorch trajectory reconstruction
 ```
 
 ### Firmware
@@ -70,11 +74,65 @@ Key capabilities:
 
 Locations: `tools/pc_gui/` + `tools/pc_acquisition/`
 
-The PySide6 UI is deliberately separated from the authoritative raw-data path. The acquisition daemon owns BLE, strict packet parsing, sequence/loss accounting, synchronization, `.waj` journal writes, final QC, and crash recovery. The GUI receives bounded preview/status traffic over localhost IPC.
+The Python Research Edition uses a reliability-first two-process architecture. The PySide6 GUI never owns the authoritative BLE/raw-data path. A separate acquisition daemon owns BLE, strict packet parsing, sequence/loss accounting, synchronization, append-only `.waj` journal writes, final QC, and crash recovery. The GUI receives bounded preview/status traffic over localhost IPC.
 
-This means a slow chart or restarted GUI cannot silently become the raw BLE storage bottleneck.
+This means a slow chart, PyTorch inference, or restarted GUI cannot silently become the raw BLE storage bottleneck.
 
-Windows UI includes Dashboard, Live, Record, Experiments, Sessions, and Diagnostics. See [`tools/pc_gui/README.md`](tools/pc_gui/README.md) for the detailed workflow.
+The current Windows UI has five operator sections:
+
+- **Dashboard** — board connection and system overview;
+- **Acquisition** — synchronized live preview and recording controls;
+- **Results** — recordings grouped by topic, QC, telemetry preview, batch CSV export/delete, and direct metadata editing;
+- **MODEL** — optional offline 2D trajectory reconstruction from finalized recordings;
+- **Diagnostics** — acquisition/data-integrity information.
+
+#### Results and session organization
+
+Finalized Windows recordings keep an immutable internal session UUID, but the files users see are stored with human-readable names:
+
+```text
+~/Documents/WheelAthlete/PC Sessions/
+└── 10x5/
+    ├── 10x5_Trial16_Nipoon.waj
+    └── 10x5_Trial16_Nipoon.summary.json
+```
+
+Results supports both **Group by Topic** and **All Trials Table** views. Topic, trial, and athlete names can be edited directly from the table. Changes require confirmation before the file/folder is renamed, while the internal UUID and raw journal identity remain unchanged. Group names can also be renamed, which moves all finalized sessions in that topic to the new topic folder.
+
+Checkboxes are reserved for batch actions such as Export/Delete; table editing does not use row selection, so preview controls stay visible while metadata is being edited.
+
+#### Experimental MODEL page
+
+The MODEL page is intentionally offline and does not touch the acquisition critical path:
+
+```text
+Record
+  ↓
+Finalized Results session
+  ↓
+Select checkpoint
+  ↓
+Prepare synchronized dual-wheel IMU window
+  ↓
+PyTorch / BiWheel3D inference
+  ↓
+2D XY trajectory
+```
+
+Current model integration supports:
+
+- selecting a compatible discovered checkpoint or browsing to a `.pt` / `.pth` checkpoint with Windows File Explorer;
+- loading finalized sessions from Results;
+- dual-wheel preprocessing into the BiWheel3D input contract;
+- SI-unit conversion and 100 Hz preparation for the current adapter;
+- offline PyTorch inference in a background worker so the GUI stays responsive;
+- a 2D XY trajectory plot with equal X/Y physical scale (`1 m` on X equals `1 m` on Y);
+- path length, endpoint distance, and model-point summaries;
+- explicit compatibility/errors instead of silently forcing an incompatible checkpoint.
+
+The current BiWheel3D TCN + BiLSTM model is a buffered/offline research model, not a zero-latency causal estimator. The MODEL feature should therefore be treated as experimental analysis, not as part of authoritative acquisition.
+
+See [`tools/pc_gui/README.md`](tools/pc_gui/README.md) for the detailed Windows workflow.
 
 ## Repository layout
 
@@ -85,7 +143,9 @@ WheelAthelse/
 ├── Xiao_firmware/               # XIAO nRF52840 Sense firmware
 ├── tools/
 │   ├── pc_acquisition/          # Windows authoritative BLE/recording daemon
-│   ├── pc_gui/                  # PySide6 Windows operator UI
+│   ├── pc_gui/                  # PySide6 Windows operator UI + MODEL adapter
+│   │   ├── model_inference.py   # Experimental offline model integration
+│   │   └── requirements-model.txt
 │   ├── check_session.py         # Session validation helper
 │   └── process_dataset.py       # Dataset processing helper
 ├── packaging/
@@ -113,7 +173,7 @@ From the repository root:
 run_python_pc_app.bat
 ```
 
-The launcher checks the Python UI dependencies and starts `tools.pc_gui`. In normal mode the GUI starts or reuses the local acquisition daemon automatically.
+The launcher checks the normal Python UI dependencies and starts `tools.pc_gui`. In normal mode the GUI starts or reuses the local acquisition daemon automatically.
 
 Demo UI without physical boards:
 
@@ -128,6 +188,16 @@ Default Windows data locations:
 - Sessions: `~/Documents/WheelAthlete/PC Sessions`
 - GUI log: `~/Documents/WheelAthlete/Logs/python-pc-app.log`
 - Experiment presets: `~/Documents/WheelAthlete/experiments.json`
+
+### Optional MODEL dependencies
+
+PyTorch is kept separate from the normal acquisition requirements so the reliable data-collection app does not need to install the large ML runtime unless MODEL analysis is required.
+
+```bat
+python -m pip install -r tools\pc_gui\requirements-model.txt
+```
+
+The MODEL page also expects the compatible model project/checkpoint files referenced by the selected checkpoint. Model inference is optional; recording, Results, export, and diagnostics remain usable without it.
 
 ## Build Windows portable EXE + installer
 
@@ -209,7 +279,9 @@ Mobile sessions are stored in the app documents area under a topic/trial/session
 
 The Windows acquisition daemon writes an append-only `.waj` journal as the authoritative record. CSV is derived from the journal. Incomplete `.open` journals are recoverable.
 
-Do not treat preview/UI values as the authoritative research record.
+Finalized sessions are relocated into human-readable topic folders using `Topic_TrialN_Athlete` filenames while preserving the UUID embedded in the authoritative journal. User-facing metadata can be corrected later from Results without rewriting the raw journal identity.
+
+Do not treat preview/UI values or MODEL output as the authoritative research record.
 
 ## Verification
 
@@ -226,9 +298,11 @@ python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
 python -m compileall -q tools/pc_acquisition tools/pc_gui
 ```
 
+MODEL-specific tests cover preprocessing contracts, checkpoint selection, Results → MODEL navigation, equal-axis trajectory rendering, and custom checkpoint browsing.
+
 Firmware has host-side contract/unit tests under each firmware target. Detailed verification evidence is kept under `docs/testing/`.
 
-Automated tests/simulation do **not** prove real RF throughput, real physical left/right start skew, or hardware behavior at distance. Those claims require the prepared physical two-XIAO acceptance procedure.
+Automated tests/simulation do **not** prove real RF throughput, real physical left/right start skew, real-world model accuracy, or hardware behavior at distance. Those claims require the prepared physical two-XIAO acceptance procedure and model validation data.
 
 ## Versioning
 

@@ -69,6 +69,13 @@ from PySide6.QtWidgets import (
 )
 
 from .controller import BaseController, sanitize_name
+from .model_inference import (
+    ModelSpec,
+    custom_model_spec,
+    discover_compatible_models,
+    model_runtime_status,
+    run_session_model,
+)
 from .state import AppViewState
 from .widgets import (
     BoardSummaryCard,
@@ -86,6 +93,7 @@ NAV_ITEMS = [
     ("Dashboard", "Overview & connect"),
     ("Acquisition", "Live preview & record"),
     ("Results", "Sessions & CSV export"),
+    ("MODEL", "2D trajectory analysis"),
     ("Diagnostics", "Data integrity"),
 ]
 
@@ -284,7 +292,7 @@ QFrame#topicCard[expanded="true"] {
     border: 1.5px solid #0f766e;
     background-color: #ffffff;
 }
-QLabel#topicTitle {
+QLabel#topicTitle, QLineEdit#topicTitle {
     font-size: 16px;
     font-weight: 700;
     color: #0f766e;
@@ -340,6 +348,24 @@ QPushButton#previewTableBtn[active="true"] {
     background-color: #0f766e;
     color: #ffffff;
     border-color: #0f766e;
+}
+QPushButton#editTableBtn {
+    min-height: 24px;
+    max-height: 26px;
+    min-width: 58px;
+    max-width: 58px;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: 1px solid #94a3b8;
+    color: #334155;
+    background-color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+}
+QPushButton#editTableBtn:hover {
+    border-color: #0f766e;
+    color: #0f766e;
+    background-color: #f0fdfa;
 }
 QFrame#previewCard {
     background-color: #ffffff;
@@ -428,6 +454,32 @@ def _table_action_button(text: str, name: str, callback, *, active: bool = False
     btn.clicked.connect(callback)
     layout.addWidget(btn)
     return container
+
+
+def _parse_trial_number(value: object) -> int | None:
+    text = str(value or "").strip()
+    if text.lower().startswith("trial"):
+        text = text[5:].strip()
+    try:
+        number = int(text)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 1 else None
+
+
+def _set_table_action_state(container: QWidget | None, text: str, *, active: bool) -> bool:
+    """Update only the preview action without replacing the clicked cell widget."""
+    if container is None:
+        return False
+    button = container.findChild(QPushButton, "previewTableBtn")
+    if button is None:
+        return False
+    button.setText(text)
+    button.setProperty("active", "true" if active else "false")
+    button.style().unpolish(button)
+    button.style().polish(button)
+    button.update()
+    return True
 
 
 def _play_tone(frequency: int, duration_ms: int) -> None:
@@ -1337,11 +1389,65 @@ class SessionPreviewDrawer(Card):
         self.show()
 
 
+class GroupNameEdit(QLineEdit):
+    """Read-only group title that becomes editable on double-click."""
+
+    rename_requested = Signal(str, str)
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._original = text
+        self.setReadOnly(True)
+        self.setFrame(False)
+        self.setObjectName("topicTitle")
+        self.setToolTip("Double-click to rename this group")
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(70)
+        self.setMaximumWidth(240)
+        self.editingFinished.connect(self._finish_edit)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        self._original = self.text()
+        self.setReadOnly(False)
+        self.selectAll()
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        if not self.isReadOnly() and event.key() == Qt.Key.Key_Escape:
+            self.setText(self._original)
+            self.setReadOnly(True)
+            self.clearFocus()
+            return
+        super().keyPressEvent(event)
+
+    def _finish_edit(self) -> None:
+        if self.isReadOnly():
+            return
+        edited = self.text().strip()
+        original = self._original.strip()
+        self.setReadOnly(True)
+        if not edited:
+            self.setText(original)
+            return
+        self.setText(edited)
+        if edited != original:
+            self.rename_requested.emit(original, edited)
+
+    def revert_to(self, text: str) -> None:
+        self._original = text
+        self.setText(text)
+        self.setReadOnly(True)
+
+
 class TopicCard(Card):
     """Collapsible card displaying a single topic's summary and expandable trials list."""
 
     selection_changed = Signal()
     preview_requested = Signal(str)
+    metadata_changed = Signal(str, str, int, str)
+    topic_rename_requested = Signal(str, str)
 
     def __init__(self, topic: str, sessions: list[dict[str, Any]], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1362,8 +1468,8 @@ class TopicCard(Card):
         self.check.setToolTip("Select all trials in this topic")
         header.addWidget(self.check)
 
-        self.title_label = QLabel(self.topic)
-        self.title_label.setObjectName("topicTitle")
+        self.title_label = GroupNameEdit(self.topic, self)
+        self.title_label.rename_requested.connect(self.topic_rename_requested.emit)
         header.addWidget(self.title_label)
 
         trials_count = len(self.sessions)
@@ -1425,6 +1531,10 @@ class TopicCard(Card):
         self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setItemDelegateForColumn(0, CheckBoxDelegate(self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
         self.table.setAlternatingRowColors(True)
 
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -1480,7 +1590,11 @@ class TopicCard(Card):
             ]
             for col, val in enumerate(values, start=1):
                 cell = QTableWidgetItem(val)
-                cell.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+                if col in (2, 3):
+                    flags |= Qt.ItemFlag.ItemIsEditable
+                    cell.setToolTip("Double-click to edit")
+                cell.setFlags(flags)
                 if col in (1, 2):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 elif col in (4, 5, 6, 7):
@@ -1506,13 +1620,17 @@ class TopicCard(Card):
         for row, item in enumerate(self.sessions):
             sess_id = str(item.get("session_id", ""))
             is_active = (sess_id == session_id and bool(session_id))
-            action_widget = _table_action_button(
-                "Viewing" if is_active else "Preview",
-                "previewTableBtn",
-                lambda _=None, s=sess_id: self.preview_requested.emit(s),
-                active=is_active,
-            )
-            self.table.setCellWidget(row, 8, action_widget)
+            container = self.table.cellWidget(row, 8)
+            if not _set_table_action_state(
+                container, "Viewing" if is_active else "Preview", active=is_active
+            ):
+                action_widget = _table_action_button(
+                    "Viewing" if is_active else "Preview",
+                    "previewTableBtn",
+                    lambda _=None, s=sess_id: self.preview_requested.emit(s),
+                    active=is_active,
+                )
+                self.table.setCellWidget(row, 8, action_widget)
 
     def toggle_expanded(self) -> None:
         self.set_expanded(not self.table_container.isVisible())
@@ -1558,9 +1676,50 @@ class TopicCard(Card):
                 item.checkState() in (Qt.CheckState.Checked, Qt.CheckState.Checked.value, 2)
                 or item.data(Qt.ItemDataRole.CheckStateRole) in (Qt.CheckState.Checked, Qt.CheckState.Checked.value, 2)
             )
-            self._highlight_row(item.row(), is_checked)
-            self._sync_topic_check()
+            self._block_signals = True
+            try:
+                self._highlight_row(item.row(), is_checked)
+                self._sync_topic_check()
+            finally:
+                self._block_signals = False
             self.selection_changed.emit()
+            return
+
+        row = item.row()
+        if row < 0 or row >= len(self.sessions) or item.column() not in (2, 3):
+            return
+        session = self.sessions[row]
+        session_id = str(session.get("session_id") or "")
+        if not session_id:
+            return
+
+        topic = str(session.get("topic") or self.topic or "General").strip() or "General"
+        trial = _parse_trial_number(session.get("trial_number")) or 1
+        athlete = str(session.get("athlete") or "").strip()
+
+        self._block_signals = True
+        changed = False
+        try:
+            if item.column() == 2:
+                parsed = _parse_trial_number(item.text())
+                if parsed is None:
+                    item.setText(f"Trial {trial}")
+                    return
+                item.setText(f"Trial {parsed}")
+                if parsed != trial:
+                    trial = parsed
+                    changed = True
+            else:
+                edited_athlete = item.text().strip()
+                item.setText(edited_athlete)
+                if edited_athlete != athlete:
+                    athlete = edited_athlete
+                    changed = True
+        finally:
+            self._block_signals = False
+
+        if changed:
+            self.metadata_changed.emit(session_id, topic, trial, athlete)
 
     def _highlight_row(self, row: int, is_checked: bool) -> None:
         bg_color = QColor("#f0fdfa") if is_checked else QColor("#ffffff")
@@ -1606,8 +1765,77 @@ class TopicCard(Card):
         return selected
 
 
+class SessionEditDialog(QDialog):
+    """Small, explicit editor for user-facing recording metadata."""
+
+    def __init__(self, session: dict[str, Any], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Edit recording details")
+        self.setModal(True)
+        self.setMinimumWidth(430)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 18, 20, 18)
+        root.setSpacing(14)
+
+        title = QLabel("Rename recording")
+        title.setObjectName("dialogTitle")
+        note = QLabel(
+            "This changes the display name and session file/folder name. "
+            "The internal session UUID and raw journal data stay unchanged."
+        )
+        note.setObjectName("mutedText")
+        note.setWordWrap(True)
+        root.addWidget(title)
+        root.addWidget(note)
+
+        form = QFormLayout()
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+        self.topic_edit = QLineEdit(str(session.get("topic") or "General"))
+        self.topic_edit.setAccessibleName("editSessionTopic")
+        self.trial_spin = QSpinBox()
+        self.trial_spin.setAccessibleName("editSessionTrial")
+        self.trial_spin.setRange(1, 999999)
+        try:
+            self.trial_spin.setValue(max(1, int(session.get("trial_number") or 1)))
+        except (TypeError, ValueError):
+            self.trial_spin.setValue(1)
+        self.athlete_edit = QLineEdit(str(session.get("athlete") or ""))
+        self.athlete_edit.setAccessibleName("editSessionAthlete")
+        form.addRow("Topic", self.topic_edit)
+        form.addRow("Trial", self.trial_spin)
+        form.addRow("Athlete", self.athlete_edit)
+        root.addLayout(form)
+
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        cancel = _button("Cancel", "cancelEditSessionButton")
+        save = _button("Save changes", "saveEditSessionButton", primary=True)
+        cancel.clicked.connect(self.reject)
+        save.clicked.connect(self._save)
+        actions.addWidget(cancel)
+        actions.addWidget(save)
+        root.addLayout(actions)
+
+    def _save(self) -> None:
+        if not self.topic_edit.text().strip():
+            self.topic_edit.setFocus()
+            return
+        self.accept()
+
+    def values(self) -> tuple[str, int, str]:
+        return (
+            self.topic_edit.text().strip(),
+            int(self.trial_spin.value()),
+            self.athlete_edit.text().strip(),
+        )
+
+
 class ResultsPage(QWidget):
     """Hierarchical Topic browser with expandable trials, multi-file CSV export into topic subfolders, and real telemetry preview."""
+
+    model_requested = Signal(str)
 
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
@@ -1670,6 +1898,9 @@ class ResultsPage(QWidget):
         self.select_all_btn = _button("Select all", "selectAllButton")
         self.deselect_all_btn = _button("Deselect all", "deselectAllButton")
 
+        self.model_button = _button("Open in MODEL", "openModelButton")
+        self.model_button.setAccessibleName("openSelectedInModel")
+        self.model_button.setEnabled(False)
         self.export_button = _button("Export selected CSV(s)", "exportSessionButton", primary=True)
         self.delete_button = _button("Delete selected", "deleteSessionButton", danger=True)
 
@@ -1679,6 +1910,7 @@ class ResultsPage(QWidget):
         filter_layout.addWidget(self.trial_filter, 1)
         filter_layout.addWidget(self.select_all_btn)
         filter_layout.addWidget(self.deselect_all_btn)
+        filter_layout.addWidget(self.model_button)
         filter_layout.addWidget(self.export_button)
         filter_layout.addWidget(self.delete_button)
         root.addWidget(filter_card)
@@ -1744,8 +1976,14 @@ class ResultsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(9, 110)
         self.table.horizontalHeaderItem(9).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        # Batch selection is checkbox-driven. Disable Qt row selection so
+        # double-click editing never paints the dark selected-row overlay over
+        # the Preview cell widget.
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
         self.table.setAlternatingRowColors(True)
         self.table.setAccessibleName("sessionsTable")
         flat_layout.addWidget(self.table)
@@ -1767,6 +2005,7 @@ class ResultsPage(QWidget):
         self.refresh_button.clicked.connect(controller.refresh_sessions)
         self.change_folder_button.clicked.connect(self._change_folder)
         self.open_folder_button.clicked.connect(self._open_folder)
+        self.model_button.clicked.connect(self._open_selected_in_model)
         self.export_button.clicked.connect(self._export_selected)
         self.delete_button.clicked.connect(self._delete_selected)
         self.table.itemChanged.connect(self._on_table_item_changed)
@@ -1854,7 +2093,11 @@ class ResultsPage(QWidget):
             ]
             for col, value in enumerate(values, start=1):
                 cell = QTableWidgetItem(value)
-                cell.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+                if col in (2, 3, 4):
+                    flags |= Qt.ItemFlag.ItemIsEditable
+                    cell.setToolTip("Double-click to edit")
+                cell.setFlags(flags)
                 if col in (1, 3):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 elif col in (5, 6, 7, 8):
@@ -1892,6 +2135,8 @@ class ResultsPage(QWidget):
             card = TopicCard(topic_name, topic_sessions, self.topic_container)
             card.selection_changed.connect(self._on_topic_card_selection_changed)
             card.preview_requested.connect(self.preview_session)
+            card.metadata_changed.connect(self._save_inline_metadata)
+            card.topic_rename_requested.connect(self._rename_topic_group)
             if self._active_session_id:
                 card.set_active_preview(self._active_session_id)
             self._topic_cards.append(card)
@@ -1904,8 +2149,10 @@ class ResultsPage(QWidget):
         if not session_id:
             return
         if self.preview_drawer.isVisible() and self._active_session_id == session_id:
-            self.preview_drawer.hide()
-            self._set_active_preview("")
+            # Preview is an explicit action, not a toggle. Re-clicking the active
+            # row must never make telemetry or its button disappear.
+            self.preview_drawer.load_session(session_id)
+            self.preview_drawer.show()
             return
 
         self._set_active_preview(session_id)
@@ -1927,40 +2174,188 @@ class ResultsPage(QWidget):
                 sess = self._visible[row]
                 sess_id = str(sess.get("session_id", ""))
                 is_active = (sess_id == self._active_session_id and bool(sess_id))
-                action_widget = _table_action_button(
-                    "Viewing" if is_active else "Preview",
-                    "previewTableBtn",
-                    lambda _=None, s=sess_id: self.preview_session(s),
-                    active=is_active,
-                )
-                self.table.setCellWidget(row, 9, action_widget)
+                container = self.table.cellWidget(row, 9)
+                if not _set_table_action_state(
+                    container, "Viewing" if is_active else "Preview", active=is_active
+                ):
+                    action_widget = _table_action_button(
+                        "Viewing" if is_active else "Preview",
+                        "previewTableBtn",
+                        lambda _=None, s=sess_id: self.preview_session(s),
+                        active=is_active,
+                    )
+                    self.table.setCellWidget(row, 9, action_widget)
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
         if self._block_table_signals:
             return
         if item.column() == 0:
+            row = item.row()
             is_checked = (
                 item.checkState() in (Qt.CheckState.Checked, Qt.CheckState.Checked.value, 2)
                 or item.data(Qt.ItemDataRole.CheckStateRole) in (Qt.CheckState.Checked, Qt.CheckState.Checked.value, 2)
             )
             bg_color = QColor("#f0fdfa") if is_checked else QColor("#ffffff")
-            for col in range(self.table.columnCount()):
-                it = self.table.item(item.row(), col)
-                if it is not None:
-                    it.setBackground(bg_color)
+            self._block_table_signals = True
+            try:
+                for col in range(self.table.columnCount()):
+                    it = self.table.item(row, col)
+                    if it is not None:
+                        it.setBackground(bg_color)
+            finally:
+                self._block_table_signals = False
             self._update_action_counts()
+            return
+
+        row = item.row()
+        if row < 0 or row >= len(self._visible) or item.column() not in (2, 3, 4):
+            return
+        session = self._visible[row]
+        session_id = str(session.get("session_id") or "")
+        if not session_id:
+            return
+
+        topic = str(session.get("topic") or "General").strip() or "General"
+        trial = _parse_trial_number(session.get("trial_number")) or 1
+        athlete = str(session.get("athlete") or "").strip()
+
+        self._block_table_signals = True
+        changed = False
+        try:
+            if item.column() == 2:
+                edited_topic = item.text().strip()
+                if not edited_topic:
+                    item.setText(topic)
+                    self.controller.message.emit("Topic cannot be empty")
+                    return
+                item.setText(edited_topic)
+                if edited_topic != topic:
+                    topic = edited_topic
+                    changed = True
+            elif item.column() == 3:
+                parsed = _parse_trial_number(item.text())
+                if parsed is None:
+                    item.setText(str(trial))
+                    self.controller.message.emit("Trial must be a positive whole number")
+                    return
+                item.setText(str(parsed))
+                if parsed != trial:
+                    trial = parsed
+                    changed = True
+            else:
+                edited_athlete = item.text().strip()
+                item.setText(edited_athlete)
+                if edited_athlete != athlete:
+                    athlete = edited_athlete
+                    changed = True
+        finally:
+            self._block_table_signals = False
+
+        if changed:
+            self._save_inline_metadata(session_id, topic, trial, athlete)
 
     def _on_topic_card_selection_changed(self) -> None:
         self._update_action_counts()
 
     def _update_action_counts(self) -> None:
         count = len(self._get_selected_sessions())
+        self.model_button.setEnabled(count == 1)
+        self.model_button.setToolTip(
+            "Open the selected recording for offline model analysis"
+            if count == 1
+            else "Select exactly one recording to analyze in MODEL"
+        )
         if count > 0:
             self.export_button.setText(f"Export CSV ({count})")
             self.delete_button.setText(f"Delete ({count})")
         else:
             self.export_button.setText("Export selected CSV(s)")
             self.delete_button.setText("Delete selected")
+
+    def _save_inline_metadata(
+        self, session_id: str, topic: str, trial_number: int, athlete: str
+    ) -> None:
+        session = next(
+            (s for s in self._sessions if str(s.get("session_id") or "") == session_id),
+            None,
+        )
+        if session is None:
+            self.controller.message.emit("Recording not found")
+            QTimer.singleShot(0, self._filter)
+            return
+
+        old_topic = str(session.get("topic") or "General").strip() or "General"
+        old_trial = _parse_trial_number(session.get("trial_number")) or 1
+        old_athlete = str(session.get("athlete") or "").strip()
+        changes: list[str] = []
+        if topic != old_topic:
+            changes.append(f'Topic: "{old_topic}" → "{topic}"')
+        if trial_number != old_trial:
+            changes.append(f"Trial: {old_trial} → {trial_number}")
+        if athlete != old_athlete:
+            changes.append(f'Athlete: "{old_athlete or "—"}" → "{athlete or "—"}"')
+        if not changes:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Confirm recording change",
+            "Apply this change?\n\n" + "\n".join(changes),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            # Rebuild from unchanged controller/session state so the edited cell reverts.
+            QTimer.singleShot(0, self._filter)
+            return
+
+        self.controller.update_session_metadata(
+            session_id,
+            topic=topic,
+            trial_number=trial_number,
+            athlete=athlete,
+        )
+
+    def _rename_topic_group(self, old_topic: str, new_topic: str) -> None:
+        old_topic = old_topic.strip()
+        new_topic = new_topic.strip()
+        if not old_topic or not new_topic or old_topic == new_topic:
+            QTimer.singleShot(0, self._filter)
+            return
+
+        matching = [
+            s for s in self._sessions
+            if (str(s.get("topic") or "General").strip() or "General") == old_topic
+        ]
+        if not matching:
+            self.controller.message.emit(f'No recordings found in group "{old_topic}"')
+            QTimer.singleShot(0, self._filter)
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Confirm group rename",
+            f'Rename group "{old_topic}" to "{new_topic}" for {len(matching)} recording(s)?\n\n'
+            "The session files will move to the new topic folder. Internal UUIDs and raw data stay unchanged.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            QTimer.singleShot(0, self._filter)
+            return
+
+        self.controller.rename_topic_group(old_topic, new_topic)
+
+    def _open_selected_in_model(self) -> None:
+        selected = self._get_selected_sessions()
+        if len(selected) != 1:
+            self.controller.message.emit("Select exactly one recording before opening MODEL")
+            return
+        session_id = str(selected[0].get("session_id") or "")
+        if not session_id:
+            self.controller.message.emit("Selected recording has no session ID")
+            return
+        self.model_requested.emit(session_id)
 
     def _select_all(self) -> None:
         # Select all topic cards
@@ -2082,6 +2477,397 @@ class ResultsPage(QWidget):
 
 
 SessionsPage = ResultsPage
+
+
+class ModelPage(QWidget):
+    """Experimental offline BiWheel3D trajectory analysis for finalized recordings."""
+
+    analysis_ready = Signal(object)
+    analysis_failed = Signal(str)
+
+    def __init__(self, controller: BaseController) -> None:
+        super().__init__()
+        self.controller = controller
+        self.repo_root = Path(__file__).resolve().parents[2]
+        self._models: list[ModelSpec] = []
+        self._running = False
+        self._trajectory_bounds: tuple[float, float, float, float] | None = None
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(14)
+        root.addLayout(
+            _page_header(
+                "MODEL",
+                "Choose a finalized recording and a compatible BiWheel3D checkpoint, then generate an offline 2D trajectory without touching the acquisition path.",
+            )
+        )
+
+        controls = Card()
+        controls_layout = QGridLayout(controls)
+        controls_layout.setContentsMargins(16, 14, 16, 14)
+        controls_layout.setHorizontalSpacing(12)
+        controls_layout.setVerticalSpacing(8)
+
+        model_label = QLabel("Model")
+        model_label.setObjectName("cardTitle")
+        self.model_combo = QComboBox()
+        self.model_combo.setObjectName("modelCheckpointCombo")
+        self.model_combo.setAccessibleName("modelCheckpointCombo")
+        self.model_combo.setMinimumWidth(280)
+
+        session_label = QLabel("Recording")
+        session_label.setObjectName("cardTitle")
+        self.session_combo = QComboBox()
+        self.session_combo.setObjectName("modelSessionCombo")
+        self.session_combo.setAccessibleName("modelSessionCombo")
+        self.session_combo.setMinimumWidth(320)
+
+        self.browse_model_button = _button("Browse model…", "browseModelCheckpointButton")
+        self.browse_model_button.setAccessibleName("browseModelCheckpointButton")
+        self.browse_model_button.setToolTip("Choose a .pt or .pth checkpoint with Windows File Explorer")
+        self.refresh_models_button = _button("Refresh models", "refreshModelListButton")
+        self.generate_button = _button("Generate 2D trajectory", "generateTrajectoryButton", primary=True)
+        self.generate_button.setAccessibleName("generateTrajectoryButton")
+
+        self.model_detail = QLabel("")
+        self.model_detail.setObjectName("mutedText")
+        self.model_detail.setWordWrap(True)
+        self.runtime_label = QLabel("")
+        self.runtime_label.setObjectName("mutedText")
+        self.runtime_label.setWordWrap(True)
+
+        controls_layout.addWidget(model_label, 0, 0)
+        controls_layout.addWidget(self.model_combo, 1, 0)
+        controls_layout.addWidget(self.browse_model_button, 1, 1)
+        controls_layout.addWidget(session_label, 0, 2)
+        controls_layout.addWidget(self.session_combo, 1, 2)
+        controls_layout.addWidget(self.refresh_models_button, 1, 3)
+        controls_layout.addWidget(self.generate_button, 1, 4)
+        controls_layout.addWidget(self.model_detail, 2, 0, 1, 3)
+        controls_layout.addWidget(self.runtime_label, 2, 3, 1, 2)
+        controls_layout.setColumnStretch(0, 2)
+        controls_layout.setColumnStretch(2, 2)
+        root.addWidget(controls)
+
+        metrics = Card()
+        metrics_layout = QGridLayout(metrics)
+        metrics_layout.setContentsMargins(16, 12, 16, 12)
+        metrics_layout.setHorizontalSpacing(24)
+        metrics_layout.setVerticalSpacing(4)
+        self.metric_model = QLabel("—")
+        self.metric_session = QLabel("—")
+        self.metric_points = QLabel("—")
+        self.metric_path = QLabel("—")
+        self.metric_endpoint = QLabel("—")
+        metric_items = [
+            ("Model", self.metric_model),
+            ("Recording", self.metric_session),
+            ("Model points", self.metric_points),
+            ("Path length", self.metric_path),
+            ("Endpoint", self.metric_endpoint),
+        ]
+        for column, (title, value) in enumerate(metric_items):
+            title_label = QLabel(title)
+            title_label.setObjectName("mutedText")
+            value.setObjectName("cardTitle")
+            metrics_layout.addWidget(title_label, 0, column)
+            metrics_layout.addWidget(value, 1, column)
+        root.addWidget(metrics)
+
+        trajectory_card = Card()
+        trajectory_layout = QVBoxLayout(trajectory_card)
+        trajectory_layout.setContentsMargins(12, 12, 12, 12)
+        trajectory_layout.setSpacing(8)
+
+        self.chart = QChart()
+        self.chart.setTitle("Select a recording and generate a trajectory")
+        self.chart.legend().setVisible(True)
+        self.trajectory_series = QLineSeries()
+        self.trajectory_series.setName("Predicted path")
+        self.trajectory_series.setPen(QPen(QColor("#0f766e"), 2.4))
+        self.start_series = QScatterSeries()
+        self.start_series.setName("Start")
+        self.start_series.setMarkerSize(10.0)
+        self.start_series.setColor(QColor("#0f766e"))
+        self.end_series = QScatterSeries()
+        self.end_series.setName("End")
+        self.end_series.setMarkerSize(10.0)
+        self.end_series.setColor(QColor("#ea580c"))
+        for series in (self.trajectory_series, self.start_series, self.end_series):
+            self.chart.addSeries(series)
+
+        self.axis_x = QValueAxis()
+        self.axis_y = QValueAxis()
+        self.axis_x.setTitleText("X (m)")
+        self.axis_y.setTitleText("Y (m)")
+        self.axis_x.setRange(-1.0, 1.0)
+        self.axis_y.setRange(-1.0, 1.0)
+        self.axis_x.setLabelFormat("%.2f")
+        self.axis_y.setLabelFormat("%.2f")
+        self.chart.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
+        self.chart.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
+        for series in (self.trajectory_series, self.start_series, self.end_series):
+            series.attachAxis(self.axis_x)
+            series.attachAxis(self.axis_y)
+
+        self.chart_view = QChartView(self.chart)
+        self.chart_view.setObjectName("trajectoryChart")
+        self.chart_view.setAccessibleName("trajectoryChart")
+        self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.chart_view.setMinimumHeight(360)
+        style_chart_surface(self.chart, self.chart_view)
+        trajectory_layout.addWidget(self.chart_view, 1)
+
+        self.status_label = QLabel("MODEL is experimental. Results are previews and do not modify recorded evidence.")
+        self.status_label.setObjectName("mutedText")
+        self.status_label.setWordWrap(True)
+        trajectory_layout.addWidget(self.status_label)
+        root.addWidget(trajectory_card, 1)
+
+        self.model_combo.currentIndexChanged.connect(self._update_model_detail)
+        self.browse_model_button.clicked.connect(self.browse_model)
+        self.refresh_models_button.clicked.connect(self.refresh_models)
+        self.generate_button.clicked.connect(self.generate_trajectory)
+        self.analysis_ready.connect(self._on_analysis_ready)
+        self.analysis_failed.connect(self._on_analysis_failed)
+        controller.sessions_changed.connect(self.update_sessions)
+
+        self.refresh_models()
+        self.update_sessions(controller.sessions)
+
+    def refresh_models(self) -> None:
+        current_key = ""
+        current = self.model_combo.currentData()
+        if isinstance(current, ModelSpec):
+            current_key = current.key
+        default_models = discover_compatible_models(self.repo_root)
+        if isinstance(current, ModelSpec) and current.key.startswith("custom:"):
+            if all(spec.checkpoint != current.checkpoint for spec in default_models):
+                default_models.append(current)
+        self._models = default_models
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        for spec in self._models:
+            self.model_combo.addItem(spec.label, spec)
+        if current_key:
+            for index in range(self.model_combo.count()):
+                spec = self.model_combo.itemData(index)
+                if isinstance(spec, ModelSpec) and spec.key == current_key:
+                    self.model_combo.setCurrentIndex(index)
+                    break
+        self.model_combo.blockSignals(False)
+        ready, detail = model_runtime_status(self.repo_root)
+        self.runtime_label.setText(("Ready · " if ready else "Unavailable · ") + detail)
+        has_model = isinstance(self.model_combo.currentData(), ModelSpec)
+        self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0)
+        self._update_model_detail()
+
+    def update_sessions(self, sessions: list[dict[str, Any]]) -> None:
+        current_id = str(self.session_combo.currentData() or "")
+        self.session_combo.blockSignals(True)
+        self.session_combo.clear()
+        for session in sessions:
+            session_id = str(session.get("session_id") or "")
+            if not session_id:
+                continue
+            topic = str(session.get("topic") or "Untitled")
+            trial = session.get("trial_number", "—")
+            athlete = str(session.get("athlete") or "Athlete")
+            quality = str(session.get("quality") or "UNKNOWN")
+            self.session_combo.addItem(
+                f"{topic} · Trial {trial} · {athlete} · {quality}",
+                session_id,
+            )
+        if current_id:
+            self.select_session(current_id)
+        self.session_combo.blockSignals(False)
+        ready, _ = model_runtime_status(self.repo_root)
+        has_model = isinstance(self.model_combo.currentData(), ModelSpec)
+        self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0 and not self._running)
+
+    def select_session(self, session_id: str) -> bool:
+        for index in range(self.session_combo.count()):
+            if str(self.session_combo.itemData(index) or "") == session_id:
+                self.session_combo.setCurrentIndex(index)
+                return True
+        return False
+
+    def _update_model_detail(self) -> None:
+        spec = self.model_combo.currentData()
+        if isinstance(spec, ModelSpec):
+            checkpoint_text = str(spec.checkpoint) if spec.key.startswith("custom:") else spec.checkpoint.name
+            self.model_detail.setText(f"{spec.description}  ·  {checkpoint_text}")
+        else:
+            self.model_detail.setText("No model selected. Choose a discovered model or Browse model…")
+
+    def browse_model(self) -> None:
+        current = self.model_combo.currentData()
+        if isinstance(current, ModelSpec):
+            initial_dir = str(current.checkpoint.parent)
+        else:
+            initial_dir = str(self.repo_root / "BiWheel3D" / "checkpoints")
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            "Select BiWheel3D model checkpoint",
+            initial_dir,
+            "PyTorch checkpoints (*.pt *.pth);;All files (*.*)",
+        )
+        if not chosen:
+            return
+        path = Path(chosen).expanduser().resolve()
+        if path.suffix.lower() not in {".pt", ".pth"}:
+            self.status_label.setText("MODEL error · Choose a PyTorch .pt or .pth checkpoint.")
+            return
+        if not path.is_file():
+            self.status_label.setText(f"MODEL error · Model checkpoint not found: {path}")
+            return
+
+        for index in range(self.model_combo.count()):
+            existing = self.model_combo.itemData(index)
+            if isinstance(existing, ModelSpec) and existing.checkpoint.resolve() == path:
+                self.model_combo.setCurrentIndex(index)
+                self._update_model_detail()
+                return
+
+        spec = custom_model_spec(path)
+        self._models.append(spec)
+        self.model_combo.addItem(spec.label, spec)
+        self.model_combo.setCurrentIndex(self.model_combo.count() - 1)
+        self.status_label.setText(
+            "Custom checkpoint selected. Compatibility and normalization will be validated when Generate is pressed."
+        )
+        ready, _ = model_runtime_status(self.repo_root)
+        self.generate_button.setEnabled(ready and self.session_combo.count() > 0 and not self._running)
+
+    def generate_trajectory(self) -> None:
+        if self._running:
+            return
+        spec = self.model_combo.currentData()
+        session_id = str(self.session_combo.currentData() or "")
+        if not isinstance(spec, ModelSpec) or not session_id:
+            self.status_label.setText("Choose both a recording and a compatible model first.")
+            return
+
+        self._set_running(True)
+        self.status_label.setText(
+            f"Running {spec.label} on {session_id}… This is offline analysis; recording is unaffected."
+        )
+
+        def work() -> None:
+            try:
+                session_data = self.controller.load_session_data(session_id)
+                result = run_session_model(self.repo_root, spec, session_data)
+            except Exception as exc:  # worker boundary: surface a readable UI error
+                self.analysis_failed.emit(str(exc))
+                return
+            self.analysis_ready.emit(result)
+
+        Thread(target=work, name="wheelathlete-model-inference", daemon=True).start()
+
+    def _set_running(self, running: bool) -> None:
+        self._running = running
+        self.model_combo.setEnabled(not running)
+        self.session_combo.setEnabled(not running)
+        self.browse_model_button.setEnabled(not running)
+        self.refresh_models_button.setEnabled(not running)
+        if running:
+            self.generate_button.setEnabled(False)
+            self.generate_button.setText("Generating…")
+        else:
+            ready, _ = model_runtime_status(self.repo_root)
+            has_model = isinstance(self.model_combo.currentData(), ModelSpec)
+            self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0)
+            self.generate_button.setText("Generate 2D trajectory")
+
+    def _on_analysis_failed(self, message: str) -> None:
+        self._set_running(False)
+        self.status_label.setText(f"MODEL error · {message}")
+
+    def _apply_equal_aspect_ranges(self) -> None:
+        """Render trajectory on a square plot with identical X/Y numeric scale."""
+        if self._trajectory_bounds is None:
+            return
+
+        # Let Qt calculate the natural plot area first, then inscribe a centered
+        # square inside it. Equal axis spans on a square plot guarantee true 1:1
+        # geometry: one meter on X is exactly one meter on Y on screen.
+        self.chart.setPlotArea(QRectF())
+        natural = self.chart.plotArea()
+        width = float(natural.width())
+        height = float(natural.height())
+        if width < 10.0 or height < 10.0:
+            return
+        side = min(width, height)
+        center = natural.center()
+        square = QRectF(
+            center.x() - side / 2.0,
+            center.y() - side / 2.0,
+            side,
+            side,
+        )
+        self.chart.setPlotArea(square)
+
+        x_min, x_max, y_min, y_max = self._trajectory_bounds
+        center_x = (x_min + x_max) / 2.0
+        center_y = (y_min + y_max) / 2.0
+        span = max(x_max - x_min, y_max - y_min, 0.5) * 1.16
+        half = span / 2.0
+        self.axis_x.setRange(center_x - half, center_x + half)
+        self.axis_y.setRange(center_y - half, center_y + half)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._trajectory_bounds is not None:
+            QTimer.singleShot(0, self._apply_equal_aspect_ranges)
+
+    def _on_analysis_ready(self, result: dict[str, Any]) -> None:
+        self._set_running(False)
+        points = list(result.get("xy") or [])
+        if not points:
+            self.status_label.setText("MODEL returned no trajectory points.")
+            return
+
+        # Keep the visual responsive for long recordings while metrics retain all points.
+        stride = max(1, len(points) // 5000)
+        display_points = points[::stride]
+        if display_points[-1] != points[-1]:
+            display_points.append(points[-1])
+        qpoints = [QPointF(float(x), float(y)) for x, y in display_points]
+        self.trajectory_series.replace(qpoints)
+        self.start_series.clear()
+        self.end_series.clear()
+        self.start_series.append(qpoints[0])
+        self.end_series.append(qpoints[-1])
+
+        xs = [point.x() for point in qpoints]
+        ys = [point.y() for point in qpoints]
+        self._trajectory_bounds = (min(xs), max(xs), min(ys), max(ys))
+
+        model_label = str(result.get("model_label") or "Model")
+        session_id = str(result.get("session_id") or "")
+        topic = str(result.get("topic") or "Recording")
+        trial = result.get("trial_number", "")
+        self.chart.setTitle(f"{topic} · Trial {trial} · {model_label}")
+        self.metric_model.setText(model_label)
+        self.metric_session.setText(session_id or "—")
+        self.metric_points.setText(f"{int(result.get('point_count') or 0):,}")
+        self.metric_path.setText(f"{float(result.get('path_length_m') or 0.0):.2f} m")
+        self.metric_endpoint.setText(f"{float(result.get('endpoint_m') or 0.0):.2f} m")
+        self._apply_equal_aspect_ranges()
+        QTimer.singleShot(0, self._apply_equal_aspect_ranges)
+
+        preprocess = result.get("preprocess") or {}
+        warnings = list(preprocess.get("warnings") or [])
+        detail = (
+            f"{int(preprocess.get('aligned_samples') or 0):,} aligned IMU samples → "
+            f"{int(preprocess.get('model_steps') or 0):,} model steps at 20 Hz."
+        )
+        if warnings:
+            detail += "  Warning: " + " ".join(str(item) for item in warnings)
+        else:
+            detail += "  Dual-wheel input prepared at the model's native 100 Hz contract."
+        self.status_label.setText(detail)
 
 
 class DiagnosticsPage(QWidget):
@@ -2277,8 +3063,9 @@ class MainWindow(QMainWindow):
         self.record = self.acquisition
         self.results = ResultsPage(controller)
         self.sessions = self.results
+        self.model = ModelPage(controller)
         self.diagnostics = DiagnosticsPage(controller)
-        for page in (self.dashboard, self.acquisition, self.results, self.diagnostics):
+        for page in (self.dashboard, self.acquisition, self.results, self.model, self.diagnostics):
             self.stack.addWidget(page)
         content_layout.addWidget(self.stack, 1)
         layout.addWidget(content, 1)
@@ -2288,6 +3075,7 @@ class MainWindow(QMainWindow):
         controller.message.connect(self._show_message)
         controller.command_error.connect(self._show_error)
         controller.sessions_changed.connect(self.results.update_sessions)
+        self.results.model_requested.connect(self._open_model_session)
         self._update_header(controller.state)
 
         toggle_action = QAction("Toggle fullscreen", self)
@@ -2297,6 +3085,13 @@ class MainWindow(QMainWindow):
 
     def start(self) -> None:
         self.controller.start()
+
+    def _open_model_session(self, session_id: str) -> None:
+        self.model.select_session(session_id)
+        model_index = next(
+            index for index, (title, _subtitle) in enumerate(NAV_ITEMS) if title == "MODEL"
+        )
+        self.nav.setCurrentRow(model_index)
 
     def _update_header(self, state: AppViewState) -> None:
         self.daemon_badge.setText("DAQ READY" if state.daemon_connected else "Daemon offline")

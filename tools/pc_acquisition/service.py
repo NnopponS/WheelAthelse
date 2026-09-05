@@ -78,6 +78,55 @@ def _metrics_delta(current: IngestionMetrics, baseline: IngestionMetrics) -> Ing
     )
 
 
+def _sanitize_storage_component(value: Any, *, fallback: str) -> str:
+    text = str(value).strip() if value is not None else ""
+    cleaned = "".join(
+        "_" if ord(ch) < 32 or ch in '<>:"/\\|?*' else ch
+        for ch in text
+    ).strip(" .")
+    return cleaned or fallback
+
+
+def session_storage_destination(root: Path | str, metadata: dict[str, Any]) -> Path:
+    """Return a collision-safe friendly .waj path matching CSV export naming."""
+    root_path = Path(root)
+    topic = _sanitize_storage_component(metadata.get("topic"), fallback="General")
+    trial_raw = metadata.get("trial_number", 1)
+    trial_text = str(trial_raw).strip()
+    trial = (
+        f"Trial{trial_text}"
+        if trial_text.isdigit()
+        else _sanitize_storage_component(trial_text, fallback="Trial1")
+    )
+    athlete_raw = str(metadata.get("athlete") or "").strip()
+    athlete = (
+        _sanitize_storage_component(athlete_raw, fallback="")
+        if athlete_raw
+        else ""
+    )
+    stem = f"{topic}_{trial}" + (f"_{athlete}" if athlete else "")
+    topic_dir = root_path / topic
+
+    candidate = topic_dir / f"{stem}.waj"
+    counter = 2
+    while candidate.exists() or candidate.with_suffix(".summary.json").exists():
+        candidate = topic_dir / f"{stem}_{counter}.waj"
+        counter += 1
+    return candidate
+
+
+def relocate_finalized_session(
+    journal_path: Path | str, metadata: dict[str, Any]
+) -> Path:
+    """Move a finalized UUID-named journal into its friendly topic folder."""
+    source = Path(journal_path)
+    destination = session_storage_destination(source.parent, metadata)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() != destination.resolve():
+        os.replace(source, destination)
+    return destination
+
+
 class AcquisitionService:
     """Command-oriented owner of the headless research acquisition pipeline."""
 
@@ -183,6 +232,7 @@ class AcquisitionService:
             "set_journal_root": self._cmd_set_journal_root,
             "export_session": self._cmd_export_session,
             "delete_session": self._cmd_delete_session,
+            "update_session_metadata": self._cmd_update_session_metadata,
             "diagnostic_report": self._cmd_diagnostic_report,
         }
         try:
@@ -598,6 +648,7 @@ class AcquisitionService:
         final_path = journal.finalize(summary)
         session_id = journal.session_id
         metadata = dict(self._record_metadata or {})
+        final_path = relocate_finalized_session(final_path, metadata)
         manifest = {
             **metadata,
             **summary,
@@ -643,9 +694,12 @@ class AcquisitionService:
             "duration_s",
             "quality",
             "sample_counts",
+            "journal_path",
         )
         for journal_path in sorted(
-            self.journal_root.glob("*.waj"), key=lambda path: path.stat().st_mtime, reverse=True
+            self.journal_root.rglob("*.waj"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
         ):
             summary: dict[str, Any] | None = None
             manifest_path = journal_path.with_suffix(".summary.json")
@@ -692,6 +746,98 @@ class AcquisitionService:
                 deleted.append(str(path))
         return {"session_id": session_id, "deleted": deleted}
 
+    async def _cmd_update_session_metadata(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Update user-facing metadata and friendly storage path without changing UUID identity."""
+        session_id = str(payload["session_id"])
+        source = self._journal_path_for_session(session_id)
+        if self._journal is not None and self._journal.session_id == session_id:
+            raise RuntimeError("cannot rename an active recording")
+
+        manifest_path = source.with_suffix(".summary.json")
+        summary: dict[str, Any]
+        if manifest_path.exists():
+            try:
+                loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+                summary = dict(loaded) if isinstance(loaded, dict) else {}
+            except (OSError, json.JSONDecodeError):
+                summary = {}
+        else:
+            summary = {}
+        if not summary:
+            summary = self._fallback_session_summary(source)
+
+        topic = _sanitize_storage_component(
+            payload.get("topic", summary.get("topic")), fallback="General"
+        )
+        athlete = str(payload.get("athlete", summary.get("athlete") or "")).strip()
+        trial_raw = payload.get("trial_number", summary.get("trial_number", 1))
+        try:
+            trial_number = int(trial_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("trial_number must be an integer") from exc
+        if trial_number < 1:
+            raise ValueError("trial_number must be >= 1")
+
+        updated = dict(summary)
+        updated.update(
+            {
+                "session_id": session_id,
+                "topic": topic,
+                "trial_number": trial_number,
+                "athlete": athlete,
+            }
+        )
+
+        trial_name = f"Trial{trial_number}"
+        athlete_name = (
+            _sanitize_storage_component(athlete, fallback="") if athlete else ""
+        )
+        stem = f"{topic}_{trial_name}" + (f"_{athlete_name}" if athlete_name else "")
+        desired = self.journal_root / topic / f"{stem}.waj"
+
+        if source.resolve() == desired.resolve():
+            destination = source
+        else:
+            destination = session_storage_destination(self.journal_root, updated)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            old_parent = source.parent
+            old_manifest = source.with_suffix(".summary.json")
+            old_csv = source.with_suffix(".csv")
+            new_manifest = destination.with_suffix(".summary.json")
+            new_csv = destination.with_suffix(".csv")
+
+            os.replace(source, destination)
+            try:
+                if old_manifest.exists():
+                    os.replace(old_manifest, new_manifest)
+                if old_csv.exists():
+                    os.replace(old_csv, new_csv)
+            except Exception:
+                if destination.exists() and not source.exists():
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(destination, source)
+                if new_manifest.exists() and not old_manifest.exists():
+                    os.replace(new_manifest, old_manifest)
+                if new_csv.exists() and not old_csv.exists():
+                    os.replace(new_csv, old_csv)
+                raise
+
+            if old_parent != self.journal_root:
+                try:
+                    old_parent.rmdir()
+                except OSError:
+                    pass
+
+        updated["journal_path"] = str(destination)
+        self._write_json_atomic(destination.with_suffix(".summary.json"), updated)
+        return {
+            "session_id": session_id,
+            "topic": topic,
+            "trial_number": trial_number,
+            "athlete": athlete,
+            "journal_path": str(destination),
+        }
+
     async def _cmd_diagnostic_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         output_raw = payload.get("output_path")
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -714,10 +860,34 @@ class AcquisitionService:
     def _journal_path_for_session(self, session_id: str) -> Path:
         if not session_id or any(ch not in "0123456789abcdefABCDEF-" for ch in session_id):
             raise ValueError("invalid session_id")
-        path = self.journal_root / f"{session_id}.waj"
-        if not path.exists():
-            raise FileNotFoundError(path)
-        return path
+
+        legacy = self.journal_root / f"{session_id}.waj"
+        if legacy.exists():
+            return legacy
+
+        for manifest_path in self.journal_root.rglob("*.summary.json"):
+            try:
+                value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(value, dict) or str(value.get("session_id") or "") != session_id:
+                continue
+            stem = manifest_path.name.removesuffix(".summary.json")
+            candidate = manifest_path.with_name(stem + ".waj")
+            if candidate.exists():
+                return candidate
+
+        # Last-resort recovery path for a journal that was moved successfully but
+        # whose sidecar manifest was not written before an interruption.
+        for candidate in self.journal_root.rglob("*.waj"):
+            try:
+                summary = self._fallback_session_summary(candidate)
+            except Exception:
+                continue
+            if str(summary.get("session_id") or "") == session_id:
+                return candidate
+
+        raise FileNotFoundError(self.journal_root / f"{session_id}.waj")
 
     def _fallback_session_summary(self, path: Path) -> dict[str, Any]:
         records = JournalReader(path).read_all()
