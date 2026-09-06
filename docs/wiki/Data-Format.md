@@ -48,4 +48,4 @@ Windows CSV is derived from the journal; it is not the primary write path. Final
 
 Do not infer authoritative sample completeness from UI preview values. Mobile recording buffers/storage and the Windows `.waj` path are the data sources of record for their respective clients.
 
-See `docs/ble-protocol.md` for the wire format and `tools/pc_gui/README.md` for Windows session behavior.
+See `docs/ble-protocol.md` for the wire format and `applications/wheelathlete_windows/tools/pc_gui/README.md` for Windows session behavior.

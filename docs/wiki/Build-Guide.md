@@ -5,7 +5,7 @@ Current release line: `v1.8.0`.
 ## Flutter mobile app — Android / iOS
 
 ```bash
-cd app
+cd applications/wheelathlete_mobile
 flutter pub get
 flutter run -d <physical-device-id>
 flutter test
@@ -24,13 +24,13 @@ The Flutter product is mobile-only. There is no supported Flutter Windows or Web
 From repository root:
 
 ```bat
-run_python_pc_app.bat
+applications/wheelathlete_windows/run_wheelathlete_windows.bat
 ```
 
 Demo mode without hardware:
 
 ```bat
-run_python_pc_app.bat --demo
+applications/wheelathlete_windows/run_wheelathlete_windows.bat --demo
 ```
 
 The GUI starts/reuses the local acquisition daemon automatically.
@@ -46,7 +46,7 @@ Prerequisites:
 Build from repository root:
 
 ```bat
-packaging\windows\build_installer.bat
+applications\wheelathlete_windows\packaging\windows\build_installer.bat
 ```
 
 Outputs:
@@ -56,12 +56,12 @@ release/WheelAthlete-1.8.0-portable.zip
 release/WheelAthleteSetup-1.8.0.exe
 ```
 
-The daemon executable is bundled with the GUI distribution. See `packaging/windows/README.md` for packaging details.
+The daemon executable is bundled with the GUI distribution. See `applications/wheelathlete_windows/packaging/windows/README.md` for packaging details.
 
 ## M5StickCPlus2 firmware
 
 ```bash
-cd M5plus2_firmware
+cd hardware_firmware/m5stickc_plus2
 pio run -e left
 pio run -e right
 pio run -e left -t upload
@@ -71,7 +71,7 @@ pio run -e right -t upload
 ## XIAO nRF52840 Sense firmware
 
 ```bash
-cd Xiao_firmware
+cd hardware_firmware/xiao_nrf52840_sense
 pio run -e left
 pio run -e right
 pio run -e left -t upload
@@ -84,13 +84,13 @@ Both targets use firmware version `1.8.0` and implement the canonical BLE contra
 
 ```bash
 # Mobile
-cd app
+cd applications/wheelathlete_mobile
 flutter test
 flutter analyze
 
 # Windows Python, from repo root
-python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
-python -m compileall -q tools/pc_acquisition tools/pc_gui
+python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests applications/wheelathlete_windows/tools/pc_gui/tests -q
+python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition applications/wheelathlete_windows/tools/pc_gui
 ```
 
 Physical BLE throughput and real left/right start skew require hardware acceptance; automated tests do not prove RF behavior.

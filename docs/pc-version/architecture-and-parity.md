@@ -6,27 +6,27 @@ Primary hardware: two Seeed Studio XIAO nRF52840 Sense boards at 50/100/200 Hz
 
 ## Scope and evidence reviewed
 
-The audit covered the complete tracked source inventory under `app/lib`,
-`app/test`, `Xiao_firmware/src`, `Xiao_firmware/test`,
-`M5plus2_firmware/src`, `M5plus2_firmware/test`, `tools`, `docs`, and the
+The audit covered the complete tracked source inventory under `applications/wheelathlete_mobile/lib`,
+`applications/wheelathlete_mobile/test`, `hardware_firmware/xiao_nrf52840_sense/src`, `hardware_firmware/xiao_nrf52840_sense/test`,
+`hardware_firmware/m5stickc_plus2/src`, `hardware_firmware/m5stickc_plus2/test`, `tools`, `docs`, and the
 existing `.project` plans. The critical flows inspected were:
 
 - BLE discovery, dual connection, MTU request, serialized GATT operations,
   notification ownership, reconnect handling, and streaming preparation in
-  `app/lib/ble/ble_repository.dart` and `app/lib/state/ble_providers.dart`.
+  `applications/wheelathlete_mobile/lib/ble/ble_repository.dart` and `applications/wheelathlete_mobile/lib/state/ble_providers.dart`.
 - Packet parsing, wrap-aware sequence tracking, replay, sample fan-out, and
-  presentation throttling in `app/lib/ble/imu_packet.dart`,
-  `app/lib/ble/imu_batch_processor.dart`, `app/lib/state/sample_hub.dart`, and
-  `app/lib/state/imu_presentation_buffer.dart`.
+  presentation throttling in `applications/wheelathlete_mobile/lib/ble/imu_packet.dart`,
+  `applications/wheelathlete_mobile/lib/ble/imu_batch_processor.dart`, `applications/wheelathlete_mobile/lib/state/sample_hub.dart`, and
+  `applications/wheelathlete_mobile/lib/state/imu_presentation_buffer.dart`.
 - Clock fit, scheduled start, START/STOP acknowledgement, bounded STOP retry,
   final acquisition health, session finalization, and single-wheel safeguards
-  in `app/lib/state/sync_*`, `record_countdown_providers.dart`, and
+  in `applications/wheelathlete_mobile/lib/state/sync_*`, `record_countdown_providers.dart`, and
   `recording_providers.dart`.
 - Session models, topic/trial layout, metadata, preview, quality badges,
   protocols, experiment tracking, CSV/XLSX/ZIP export, and atomic folder
-  export in `app/lib/records`, `app/lib/export`, and `app/lib/ui`.
+  export in `applications/wheelathlete_mobile/lib/records`, `applications/wheelathlete_mobile/lib/export`, and `applications/wheelathlete_mobile/lib/ui`.
 - XIAO command lifecycle, batched BLE delivery, replay, health events, and its
-  FreeRTOS IMU polling implementation in `Xiao_firmware/src`.
+  FreeRTOS IMU polling implementation in `hardware_firmware/xiao_nrf52840_sense/src`.
 - Existing Bleak console and Tkinter/matplotlib clients in `tools`.
 - Protocol and prior automated/physical-test evidence in `docs/ble-protocol.md`,
   `docs/data-collection-protocol.md`, and `docs/testing`.

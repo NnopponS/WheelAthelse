@@ -6,7 +6,7 @@ Flutter: parse IMU binary packet + realtime display using the design system.
 ## What was built
 
 ### Pure logic (host-testable, no Flutter/BLE)
-- `app/lib/ble/imu_packet.dart`:
+- `applications/wheelathlete_mobile/lib/ble/imu_packet.dart`:
   - `ImuSample.parse(bytes, {offset})` — parses one 20-byte sample at exact
     byte offsets from BLE protocol §2.1 (seq u32 @0, t_device_us u32 @4,
     ax/ay/az/gx/gy/gz int16 @8–18, all little-endian).
@@ -21,7 +21,7 @@ Flutter: parse IMU binary packet + realtime display using the design system.
     parsing + gap tracking, returns `ParsedBatch{samples, newGaps}`.
 
 ### State layer (Riverpod)
-- `app/lib/state/imu_providers.dart`:
+- `applications/wheelathlete_mobile/lib/state/imu_providers.dart`:
   - `WheelImuState` — per-side: streaming flag, latest ImuReading,
     sampleCount, dropCount, error.
   - `ImuStreamNotifier` — subscribes to `BleRepository.imuData(deviceId)`,
@@ -31,7 +31,7 @@ Flutter: parse IMU binary packet + realtime display using the design system.
     `error` + stop streaming. `stop` retains `latest` for UI.
 
 ### BLE repository extension
-- `app/lib/ble/ble_repository.dart`:
+- `applications/wheelathlete_mobile/lib/ble/ble_repository.dart`:
   - Added `Stream<List<int>> imuData(String deviceId)` to abstract interface.
   - `FlutterBluePlusBleRepository.imuData` — resolves IMU Data characteristic
     from `servicesList` (flutter_blue_plus 2.x removed `servicesStream`),
@@ -41,7 +41,7 @@ Flutter: parse IMU binary packet + realtime display using the design system.
     per device. `imuController(deviceId)` exposes it for test injection.
 
 ### UI layer
-- `app/lib/ui/live_page.dart`:
+- `applications/wheelathlete_mobile/lib/ui/live_page.dart`:
   - `LivePage` — ConsumerWidget with two `_WheelPanel`s (L/R) in a
     `SingleChildScrollView` (so both panels always render, not just the
     visible viewport). Single Start/Stop FAB toggles streaming for all
@@ -51,7 +51,7 @@ Flutter: parse IMU binary packet + realtime display using the design system.
     avoid `pumpAndSettle` timeout), `_MetricGrid` with 6 `LiveMetricTile`s
     (ax/ay/az in g, gx/gy/gz in °/s), sample count + drop count stats line.
   - Error text shown at panel level (even when no data yet).
-- `app/lib/ui/connect_page.dart`:
+- `applications/wheelathlete_mobile/lib/ui/connect_page.dart`:
   - Added "Live IMU" AppBar action (chart icon) — pushes `LivePage` when
     at least one wheel is connected, disabled otherwise.
 

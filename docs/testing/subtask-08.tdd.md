@@ -7,7 +7,7 @@ topic/trial hierarchy, buffered samples with synced timestamps.
 ## What was built
 
 ### Pure models (no I/O)
-- `app/lib/records/session_model.dart`:
+- `applications/wheelathlete_mobile/lib/records/session_model.dart`:
   - `MarkerEvent` — sync marker (timestampAppMs, offsetFromStartMs, label).
   - `SessionConfig` — pre-recording config (topic, trialNumber, sampleRateHz,
     athleteName, notes). `trialFolderName` zero-pads to 2 digits. `sessionId`
@@ -19,7 +19,7 @@ topic/trial hierarchy, buffered samples with synced timestamps.
     timestampSyncedMs, marker flag. Maps to CSV row per §3 of architecture.md.
 
 ### Storage repository (abstract + path_provider + in-memory fake)
-- `app/lib/records/storage_repository.dart`:
+- `applications/wheelathlete_mobile/lib/records/storage_repository.dart`:
   - `StorageRepository` abstract interface: listTopics, createTopic, deleteTopic,
     nextTrialNumber, saveSession, readSessionMeta, listSessions, deleteSession.
   - `PathProviderStorageRepository` — production impl using `path_provider` +
@@ -28,7 +28,7 @@ topic/trial hierarchy, buffered samples with synced timestamps.
   - `TopicEntry` — topic folder metadata (name, description, createdAt).
 
 ### Recording state machine (Riverpod)
-- `app/lib/state/recording_providers.dart`:
+- `applications/wheelathlete_mobile/lib/state/recording_providers.dart`:
   - `RecordingStatus` enum: idle, recording, stopped.
   - `RecordingState` — status, config, startTime, sampleCount, markerCount,
     markers, savedSessionId, error.
@@ -44,7 +44,7 @@ topic/trial hierarchy, buffered samples with synced timestamps.
     - `reset()`: returns to idle, clears buffer.
 
 ### UI
-- `app/lib/ui/record_page.dart`:
+- `applications/wheelathlete_mobile/lib/ui/record_page.dart`:
   - `RecordPage` (ConsumerStatefulWidget) — three-state UI:
     - idle: topic dropdown + trial info + "Start Recording" button + new topic dialog.
     - recording: live stats card (samples, markers, elapsed) + MarkEventButton +
@@ -53,9 +53,9 @@ topic/trial hierarchy, buffered samples with synced timestamps.
   - `_TopicDropdown` — cached FutureBuilder for topic list + new topic IconButton.
   - `_NewTopicDialog` — AlertDialog with TextField for topic name.
   - `_TrialInfo` — shows `trial_NN` with "(auto)" label.
-- `app/lib/ui/live_page.dart`: added Record icon button in AppBar (navigates to
+- `applications/wheelathlete_mobile/lib/ui/live_page.dart`: added Record icon button in AppBar (navigates to
   RecordPage when wheels are connected).
-- `app/lib/state/ble_providers.dart`: added `storageRepositoryProvider`.
+- `applications/wheelathlete_mobile/lib/state/ble_providers.dart`: added `storageRepositoryProvider`.
 
 ### Dependencies
 - Added `path_provider: ^2.1.6` to pubspec.yaml.

@@ -35,7 +35,7 @@ Only lessons that remain relevant to the current mobile + Python Windows archite
 
 ## Packaging and repository hygiene
 
-- Keep installer/build source under `packaging/windows/`; keep generated `build/` and `release/` output untracked.
+- Keep installer/build source under `applications/wheelathlete_windows/packaging/windows/`; keep generated `build/` and `release/` output untracked.
 - Keep `.project` small and canonical. Old plans/prompts belong in Git history, not in active project state.
 - Keep mobile, firmware, BLE contract, README, and Windows package versions synchronized with automated checks.
 - Work on `codex/pc-version` must not mutate `main` unless explicitly requested.

@@ -7,7 +7,7 @@ WheelAthlete separates pure logic from hardware/UI boundaries so most correctnes
 ## Flutter mobile
 
 ```bash
-cd app
+cd applications/wheelathlete_mobile
 flutter test
 flutter analyze
 ```
@@ -19,8 +19,8 @@ Coverage includes BLE parsing, synchronization, recording/storage state, session
 From repository root:
 
 ```bash
-python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
-python -m compileall -q tools/pc_acquisition tools/pc_gui
+python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests applications/wheelathlete_windows/tools/pc_gui/tests -q
+python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition applications/wheelathlete_windows/tools/pc_gui
 ```
 
 The acquisition suite covers strict parsing, lifecycle, journal/QC/recovery, IPC, queue/backpressure behavior, acceptance evaluation, and fault cases. GUI tests cover state mapping, IPC handling, experiment persistence, and offscreen smoke workflows.
@@ -30,7 +30,7 @@ The acquisition suite covers strict parsing, lifecycle, journal/QC/recovery, IPC
 ### M5StickCPlus2
 
 ```bash
-cd M5plus2_firmware
+cd hardware_firmware/m5stickc_plus2
 python -m pytest test -q
 pio test -e native
 ```
@@ -38,7 +38,7 @@ pio test -e native
 ### XIAO nRF52840 Sense
 
 ```bash
-cd Xiao_firmware
+cd hardware_firmware/xiao_nrf52840_sense
 python -m pytest test -q
 ```
 
@@ -46,7 +46,7 @@ PlatformIO target builds are additional firmware gates where the local toolchain
 
 ## Version consistency
 
-`app/test/version_consistency_test.dart` checks the coordinated release declarations across:
+`applications/wheelathlete_mobile/test/version_consistency_test.dart` checks the coordinated release declarations across:
 
 - root `VERSION`;
 - Flutter mobile version;
@@ -57,7 +57,7 @@ PlatformIO target builds are additional firmware gates where the local toolchain
 
 ## Packaging
 
-`packaging/windows/build_installer.bat` is the supported Windows packaging path. A successful package build produces a PyInstaller GUI distribution with the daemon bundled, a portable ZIP, and an Inno Setup installer.
+`applications/wheelathlete_windows/packaging/windows/build_installer.bat` is the supported Windows packaging path. A successful package build produces a PyInstaller GUI distribution with the daemon bundled, a portable ZIP, and an Inno Setup installer.
 
 ## Physical acceptance
 

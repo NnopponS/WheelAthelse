@@ -42,7 +42,7 @@ Current release line: `v1.8.0`.
 
 ### Windows
 
-1. เปิด `run_python_pc_app.bat` หรือโปรแกรมที่ติดตั้งแล้ว
+1. เปิด `applications/wheelathlete_windows/run_wheelathlete_windows.bat` หรือโปรแกรมที่ติดตั้งแล้ว
 2. Dashboard → scan/connect sensor L/R
 3. ตรวจ device/FW, battery, RSSI/MTU, sampling rate และ diagnostics
 4. Sync clocks ก่อน record

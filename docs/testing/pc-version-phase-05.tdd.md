@@ -4,9 +4,9 @@
 
 - RED: journal/QC tests failed collection because the modules did not exist.
 - Targeted GREEN: `test_journal_qc.py` reports `4 passed`.
-- Full PC GREEN: `python -m pytest tools/pc_acquisition/tests -q` reports
+- Full PC GREEN: `python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests -q` reports
   `15 passed`.
-- STATIC: `python -m compileall -q tools/pc_acquisition` succeeds.
+- STATIC: `python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition` succeeds.
 
 ## Implemented guarantees
 

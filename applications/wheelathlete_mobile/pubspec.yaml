@@ -1,0 +1,39 @@
+name: wheelathlete
+description: "WheelAthlete mobile data-collection app for iOS and Android."
+publish_to: 'none'
+
+version: 1.8.0+10
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.1.0
+  fl_chart: ^1.2.0
+  flutter_blue_plus: ^2.3.9
+  flutter_riverpod: ^3.3.2
+  path_provider: ^2.1.6
+  csv: ^8.0.0
+  share_plus: ^13.2.0
+  file_picker: 12.0.0-beta.7
+  excel: ^4.0.6
+  archive: ^3.6.1
+  onnxruntime_v2: 1.23.2+2
+  crypto: ^3.0.7
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/wheelathlete_biwheel3d_m4.onnx
+    - assets/models/BIWHEEL3D_LICENSE.txt

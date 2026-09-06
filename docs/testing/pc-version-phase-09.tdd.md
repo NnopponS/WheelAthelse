@@ -15,7 +15,7 @@ BLE-controller, sensor-FIFO, and real dual-XIAO evidence. Those remain Phase 10.
 
 ## Stress matrix
 
-`tools/pc_acquisition/tests/test_stress_simulation.py` simulates two independent
+`applications/wheelathlete_windows/tools/pc_acquisition/tests/test_stress_simulation.py` simulates two independent
 wheel streams with strict 12-sample BLE batches and synthetic device timestamps.
 Each rate represents 30 minutes of logical acquisition per wheel:
 
@@ -45,7 +45,7 @@ configured 512-notification per-wheel queues absorb the burst with no loss.
 
 ## Authoritative journal stress
 
-`tools/pc_acquisition/tests/test_journal_stress.py` performs an accelerated
+`applications/wheelathlete_windows/tools/pc_acquisition/tests/test_journal_stress.py` performs an accelerated
 30-minute-equivalent writer test at dual-wheel 200 Hz:
 
 - 360,000 samples per wheel;
@@ -79,7 +79,7 @@ max write latency, and fatal-fault details.
 
 ## Slow/frozen Flutter UI isolation
 
-`tools/pc_acquisition/tests/test_ipc_backpressure.py` verifies the localhost IPC
+`applications/wheelathlete_windows/tools/pc_acquisition/tests/test_ipc_backpressure.py` verifies the localhost IPC
 boundary:
 
 - raw IMU samples never cross IPC;
@@ -104,7 +104,7 @@ BLE → parser → journal acquisition path.
 
 ## QC fault evidence
 
-`tools/pc_acquisition/tests/test_journal_qc.py` verifies that an incomplete or
+`applications/wheelathlete_windows/tools/pc_acquisition/tests/test_journal_qc.py` verifies that an incomplete or
 faulted authoritative journal is `INVALID`, including both:
 
 - `journal_writer_fault`;
@@ -118,7 +118,7 @@ missing lifecycle acknowledgements, and transport failures.
 
 Final Phase 9 gates on the current source tree:
 
-- `python -m pytest tools/pc_acquisition/tests -q`
+- `python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests -q`
   - **31 passed in 22.09 s**
 - Phase 9 stress/fault subset after all additions
   - all stress/backpressure/journal tests passed
@@ -128,9 +128,9 @@ Final Phase 9 gates on the current source tree:
   - **No issues found**
 - `flutter test`
   - **645 passed**
-- `python -m compileall -q tools/pc_acquisition`
+- `python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition`
   - clean
-- `python -m pytest Xiao_firmware/test -q`
+- `python -m pytest hardware_firmware/xiao_nrf52840_sense/test -q`
   - **15 passed**
 - `pio run -e left`
   - SUCCESS

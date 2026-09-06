@@ -15,7 +15,7 @@ Phase 10 must run the production acquisition path:
 
 `XIAO L + XIAO R -> Windows BLE/Bleak -> AcquisitionService -> .waj -> acceptance evaluator`
 
-The harness is `tools/pc_acquisition/acceptance.py`. It does not contain a
+The harness is `applications/wheelathlete_windows/tools/pc_acquisition/acceptance.py`. It does not contain a
 second data collector and does not use Flutter graphs as evidence.
 
 ## Branch safety
@@ -35,7 +35,7 @@ into `main`.
 6. PC sleep/hibernation is disabled for the duration of long tests and the PC
    is on stable power.
 7. Keep the same Windows Bluetooth adapter/controller for the whole matrix.
-8. Python dependencies from `tools/pc_acquisition/requirements.txt` are
+8. Python dependencies from `applications/wheelathlete_windows/tools/pc_acquisition/requirements.txt` are
    installed.
 
 The Python PySide6 GUI is not required to execute the headless physical`r`nacceptance harness. The acceptance path intentionally uses the production`r`nacquisition service directly so UI rendering cannot influence raw-data evidence.
@@ -45,7 +45,7 @@ The Python PySide6 GUI is not required to execute the headless physical`r`naccep
 Build evidence already passes for both environments:
 
 ```text
-cd Xiao_firmware
+cd hardware_firmware/xiao_nrf52840_sense
 pio run -e left
 pio run -e right
 ```

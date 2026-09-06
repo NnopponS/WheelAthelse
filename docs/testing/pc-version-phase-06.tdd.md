@@ -7,7 +7,7 @@
   the client now casts `Socket` bytes to `List<int>` before UTF-8 decoding.
 - `flutter test test/desktop/daemon_client_test.dart`: `2 passed`.
 - `dart analyze lib/desktop test/desktop/daemon_client_test.dart`: no issues.
-- `python -m compileall -q tools/pc_acquisition`: clean.
+- `python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition`: clean.
 
 ## Implemented guarantees
 

@@ -38,25 +38,25 @@
 ## 3. Files
 
 **New (lib):**
-- `app/lib/ble/ble_uuids.dart` — UUID + packet-size constants (mirrors `firmware/src/ble_types.h`)
-- `app/lib/ble/wheel_id.dart` — `WheelId` enum + `fromByte` parser (0x4C=L, 0x52=R)
-- `app/lib/ble/device_info.dart` — `DeviceInfo.parse(16 bytes)` little-endian per protocol §5
-- `app/lib/ble/ble_repository.dart` — abstract `BleRepository` + `FlutterBluePlusBleRepository` (production) + `FakeBleRepository` (tests)
-- `app/lib/state/ble_providers.dart` — Riverpod `bleRepositoryProvider` + `connectionManagerProvider` (Notifier) with `ref.mounted` guards
-- `app/lib/ui/connect_page.dart` — scan + connect screen, reuses `ConnectionCard`
+- `applications/wheelathlete_mobile/lib/ble/ble_uuids.dart` — UUID + packet-size constants (mirrors `firmware/src/ble_types.h`)
+- `applications/wheelathlete_mobile/lib/ble/wheel_id.dart` — `WheelId` enum + `fromByte` parser (0x4C=L, 0x52=R)
+- `applications/wheelathlete_mobile/lib/ble/device_info.dart` — `DeviceInfo.parse(16 bytes)` little-endian per protocol §5
+- `applications/wheelathlete_mobile/lib/ble/ble_repository.dart` — abstract `BleRepository` + `FlutterBluePlusBleRepository` (production) + `FakeBleRepository` (tests)
+- `applications/wheelathlete_mobile/lib/state/ble_providers.dart` — Riverpod `bleRepositoryProvider` + `connectionManagerProvider` (Notifier) with `ref.mounted` guards
+- `applications/wheelathlete_mobile/lib/ui/connect_page.dart` — scan + connect screen, reuses `ConnectionCard`
 
 **Modified:**
-- `app/pubspec.yaml` — added `flutter_blue_plus ^2.3.9`, `flutter_riverpod ^3.3.2`
-- `app/lib/main.dart` — wrapped in `ProviderScope`
-- `app/lib/ui/showcase_page.dart` — added "Connect wheels" AppBar action → pushes `ConnectPage`
+- `applications/wheelathlete_mobile/pubspec.yaml` — added `flutter_blue_plus ^2.3.9`, `flutter_riverpod ^3.3.2`
+- `applications/wheelathlete_mobile/lib/main.dart` — wrapped in `ProviderScope`
+- `applications/wheelathlete_mobile/lib/ui/showcase_page.dart` — added "Connect wheels" AppBar action → pushes `ConnectPage`
 
 **New (test) — 6 files, 27 new tests (87 total):**
-- `app/test/ble/ble_uuids_test.dart` — 4 tests
-- `app/test/ble/wheel_id_test.dart` — 5 tests
-- `app/test/ble/device_info_test.dart` — 7 tests
-- `app/test/ble/ble_repository_fake_test.dart` — 4 tests
-- `app/test/state/connection_manager_test.dart` — 8 tests
-- `app/test/ui/connect_page_test.dart` — 4 widget tests
+- `applications/wheelathlete_mobile/test/ble/ble_uuids_test.dart` — 4 tests
+- `applications/wheelathlete_mobile/test/ble/wheel_id_test.dart` — 5 tests
+- `applications/wheelathlete_mobile/test/ble/device_info_test.dart` — 7 tests
+- `applications/wheelathlete_mobile/test/ble/ble_repository_fake_test.dart` — 4 tests
+- `applications/wheelathlete_mobile/test/state/connection_manager_test.dart` — 8 tests
+- `applications/wheelathlete_mobile/test/ui/connect_page_test.dart` — 4 widget tests
 
 ## 4. Verification results
 

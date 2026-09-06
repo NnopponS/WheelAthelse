@@ -4,7 +4,7 @@
 
 - RED: sync/lifecycle tests failed collection because the clock, control, sync
   parser, and lifecycle modules did not exist.
-- GREEN: `python -m pytest tools/pc_acquisition/tests -q` reports `11 passed`.
+- GREEN: `python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests -q` reports `11 passed`.
 
 ## Implemented guarantees
 

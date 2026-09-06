@@ -29,8 +29,8 @@ WheelAthlete is a synchronized dual-wheel IMU acquisition platform for wheelchai
 ## Current architecture references
 
 - [Root README](../../README.md)
-- [Python Windows app](../../tools/pc_gui/README.md)
-- [Windows packaging](../../packaging/windows/README.md)
+- [Python Windows app](../../applications/wheelathlete_windows/tools/pc_gui/README.md)
+- [Windows packaging](../../applications/wheelathlete_windows/packaging/windows/README.md)
 - [Canonical project state](../../.project/README.md)
 - [Canonical BLE protocol](../ble-protocol.md)
 

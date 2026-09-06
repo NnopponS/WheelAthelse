@@ -1,330 +1,367 @@
 # WheelAthlete
 
-**Dual-wheel IMU data collection for wheelchair sports research.** WheelAthlete captures synchronized accelerometer and gyroscope data from left/right wheel sensors and provides two operator applications: a Flutter mobile app and a reliability-focused Python Windows app.
+**Dual-wheel IMU acquisition and analysis platform for wheelchair sports research.**
+
+WheelAthlete synchronizes left- and right-wheel inertial sensors, records research-grade motion data, and provides dedicated mobile and Windows applications for field collection, monitoring, quality control, export, and optional trajectory analysis.
 
 > **Current release line:** `v1.8.0`
-> **Mobile:** `1.8.0+9` · **Firmware:** `1.8.0` · **BLE protocol:** `1.8.0` · **Windows package:** `1.8.0`
-> **Languages:** [English](README.md) · [ภาษาไทย](README.th.md)
+> **Mobile application:** `1.8.0+10`
+> **Firmware:** `1.8.0`
+> **BLE protocol:** `1.8.0`
+> **Windows package:** `1.8.0`
+> **Language:** English | [à¹„à¸—à¸¢](README.th.md)
 
-## Current products
+## Product architecture
 
-WheelAthlete intentionally has **two user-facing applications only**:
+WheelAthlete is organized into two top-level product domains:
 
-| Product | Platform | Runtime | BLE ownership | Primary storage |
+1. **Applications** â€” operator-facing software.
+2. **Hardware & Firmware** â€” embedded sensor firmware.
+
+There are two maintained operator applications. Use only one operator application with a given left/right sensor pair at a time.
+
+| Component | Official name | Platform / hardware | Technology | Primary role |
 |---|---|---|---|---|
-| Mobile App | iOS + Android | Flutter / Dart | App owns BLE directly | Mobile session CSV + metadata |
-| Windows App | Windows 10/11 | Python / PySide6 | Acquisition daemon owns BLE | Append-only `.waj` journal + derived CSV |
+| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | Portable BLE acquisition, live monitoring, session management, export |
+| Windows | **WheelAthlete Windows Research Application** | Windows 10/11 | Python / PySide6 | Reliability-first acquisition, QC, recovery, research workflow, optional model analysis |
+| Firmware | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 | PlatformIO | Dual-wheel IMU sensing and BLE transport |
+| Firmware | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense | PlatformIO | Dual-wheel IMU sensing and BLE transport |
 
-The retired Flutter Windows application, Flutter Web scaffold, and legacy Tkinter/Matplotlib desktop GUI are not part of the current source tree.
-
-## System overview
-
-Both clients use the same firmware BLE contract. Use one operator client at a time with a given sensor pair.
-
-```text
-     Left wheel sensor                    Right wheel sensor
-  M5StickCPlus2 / XIAO                 M5StickCPlus2 / XIAO
-           │                                   │
-           └────────────── BLE GATT ───────────┘
-                            │
-               ┌────────────┴────────────┐
-               │                         │
-               ▼                         ▼
-      Flutter Mobile App        Python Windows App
-        iOS / Android              PySide6 GUI
-        direct BLE I/O                  │
-               │                  localhost IPC
-               │                        │
-               │                 Acquisition daemon
-               │                 Bleak / WinRT BLE
-               ▼                        ▼
-      CSV + metadata           authoritative .waj journal
-      preview + export         QC + recovery + CSV export
-                                      │
-                                      ▼
-                           optional offline MODEL page
-                         PyTorch trajectory reconstruction
-```
-
-### Firmware
-
-Two maintained targets implement the same protocol:
-
-- `M5plus2_firmware/` — M5StickCPlus2 / ESP32
-- `Xiao_firmware/` — Seeed XIAO nRF52840 Sense
-
-Core capabilities include left/right identity, 50/100/200 Hz sampling, synchronized lifecycle commands, sensor-range configuration, battery information, replay/recovery support, sequence accounting, and acquisition-health telemetry.
-
-### Flutter mobile app
-
-Location: `app/`
-
-Key capabilities:
-
-- connect left/right BLE boards simultaneously;
-- realtime Accel XYZ + Gyro XYZ display;
-- clock synchronization and synchronized recording start;
-- topic/trial/session organization;
-- protocol templates, experiment tracking, tags, search/filter;
-- session preview, QC/quality indicators, and statistics;
-- CSV/Excel/ZIP export and OS sharing;
-- mobile-only runtime target: Android + iOS.
-
-### Python Windows app
-
-Locations: `tools/pc_gui/` + `tools/pc_acquisition/`
-
-The Python Research Edition uses a reliability-first two-process architecture. The PySide6 GUI never owns the authoritative BLE/raw-data path. A separate acquisition daemon owns BLE, strict packet parsing, sequence/loss accounting, synchronization, append-only `.waj` journal writes, final QC, and crash recovery. The GUI receives bounded preview/status traffic over localhost IPC.
-
-This means a slow chart, PyTorch inference, or restarted GUI cannot silently become the raw BLE storage bottleneck.
-
-The current Windows UI has five operator sections:
-
-- **Dashboard** — board connection and system overview;
-- **Acquisition** — synchronized live preview and recording controls;
-- **Results** — recordings grouped by topic, QC, telemetry preview, batch CSV export/delete, and direct metadata editing;
-- **MODEL** — optional offline 2D trajectory reconstruction from finalized recordings;
-- **Diagnostics** — acquisition/data-integrity information.
-
-#### Results and session organization
-
-Finalized Windows recordings keep an immutable internal session UUID, but the files users see are stored with human-readable names:
-
-```text
-~/Documents/WheelAthlete/PC Sessions/
-└── 10x5/
-    ├── 10x5_Trial16_Nipoon.waj
-    └── 10x5_Trial16_Nipoon.summary.json
-```
-
-Results supports both **Group by Topic** and **All Trials Table** views. Topic, trial, and athlete names can be edited directly from the table. Changes require confirmation before the file/folder is renamed, while the internal UUID and raw journal identity remain unchanged. Group names can also be renamed, which moves all finalized sessions in that topic to the new topic folder.
-
-Checkboxes are reserved for batch actions such as Export/Delete; table editing does not use row selection, so preview controls stay visible while metadata is being edited.
-
-#### Experimental MODEL page
-
-The MODEL page is intentionally offline and does not touch the acquisition critical path:
-
-```text
-Record
-  ↓
-Finalized Results session
-  ↓
-Select checkpoint
-  ↓
-Prepare synchronized dual-wheel IMU window
-  ↓
-PyTorch / BiWheel3D inference
-  ↓
-2D XY trajectory
-```
-
-Current model integration supports:
-
-- selecting a compatible discovered checkpoint or browsing to a `.pt` / `.pth` checkpoint with Windows File Explorer;
-- loading finalized sessions from Results;
-- dual-wheel preprocessing into the BiWheel3D input contract;
-- SI-unit conversion and 100 Hz preparation for the current adapter;
-- offline PyTorch inference in a background worker so the GUI stays responsive;
-- a 2D XY trajectory plot with equal X/Y physical scale (`1 m` on X equals `1 m` on Y);
-- path length, endpoint distance, and model-point summaries;
-- explicit compatibility/errors instead of silently forcing an incompatible checkpoint.
-
-The current BiWheel3D TCN + BiLSTM model is a buffered/offline research model, not a zero-latency causal estimator. The MODEL feature should therefore be treated as experimental analysis, not as part of authoritative acquisition.
-
-See [`tools/pc_gui/README.md`](tools/pc_gui/README.md) for the detailed Windows workflow.
+The retired Flutter Windows target, Flutter Web scaffold, and legacy Tkinter desktop interface are not part of the maintained product surface.
 
 ## Repository layout
 
 ```text
 WheelAthelse/
-├── app/                         # Flutter mobile app — iOS + Android
-├── M5plus2_firmware/            # M5StickCPlus2 firmware
-├── Xiao_firmware/               # XIAO nRF52840 Sense firmware
-├── tools/
-│   ├── pc_acquisition/          # Windows authoritative BLE/recording daemon
-│   ├── pc_gui/                  # PySide6 Windows operator UI + MODEL adapter
-│   │   ├── model_inference.py   # Experimental offline model integration
-│   │   └── requirements-model.txt
-│   ├── check_session.py         # Session validation helper
-│   └── process_dataset.py       # Dataset processing helper
-├── packaging/
-│   └── windows/                 # PyInstaller + Inno Setup build sources
-├── docs/
-│   ├── ble-protocol.md          # Canonical BLE contract
-│   ├── data-collection-protocol.md
-│   ├── testing/                 # Verification evidence
-│   └── wiki/                    # Longer-form project documentation
-├── assets/                      # Product icons/logo
-├── .project/                    # Canonical current project state only
-├── run_python_pc_app.bat        # Windows source launcher
-├── VERSION                      # Coordinated semantic product version
-├── README.md
-└── README.th.md
+â”œâ”€â”€ applications/
+â”‚   â”œâ”€â”€ wheelathlete_mobile/              # Flutter â€” iOS / Android
+â”‚   â”‚   â”œâ”€â”€ android/
+â”‚   â”‚   â”œâ”€â”€ ios/
+â”‚   â”‚   â”œâ”€â”€ lib/
+â”‚   â”‚   â”œâ”€â”€ test/
+â”‚   â”‚   â””â”€â”€ pubspec.yaml
+â”‚   â”‚
+â”‚   â””â”€â”€ wheelathlete_windows/             # Python / PySide6 â€” Windows
+â”‚       â”œâ”€â”€ tools/
+â”‚       â”‚   â”œâ”€â”€ pc_acquisition/           # Authoritative BLE acquisition daemon
+â”‚       â”‚   â””â”€â”€ pc_gui/                   # Operator UI + optional MODEL adapter
+â”‚       â”œâ”€â”€ packaging/
+â”‚       â”‚   â””â”€â”€ windows/                  # PyInstaller + Inno Setup
+â”‚       â”œâ”€â”€ run_wheelathlete_windows.bat
+â”‚       â”œâ”€â”€ build/                        # Generated, ignored
+â”‚       â””â”€â”€ release/                      # Generated, ignored
+â”‚
+â”œâ”€â”€ hardware_firmware/
+â”‚   â”œâ”€â”€ m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
+â”‚   â””â”€â”€ xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
+â”‚
+â”œâ”€â”€ assets/                               # Product icons and shared assets
+â”œâ”€â”€ docs/                                 # BLE specification, testing, protocols, wiki
+â”œâ”€â”€ .project/                             # Canonical engineering/project state
+â”œâ”€â”€ VERSION                               # Coordinated semantic release version
+â”œâ”€â”€ README.md
+â””â”€â”€ README.th.md
 ```
 
-`build/`, `release/`, Flutter generated files, PlatformIO `.pio/`, and collected session data are intentionally untracked.
+Generated build output, PlatformIO `.pio/`, Flutter generated files, Python caches, and collected research sessions are intentionally excluded from Git.
 
-## Quick start — Windows Python app
+## System overview
 
-From the repository root:
+```text
+ Left wheel IMU                         Right wheel IMU
+       |                                      |
+       +--------------- BLE ------------------+
+                          |
+              +-----------+-----------+
+              |                       |
+              v                       v
+ WheelAthlete Mobile       WheelAthlete Windows
+ Application               Research Application
+ Flutter / Dart             PySide6 GUI
+ direct BLE ownership           |
+                                v
+                       localhost IPC
+                                |
+                                v
+                       Acquisition daemon
+                       Bleak / WinRT BLE
+                                |
+                                v
+                       append-only .waj journal
+                       QC / recovery / CSV export
+                                |
+                                v
+                       optional offline MODEL
+```
+
+Both firmware targets implement the same BLE contract. The canonical protocol specification is [`docs/ble-protocol.md`](docs/ble-protocol.md).
+
+## Applications
+
+### WheelAthlete Mobile Application
+
+Location: [`applications/wheelathlete_mobile/`](applications/wheelathlete_mobile/)
+
+Primary capabilities:
+
+- connect left and right BLE sensor boards;
+- display real-time accelerometer and gyroscope data;
+- synchronize device clocks and recording start;
+- organize data by topic, trial, and session;
+- use protocol templates and experiment tracking;
+- add tags, search, filter, and preview sessions;
+- show QC/quality indicators and statistics;
+- export CSV, Excel, ZIP, and share through the operating system;
+- run on Android and iOS only.
+
+Quick start:
+
+```bash
+cd applications/wheelathlete_mobile
+flutter pub get
+flutter run -d <device-id>
+```
+
+Verification:
+
+```bash
+cd applications/wheelathlete_mobile
+flutter test
+flutter analyze
+```
+
+Release builds:
+
+```bash
+# Android
+flutter build apk --release
+flutter build appbundle --release
+
+# iOS â€” requires macOS + Xcode
+flutter build ios --release
+```
+
+### WheelAthlete Windows Research Application
+
+Location: [`applications/wheelathlete_windows/`](applications/wheelathlete_windows/)
+
+The Windows application uses a reliability-first two-process design:
+
+- the **acquisition daemon** owns BLE, packet parsing, synchronization, sequence/loss accounting, append-only journal writes, QC, and recovery;
+- the **PySide6 GUI** handles operator controls, status, preview, results, diagnostics, export, and optional model analysis.
+
+The GUI is intentionally not the authoritative raw-data path. A slow chart, model inference task, or GUI restart therefore cannot silently become the BLE storage bottleneck.
+
+Current operator sections:
+
+- **Dashboard** â€” board connection and system overview;
+- **Acquisition** â€” synchronized preview and recording controls;
+- **Results** â€” finalized sessions, QC, metadata editing, export, and delete;
+- **MODEL** â€” optional offline trajectory reconstruction;
+- **Diagnostics** â€” acquisition and integrity information.
+
+Run from source:
 
 ```bat
-run_python_pc_app.bat
+cd applications\wheelathlete_windows
+run_wheelathlete_windows.bat
 ```
 
-The launcher checks the normal Python UI dependencies and starts `tools.pc_gui`. In normal mode the GUI starts or reuses the local acquisition daemon automatically.
-
-Demo UI without physical boards:
+Demo mode:
 
 ```bat
-run_python_pc_app.bat --demo
+cd applications\wheelathlete_windows
+run_wheelathlete_windows.bat --demo
 ```
-
-Demo mode is visibly labeled and does not create synthetic research evidence.
 
 Default Windows data locations:
 
 - Sessions: `~/Documents/WheelAthlete/PC Sessions`
-- GUI log: `~/Documents/WheelAthlete/Logs/python-pc-app.log`
+- GUI log: `~/Documents/WheelAthlete/Logs/wheelathlete-windows.log`
 - Experiment presets: `~/Documents/WheelAthlete/experiments.json`
+
+Detailed Windows documentation: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
 
 ### Optional MODEL dependencies
 
-PyTorch is kept separate from the normal acquisition requirements so the reliable data-collection app does not need to install the large ML runtime unless MODEL analysis is required.
+PyTorch/model dependencies are separate from the core acquisition runtime.
 
 ```bat
-python -m pip install -r tools\pc_gui\requirements-model.txt
+python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
 ```
 
-The MODEL page also expects the compatible model project/checkpoint files referenced by the selected checkpoint. Model inference is optional; recording, Results, export, and diagnostics remain usable without it.
+The MODEL workflow is optional and offline. Recording, Results, export, and diagnostics remain available without PyTorch or a compatible model checkout.
 
-## Build Windows portable EXE + installer
+## Hardware & firmware
 
-Prerequisites: Python, PyInstaller, and Inno Setup 6.
+Both maintained firmware targets support the shared left/right WheelAthlete BLE contract, including configured wheel identity, sampling rates, synchronized lifecycle control, battery state, sequence accounting, replay/recovery support, and acquisition-health telemetry.
+
+### WheelAthlete M5StickC Plus2 Firmware
+
+Location: [`hardware_firmware/m5stickc_plus2/`](hardware_firmware/m5stickc_plus2/)
+
+```bash
+cd hardware_firmware/m5stickc_plus2
+
+pio run -e left
+pio run -e right
+
+pio run -e left -t upload
+pio run -e right -t upload
+```
+
+### WheelAthlete XIAO nRF52840 Sense Firmware
+
+Location: [`hardware_firmware/xiao_nrf52840_sense/`](hardware_firmware/xiao_nrf52840_sense/)
+
+```bash
+cd hardware_firmware/xiao_nrf52840_sense
+
+pio run -e left
+pio run -e right
+
+pio run -e left -t upload
+pio run -e right -t upload
+```
+
+## Windows packaging
+
+Prerequisites:
+
+- Python 3.10+
+- PyInstaller
+- Inno Setup 6
+
+Build the portable package and installer:
 
 ```bat
+cd applications\wheelathlete_windows
 packaging\windows\build_installer.bat
 ```
 
-Outputs are generated under ignored `release/`:
+Generated output:
 
 ```text
-release/WheelAthlete-1.8.0-portable.zip
-release/WheelAthleteSetup-1.8.0.exe
+applications/wheelathlete_windows/release/
+â”œâ”€â”€ WheelAthlete-1.8.0-portable.zip
+â””â”€â”€ WheelAthleteSetup-1.8.0.exe
 ```
 
-The distribution bundles `WheelAthleteDaemon.exe`; users do not need to start a separate daemon manually. Packaging source and details live in [`packaging/windows/README.md`](packaging/windows/README.md).
+The installer and portable package bundle `WheelAthleteDaemon.exe`. Packaging details are documented in [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md).
 
-## Build & run — Flutter mobile app
+## Automatic application updates
 
-Requires Flutter 3.x and a physical BLE-capable device.
+The Flutter Mobile and Python Windows applications use one stable GitHub Releases manifest:
 
-```bash
-cd app
-flutter pub get
-flutter run -d <device-id>
-flutter test
-flutter analyze
-
-# Android release
-flutter build apk --release
-flutter build appbundle --release
-
-# iOS release (macOS + Xcode required)
-flutter build ios --release
+```text
+https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-Mobile version is `1.8.0+9` in `app/pubspec.yaml`.
+Every downloadable artifact is pinned by exact byte size and SHA-256 in `latest.json`.
 
-## Build & flash firmware
+- **Android:** the release app checks automatically after startup and every six hours, downloads only the repository's HTTPS release APK, verifies size + SHA-256, then opens Android's system package installer. The user still approves installation. Direct APK updating requires a persistent release signing key; GitHub release builds intentionally fail if the Android signing secrets are missing.
+- **iOS:** update discovery uses the same manifest, while installation is handed to App Store/TestFlight. iOS does not permit an app to replace itself with an arbitrary downloaded binary.
+- **Windows:** the installed PyInstaller build checks automatically after startup and every six hours, downloads and verifies the Inno Setup installer, then can silently update the existing AppId and relaunch WheelAthlete.
+- **Acquisition safety:** neither app will install an update while Live preview, countdown, or recording is active.
 
-### M5StickCPlus2
+Release automation lives in `.github/workflows/release.yml`. A `v<version>` tag builds/tests both applications, produces the APK and Windows installer, generates `latest.json`, and publishes all three to one GitHub Release. See [`release/README.md`](release/README.md).
 
-```bash
-cd M5plus2_firmware
-pio run -e left
-pio run -e right
-pio run -e left -t upload
-pio run -e right -t upload
-```
+> Bootstrap note: an already-installed build that predates this updater cannot self-update. Install the first updater-enabled release once manually; subsequent releases can use the in-app updater.
 
-### XIAO nRF52840 Sense
-
-```bash
-cd Xiao_firmware
-pio run -e left
-pio run -e right
-pio run -e left -t upload
-pio run -e right -t upload
-```
-
-Both firmware targets use version `1.8.0` and the same left/right BLE contract.
-
-## BLE protocol and synchronization
-
-The canonical contract is [`docs/ble-protocol.md`](docs/ble-protocol.md), version `1.8.0`.
-
-Important characteristics include IMU Data, Control, Sync, Info, Config, and the standard Battery Level characteristic. Recording reliability uses explicit lifecycle acknowledgements, sequence accounting, acquisition-health telemetry, and low-RTT clock synchronization/drift mapping.
-
-The mobile and Windows implementations share the protocol semantics but maintain platform-appropriate storage and runtime architecture.
-
-## Data
+## Data integrity
 
 ### Mobile
 
-Mobile sessions are stored in the app documents area under a topic/trial/session hierarchy and exported as versioned CSV/metadata/Excel/ZIP artifacts.
+The mobile application stores sessions using topic/trial/session organization and exports versioned CSV/metadata artifacts.
 
 ### Windows
 
-The Windows acquisition daemon writes an append-only `.waj` journal as the authoritative record. CSV is derived from the journal. Incomplete `.open` journals are recoverable.
+The Windows acquisition daemon writes an append-only `.waj` journal as the authoritative record. CSV and summaries are derived from that journal. Incomplete `.open` journals can be recovered.
 
-Finalized sessions are relocated into human-readable topic folders using `Topic_TrialN_Athlete` filenames while preserving the UUID embedded in the authoritative journal. User-facing metadata can be corrected later from Results without rewriting the raw journal identity.
+Finalized sessions use human-readable topic/trial/athlete file names while preserving the immutable internal session UUID.
 
-Do not treat preview/UI values or MODEL output as the authoritative research record.
+**Preview values, charts, and MODEL output are not the authoritative research record.**
+
+## BLE protocol and synchronization
+
+Canonical specification: [`docs/ble-protocol.md`](docs/ble-protocol.md)
+
+Current protocol version: `1.8.0`
+
+Important reliability mechanisms include:
+
+- explicit recording lifecycle acknowledgements;
+- left/right synchronized start;
+- clock synchronization and drift mapping;
+- sequence accounting;
+- acquisition-health telemetry;
+- replay/recovery support;
+- strict packet parsing and QC.
 
 ## Verification
 
-Core verification includes:
+Mobile application:
 
 ```bash
-# Mobile
-cd app
+cd applications/wheelathlete_mobile
 flutter test
 flutter analyze
-
-# Windows Python stack (from repo root)
-python -m pytest tools/pc_acquisition/tests tools/pc_gui/tests -q
-python -m compileall -q tools/pc_acquisition tools/pc_gui
 ```
 
-MODEL-specific tests cover preprocessing contracts, checkpoint selection, Results → MODEL navigation, equal-axis trajectory rendering, and custom checkpoint browsing.
+Windows application:
 
-Firmware has host-side contract/unit tests under each firmware target. Detailed verification evidence is kept under `docs/testing/`.
+```bat
+cd applications\wheelathlete_windows
+python -m pytest tools\pc_acquisition\tests tools\pc_gui\tests -q
+python -m compileall -q tools\pc_acquisition tools\pc_gui
+```
 
-Automated tests/simulation do **not** prove real RF throughput, real physical left/right start skew, real-world model accuracy, or hardware behavior at distance. Those claims require the prepared physical two-XIAO acceptance procedure and model validation data.
+Firmware:
 
-## Versioning
+```bash
+cd hardware_firmware/m5stickc_plus2
+pio run -e left
+pio run -e right
 
-Current coordinated release:
+cd ../xiao_nrf52840_sense
+pio run -e left
+pio run -e right
+```
+
+Automated tests do not replace physical two-board acceptance testing under realistic RF conditions.
+
+## Version matrix
 
 | Component | Version |
 |---|---:|
-| Product | `1.8.0` |
-| Flutter mobile | `1.8.0+9` |
-| M5StickCPlus2 firmware | `1.8.0` |
-| XIAO firmware | `1.8.0` |
+| Product release | `1.8.0` |
+| WheelAthlete Mobile Application | `1.8.0+10` |
+| WheelAthlete Windows Research Application | `1.8.0` |
+| M5StickC Plus2 firmware | `1.8.0` |
+| XIAO nRF52840 Sense firmware | `1.8.0` |
 | BLE protocol | `1.8.0` |
-| Python Windows installer | `1.8.0` |
 
-`VERSION` is the product/Windows packaging version. Automated consistency tests guard the duplicated platform-specific version declarations.
+The root [`VERSION`](VERSION) file is the coordinated product version used by Windows packaging and release validation.
 
-## Project state
+## Engineering documentation
 
-Current architecture/decisions/progress are intentionally consolidated under [`.project/`](.project/). Old phase prompts and duplicate trackers were removed because Git history already preserves them.
-
-Development for the Windows product is currently on `codex/pc-version`. Do not merge/push it into `main` unless explicitly requested.
+- [`docs/`](docs/) â€” protocol, field workflow, test plans, and wiki documentation
+- [`.project/`](.project/) â€” current architecture, progress, engineering decisions, and project state
 
 ## License
 
-Proprietary — all rights reserved. This is a research project; contact the maintainer before reuse.
+Proprietary. Use, redistribution, and modification require permission from the project maintainers.
+
+## Automatic software updates
+
+WheelAthlete Mobile and WheelAthlete Windows use one verified stable manifest published with GitHub Releases:
+
+```text
+https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
+```
+
+- **Android:** checks automatically in release builds, downloads the APK, verifies exact size + SHA-256, and opens Android's system installer. Android still requires user approval and every public APK must use the same permanent signing key with an increasing `versionCode`.
+- **iOS:** checks the same manifest, then opens the configured App Store/TestFlight page; iOS installation remains store-managed.
+- **Windows:** an installed PyInstaller/Inno build checks shortly after launch and every six hours, downloads and verifies the installer, refuses to interrupt active acquisition, closes safely, installs silently, and relaunches WheelAthlete. Source and portable builds never replace themselves.
+
+Release artifacts and `latest.json` are generated by `.github/workflows/release.yml`. The first updater-enabled production build must be installed manually once on devices running an older build that did not contain the updater. Full release/signing instructions are in `release/README.md`.

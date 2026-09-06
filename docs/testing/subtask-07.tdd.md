@@ -7,7 +7,7 @@ start, Sync event parsing, Control command encoding.
 ## What was built
 
 ### Pure logic (host-testable, no Flutter/BLE)
-- `app/lib/ble/sync_packet.dart`:
+- `applications/wheelathlete_mobile/lib/ble/sync_packet.dart`:
   - `SyncEvent.parse(bytes)` — parses Sync notify payloads `[event_id][payload]`
     (verified against firmware `ble_service.cpp:handleSyncPing` which prepends
     event_id via `packSyncEvent`). Sealed class hierarchy:
@@ -18,7 +18,7 @@ start, Sync event parsing, Control command encoding.
     - `StopFiredEvent` (0x40): 9B `[0x40][t_device_us u32@1][last_seq u32@5]`
   - Throws `ArgumentError` on empty/truncated buffers, `FormatException` on
     unknown event_id.
-- `app/lib/ble/control_command.dart`:
+- `applications/wheelathlete_mobile/lib/ble/control_command.dart`:
   - `ControlCommand.*` encoders for all §3.1 commands:
     - `start(targetStartUs)` → `[0x01][u32 LE]` (5B)
     - `stop()` → `[0x02]` (1B)
@@ -27,7 +27,7 @@ start, Sync event parsing, Control command encoding.
     - `setRange(accelRange, gyroRange)` → `[0x05][u8][u8]` (3B, validates 0–3)
     - `beep(count, periodMs)` → `[0x06][u8][u16 LE]` (4B, validates count > 0)
     - `resetSeq()` → `[0xFF]` (1B)
-- `app/lib/state/sync_engine.dart`:
+- `applications/wheelathlete_mobile/lib/state/sync_engine.dart`:
   - `OffsetEstimate.compute(t1AppMs, t2DeviceUs, t3AppMs)` — NTP-lite offset
     per §4.2: `RTT = T3 - T1`, `offset = T2 - (T1*1000 + RTT_us/2)`.
   - `MinRttTracker` — keeps the estimate with lowest RTT across N pings (§4.2).
@@ -39,7 +39,7 @@ start, Sync event parsing, Control command encoding.
     — converts phone start time to device-local micros per §3.2 formula.
 
 ### State layer (Riverpod)
-- `app/lib/state/sync_providers.dart`:
+- `applications/wheelathlete_mobile/lib/state/sync_providers.dart`:
   - `WheelSyncState` — per-side: syncing, offset, driftFit, pendingPing,
     dropCount, lastStartFiredUs, lastStopFiredUs, lastSeq, error.
   - `SyncEngineNotifier` — orchestrates:
@@ -52,7 +52,7 @@ start, Sync event parsing, Control command encoding.
     protocol's uint32 field (absolute Unix epoch ms overflows uint32 in 2026).
 
 ### BLE repository extension
-- `app/lib/ble/ble_repository.dart`:
+- `applications/wheelathlete_mobile/lib/ble/ble_repository.dart`:
   - Added `Stream<List<int>> syncData(String deviceId)` to abstract interface.
   - Added `Future<void> writeControl(String deviceId, List<int> bytes)`.
   - `FlutterBluePlusBleRepository`: syncData resolves Sync characteristic from

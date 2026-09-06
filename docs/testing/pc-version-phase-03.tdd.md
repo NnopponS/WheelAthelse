@@ -4,9 +4,9 @@
 
 - RED: the first ingestion test collection failed because
   `tools.pc_acquisition.engine` did not exist.
-- GREEN: `python -m pytest tools/pc_acquisition/tests/test_ingestion_core.py -q`
+- GREEN: `python -m pytest applications/wheelathlete_windows/tools/pc_acquisition/tests/test_ingestion_core.py -q`
   reports `5 passed`.
-- STATIC: `python -m compileall -q tools/pc_acquisition` succeeds.
+- STATIC: `python -m compileall -q applications/wheelathlete_windows/tools/pc_acquisition` succeeds.
 
 ## Implemented guarantees
 

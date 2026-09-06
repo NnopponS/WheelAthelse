@@ -39,8 +39,18 @@ The repository was simplified to match the actual supported product direction:
 - remove legacy Tkinter desktop GUI
 - remove Flutter Windows implementation
 - remove Flutter Web scaffold
-- consolidate Windows packaging under `packaging/windows/`
+- consolidate Windows packaging under `applications/wheelathlete_windows/packaging/windows/`
 - replace duplicated `.project` phase documents/prompts with current canonical state
 - advance coordinated product metadata to v1.8.0; mobile build `1.8.0+9`
 
 The retired source remains available in Git history if future comparison is needed.
+## 2026-09-06 formal repository hierarchy
+
+The source tree was reorganized around explicit product domains without changing the supported product set:
+
+- `applications/wheelathlete_mobile/` — WheelAthlete Mobile Application;
+- `applications/wheelathlete_windows/` — WheelAthlete Windows Research Application;
+- `hardware_firmware/m5stickc_plus2/` — M5StickC Plus2 firmware;
+- `hardware_firmware/xiao_nrf52840_sense/` — XIAO nRF52840 Sense firmware.
+
+The Windows launcher was renamed to `run_wheelathlete_windows.bat`, documentation and packaging paths were migrated, and root English/Thai READMEs were rewritten to reflect the formal architecture. No change was made to the rule that the active PC work remains on `codex/pc-version` and not on `main`.

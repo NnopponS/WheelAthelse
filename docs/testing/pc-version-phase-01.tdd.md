@@ -16,8 +16,8 @@ Source: `pc-version-promt.txt` (local task input; intentionally not committed).
 
 | Guarantee | Command | Type | Result | Evidence |
 |---|---|---|---|---|
-| XIAO host contracts pass before PC work | `cd Xiao_firmware; python -m pytest test -q` | unit/contract | PASS | `12 passed in 0.24s` |
-| M5 host contracts pass before PC work | `cd M5plus2_firmware; python -m pytest test -q` | unit/contract | PASS | `135 passed in 0.50s` |
+| XIAO host contracts pass before PC work | `cd hardware_firmware/xiao_nrf52840_sense; python -m pytest test -q` | unit/contract | PASS | `12 passed in 0.24s` |
+| M5 host contracts pass before PC work | `cd hardware_firmware/m5stickc_plus2; python -m pytest test -q` | unit/contract | PASS | `135 passed in 0.50s` |
 | Dataset tool baseline passes | `python -m pytest tools/test_process_dataset.py -q` | unit | PASS | `5 passed in 1.73s` |
 | Flutter production sources analyze after dependency resolution | `cd app; dart analyze lib` | static | PASS | `No issues found!` |
 | Existing Flutter suite passes | `cd app; flutter test --coverage --no-pub --timeout 60s --reporter compact` | unit/widget | PASS | `637 passed`; line coverage `81.83%` (`4643/5674`). Stale synchronous-delivery expectations and a STOP-ack test fixture were corrected before PC production code was added. |

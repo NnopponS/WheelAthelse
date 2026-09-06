@@ -53,7 +53,7 @@ Do not attempt to operate the same two BLE peripherals from the mobile and Windo
 
 ## D11 — Packaging is source-controlled, artifacts are not
 
-Windows installer definitions live in `packaging/windows/`. Generated `build/` and `release/` artifacts remain ignored by Git.
+Windows installer definitions live in `applications/wheelathlete_windows/packaging/windows/`. Generated `build/` and `release/` artifacts remain ignored by Git.
 
 ## D12 — Branch safety
 

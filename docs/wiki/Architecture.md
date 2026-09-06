@@ -31,8 +31,8 @@ Use one operator client at a time with a sensor pair.
 
 Maintained targets:
 
-- `M5plus2_firmware/`
-- `Xiao_firmware/`
+- `hardware_firmware/m5stickc_plus2/`
+- `hardware_firmware/xiao_nrf52840_sense/`
 
 They share the BLE protocol semantics, left/right identity model, 50/100/200 Hz configuration, synchronized lifecycle, sequence accounting, replay/recovery support, and acquisition-health telemetry.
 
@@ -65,5 +65,5 @@ Raw research samples are not routed through Qt charts. A slow/frozen GUI therefo
 
 - `.project/architecture.md`
 - `docs/ble-protocol.md`
-- `tools/pc_gui/README.md`
-- `packaging/windows/README.md`
+- `applications/wheelathlete_windows/tools/pc_gui/README.md`
+- `applications/wheelathlete_windows/packaging/windows/README.md`

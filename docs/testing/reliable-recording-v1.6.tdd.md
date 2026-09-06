@@ -55,13 +55,13 @@ raw and diagnostic outputs.
 
 | Artifact | SHA-256 |
 |---|---|
-| `app/build/app/outputs/flutter-apk/app-release.apk` | `F1025DAA2C15D70F5EFF8A9B41DDCE14216B922ECF4FCCF08F6830E88A8E1CD5` |
-| `M5plus2_firmware/.pio/build/left/firmware.bin` | `435FFADBC9B0B246FB83F48489F32F531DA5ECAE03299EE8D3F9D094C84103F0` |
-| `M5plus2_firmware/.pio/build/right/firmware.bin` | `8D2870C2955A893305557E63BC07AFCF433586201A435A2AAD9F6D18F23A455F` |
-| `Xiao_firmware/.pio/build/left/firmware.zip` | `EE3841B0972291CA5D3F5193354BDE51EB608A41C9F616F1586E37D6807A783C` |
-| `Xiao_firmware/.pio/build/right/firmware.zip` | `3F01C41ED1FF73A488B4BB5ED9277101489D2022CAAEC6E2D1A5FA4537830BFE` |
-| `Xiao_firmware/.pio/build/left/firmware.hex` | `65164D507425D310DBA58E66FC0F534C7C3063983546E43381B22825279555BC` |
-| `Xiao_firmware/.pio/build/right/firmware.hex` | `08A18D18042CAEB365B5AF68043E0D7A6BF993790FA7B8F75BF53D117A4C750C` |
+| `applications/wheelathlete_mobile/build/app/outputs/flutter-apk/app-release.apk` | `F1025DAA2C15D70F5EFF8A9B41DDCE14216B922ECF4FCCF08F6830E88A8E1CD5` |
+| `hardware_firmware/m5stickc_plus2/.pio/build/left/firmware.bin` | `435FFADBC9B0B246FB83F48489F32F531DA5ECAE03299EE8D3F9D094C84103F0` |
+| `hardware_firmware/m5stickc_plus2/.pio/build/right/firmware.bin` | `8D2870C2955A893305557E63BC07AFCF433586201A435A2AAD9F6D18F23A455F` |
+| `hardware_firmware/xiao_nrf52840_sense/.pio/build/left/firmware.zip` | `EE3841B0972291CA5D3F5193354BDE51EB608A41C9F616F1586E37D6807A783C` |
+| `hardware_firmware/xiao_nrf52840_sense/.pio/build/right/firmware.zip` | `3F01C41ED1FF73A488B4BB5ED9277101489D2022CAAEC6E2D1A5FA4537830BFE` |
+| `hardware_firmware/xiao_nrf52840_sense/.pio/build/left/firmware.hex` | `65164D507425D310DBA58E66FC0F534C7C3063983546E43381B22825279555BC` |
+| `hardware_firmware/xiao_nrf52840_sense/.pio/build/right/firmware.hex` | `08A18D18042CAEB365B5AF68043E0D7A6BF993790FA7B8F75BF53D117A4C750C` |
 | July `dataset_manifest.csv` | `BB34E60849E2EBE7F33598CF71AB90A09DEA2EC3DD4968A29B084A895D24C84B` |
 | July `qc/validation_report.json` | `B29D5E6F93EBC1D5EB00743782EAEC30CE82D146197917886353F0305DC5EE4E` |
 

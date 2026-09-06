@@ -6,7 +6,7 @@ Flutter: CSV export (synced/resampled) + folder hierarchy + share + browse page.
 ## What was built
 
 ### CSV Exporter (pure, no I/O)
-- `app/lib/export/csv_exporter.dart`:
+- `applications/wheelathlete_mobile/lib/export/csv_exporter.dart`:
   - `CsvExporter.toCsvString(samples)` — converts samples to CSV string.
   - `CsvExporter.writeToSink(sink, samples)` — streams CSV to a `StringSink`
     for large files (avoids building entire string in memory).
@@ -18,7 +18,7 @@ Flutter: CSV export (synced/resampled) + folder hierarchy + share + browse page.
   - Double values formatted without trailing zeros (`1.0` → `1`, `1.50` → `1.5`).
 
 ### Resampler (pure, no I/O)
-- `app/lib/export/resampler.dart`:
+- `applications/wheelathlete_mobile/lib/export/resampler.dart`:
   - `Resampler.resample(samples, gridIntervalMs)` — linear interpolation of
     both wheels onto a common time grid (architecture.md §4.6).
   - No extrapolation: grid points outside a wheel's range are skipped.
@@ -28,7 +28,7 @@ Flutter: CSV export (synced/resampled) + folder hierarchy + share + browse page.
   - Binary search for bracketing pair.
 
 ### Export Providers (Riverpod)
-- `app/lib/export/export_providers.dart`:
+- `applications/wheelathlete_mobile/lib/export/export_providers.dart`:
   - `ExportNotifier` — manages export state:
     - `exportSession(topic, trial, sessionId, {resample, gridIntervalMs})` —
       reads samples from storage, optionally resamples, writes CSV via
@@ -39,20 +39,20 @@ Flutter: CSV export (synced/resampled) + folder hierarchy + share + browse page.
       `SharePlus.instance.share()` (v13 API).
 
 ### Storage Repository Extensions
-- `app/lib/records/storage_repository.dart`:
+- `applications/wheelathlete_mobile/lib/records/storage_repository.dart`:
   - Added: `readSamples`, `listTrials`, `getSessionCsvPath`,
     `getTrialDirPath`, `getTopicDirPath`, `writeSessionCsv`.
   - `PathProviderStorageRepository`: real file I/O for all new methods.
   - `InMemoryStorageRepository`: in-memory fake for tests.
 
 ### Browse Page (UI)
-- `app/lib/ui/browse_page.dart`:
+- `applications/wheelathlete_mobile/lib/ui/browse_page.dart`:
   - Three-level navigation: topic list → trial list → session list.
   - `_TopicListView` — folder icons, empty state with "No topics yet".
   - `_TrialListView` — `trial_NN` labels, back button.
   - `_SessionListView` — `SessionListItem` widgets with share buttons,
     sample count, marker count, sync quality.
-- `app/lib/ui/live_page.dart`: added Browse icon button in AppBar.
+- `applications/wheelathlete_mobile/lib/ui/live_page.dart`: added Browse icon button in AppBar.
 
 ### Dependencies
 - Added `csv` and `share_plus: ^13.2.0` to pubspec.yaml.

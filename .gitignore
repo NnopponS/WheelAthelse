@@ -28,72 +28,78 @@ __pycache__/
 .venv/
 venv/
 
-# Flutter mobile app
-app/.dart_tool/
-app/.flutter-plugins
-app/.flutter-plugins-dependencies
-app/.packages
-app/.pub-cache/
-app/.pub/
-app/build/
-app/.fvm/
-app/.metadata
-app/coverage/
-app/**/*.freezed.dart
-app/**/*.g.dart
-app/**/*.mocks.dart
-app/ios/Pods/
-app/ios/.symlinks/
-app/ios/Flutter/Flutter.framework
-app/ios/Flutter/Flutter.podspec
-app/ios/Flutter/Generated.xcconfig
-app/ios/Flutter/flutter_export_environment.sh
-app/ios/ServiceDefinitions.json
-app/ios/Runner/GeneratedPluginRegistrant.*
-app/ios/build/
-app/ios/*.xcworkspace/xcuserdata/
-app/ios/*.xcodeproj/xcuserdata/
-app/ios/**/*.pbxuser
-app/ios/**/*.perspectivev3
-app/android/.gradle/
-app/android/build/
-app/android/app/build/
-app/android/captures/
-app/android/local.properties
-app/android/.idea/
-app/android/*.iml
-app/android/**/.cxx/
-app/android/key.properties
-app/android/app/google-services.json
-app/android/app/release/
+# WheelAthlete Mobile Application (Flutter)
+applications/wheelathlete_mobile/.dart_tool/
+applications/wheelathlete_mobile/.flutter-plugins
+applications/wheelathlete_mobile/.flutter-plugins-dependencies
+applications/wheelathlete_mobile/.packages
+applications/wheelathlete_mobile/.pub-cache/
+applications/wheelathlete_mobile/.pub/
+applications/wheelathlete_mobile/build/
+applications/wheelathlete_mobile/.fvm/
+applications/wheelathlete_mobile/.metadata
+applications/wheelathlete_mobile/coverage/
+applications/wheelathlete_mobile/**/*.freezed.dart
+applications/wheelathlete_mobile/**/*.g.dart
+applications/wheelathlete_mobile/**/*.mocks.dart
+applications/wheelathlete_mobile/ios/Pods/
+applications/wheelathlete_mobile/ios/.symlinks/
+applications/wheelathlete_mobile/ios/Flutter/Flutter.framework
+applications/wheelathlete_mobile/ios/Flutter/Flutter.podspec
+applications/wheelathlete_mobile/ios/Flutter/Generated.xcconfig
+applications/wheelathlete_mobile/ios/Flutter/flutter_export_environment.sh
+applications/wheelathlete_mobile/ios/ServiceDefinitions.json
+applications/wheelathlete_mobile/ios/Runner/GeneratedPluginRegistrant.*
+applications/wheelathlete_mobile/ios/build/
+applications/wheelathlete_mobile/ios/*.xcworkspace/xcuserdata/
+applications/wheelathlete_mobile/ios/*.xcodeproj/xcuserdata/
+applications/wheelathlete_mobile/ios/**/*.pbxuser
+applications/wheelathlete_mobile/ios/**/*.perspectivev3
+applications/wheelathlete_mobile/android/.gradle/
+applications/wheelathlete_mobile/android/build/
+applications/wheelathlete_mobile/android/app/build/
+applications/wheelathlete_mobile/android/captures/
+applications/wheelathlete_mobile/android/local.properties
+applications/wheelathlete_mobile/android/.idea/
+applications/wheelathlete_mobile/android/*.iml
+applications/wheelathlete_mobile/android/**/.cxx/
+applications/wheelathlete_mobile/android/key.properties
+applications/wheelathlete_mobile/android/app/google-services.json
+applications/wheelathlete_mobile/android/app/release/
+
+# WheelAthlete Windows Research Application generated output
+applications/wheelathlete_windows/build/
+applications/wheelathlete_windows/release/
 
 # PlatformIO firmware output
-M5plus2_firmware/.pio/
-M5plus2_firmware/.pioenvs/
-M5plus2_firmware/.piolibdeps/
-M5plus2_firmware/.clangd
-M5plus2_firmware/.gcc-flags.json
-M5plus2_firmware/build/
-Xiao_firmware/.pio/
-Xiao_firmware/.pioenvs/
-Xiao_firmware/.piolibdeps/
-Xiao_firmware/.clangd
-Xiao_firmware/.gcc-flags.json
-Xiao_firmware/build/
+hardware_firmware/m5stickc_plus2/.pio/
+hardware_firmware/m5stickc_plus2/.pioenvs/
+hardware_firmware/m5stickc_plus2/.piolibdeps/
+hardware_firmware/m5stickc_plus2/.clangd
+hardware_firmware/m5stickc_plus2/.gcc-flags.json
+hardware_firmware/m5stickc_plus2/build/
+hardware_firmware/xiao_nrf52840_sense/.pio/
+hardware_firmware/xiao_nrf52840_sense/.pioenvs/
+hardware_firmware/xiao_nrf52840_sense/.piolibdeps/
+hardware_firmware/xiao_nrf52840_sense/.clangd
+hardware_firmware/xiao_nrf52840_sense/.gcc-flags.json
+hardware_firmware/xiao_nrf52840_sense/build/
 
 # Collected/exported research data
 WheelAthleteData/
 *.csv
 !docs/**/*.csv
-!app/test/**/*.csv
+!applications/wheelathlete_mobile/test/**/*.csv
 *.meta.json
-
-# Windows packaging output
-/build/
-/release/
 
 # Playwright artifacts
 .playwright-mcp/
 
 # Large local BiWheel3D working tree / datasets are intentionally untracked
 BiWheel3D*
+# Local release/update verification scratch
+.project/tmp_*
+.project/updater_*
+.project/update_*
+.project/latest.local.json
+.project/verify_*.cmd
