@@ -1,74 +1,74 @@
 # WheelAthlete
 
-**à¹à¸žà¸¥à¸•à¸Ÿà¸­à¸£à¹Œà¸¡à¹€à¸à¹‡à¸šà¹à¸¥à¸°à¸§à¸´à¹€à¸„à¸£à¸²à¸°à¸«à¹Œà¸‚à¹‰à¸­à¸¡à¸¹à¸¥ IMU à¸ˆà¸²à¸à¸¥à¹‰à¸­à¸‹à¹‰à¸²à¸¢â€“à¸‚à¸§à¸² à¸ªà¸³à¸«à¸£à¸±à¸šà¸‡à¸²à¸™à¸§à¸´à¸ˆà¸±à¸¢à¸à¸µà¸¬à¸²à¸§à¸µà¸¥à¹à¸Šà¸£à¹Œ**
+**แพลตฟอร์มเก็บและวิเคราะห์ข้อมูล IMU จากล้อซ้าย–ขวา สำหรับงานวิจัยกีฬาวีลแชร์**
 
-WheelAthlete à¹ƒà¸Šà¹‰à¹€à¸‹à¸™à¹€à¸‹à¸­à¸£à¹Œà¸—à¸µà¹ˆà¸¥à¹‰à¸­à¸‹à¹‰à¸²à¸¢à¹à¸¥à¸°à¸‚à¸§à¸²à¹€à¸žà¸·à¹ˆà¸­à¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥ accelerometer à¹à¸¥à¸° gyroscope à¹à¸šà¸šà¸‹à¸´à¸‡à¹‚à¸„à¸£à¹„à¸™à¸‹à¹Œ à¸žà¸£à¹‰à¸­à¸¡à¹à¸­à¸›à¸ªà¸³à¸«à¸£à¸±à¸šà¸¡à¸·à¸­à¸–à¸·à¸­à¹à¸¥à¸° Windows à¹€à¸žà¸·à¹ˆà¸­à¹ƒà¸Šà¹‰à¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸ à¸²à¸„à¸ªà¸™à¸²à¸¡ à¸”à¸¹à¸ªà¸–à¸²à¸™à¸° à¸•à¸£à¸§à¸ˆà¸„à¸¸à¸“à¸ à¸²à¸ž à¸ˆà¸±à¸”à¸à¸²à¸£ session à¸ªà¹ˆà¸‡à¸­à¸­à¸à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ à¹à¸¥à¸°à¸§à¸´à¹€à¸„à¸£à¸²à¸°à¸«à¹Œ trajectory à¹à¸šà¸šà¹€à¸ªà¸£à¸´à¸¡
+WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายและขวาเพื่อเก็บข้อมูล accelerometer และ gyroscope แบบซิงโครไนซ์ พร้อมแอปสำหรับมือถือและ Windows เพื่อใช้เก็บข้อมูลภาคสนาม ดูสถานะ ตรวจคุณภาพ จัดการ session ส่งออกข้อมูล และวิเคราะห์ trajectory แบบเสริม
 
-> **Release à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™:** `v1.8.0`
+> **Release ปัจจุบัน:** `v1.8.0`
 > **Mobile application:** `1.8.0+10`
 > **Firmware:** `1.8.0`
 > **BLE protocol:** `1.8.0`
 > **Windows package:** `1.8.0`
-> **à¸ à¸²à¸©à¸²:** [English](README.md) | à¹„à¸—à¸¢
+> **ภาษา:** [English](README.md) | ไทย
 
-## à¸ªà¸–à¸²à¸›à¸±à¸•à¸¢à¸à¸£à¸£à¸¡à¸‚à¸­à¸‡à¸œà¸¥à¸´à¸•à¸ à¸±à¸“à¸‘à¹Œ
+## สถาปัตยกรรมของผลิตภัณฑ์
 
-Repository à¹à¸šà¹ˆà¸‡à¹€à¸›à¹‡à¸™ 2 à¸à¸¥à¸¸à¹ˆà¸¡à¸«à¸¥à¸±à¸à¸­à¸¢à¹ˆà¸²à¸‡à¸Šà¸±à¸”à¹€à¸ˆà¸™:
+Repository แบ่งเป็น 2 กลุ่มหลักอย่างชัดเจน:
 
-1. **Applications** â€” à¸‹à¸­à¸Ÿà¸•à¹Œà¹à¸§à¸£à¹Œà¸—à¸µà¹ˆà¸œà¸¹à¹‰à¹ƒà¸Šà¹‰à¹ƒà¸Šà¹‰à¸‡à¸²à¸™à¹‚à¸”à¸¢à¸•à¸£à¸‡
-2. **Hardware & Firmware** â€” firmware à¸ªà¸³à¸«à¸£à¸±à¸šà¸šà¸­à¸£à¹Œà¸”à¹€à¸‹à¸™à¹€à¸‹à¸­à¸£à¹Œ
+1. **Applications** — ซอฟต์แวร์ที่ผู้ใช้ใช้งานโดยตรง
+2. **Hardware & Firmware** — firmware สำหรับบอร์ดเซนเซอร์
 
-à¸¡à¸µà¹à¸­à¸›à¸—à¸µà¹ˆà¸”à¸¹à¹à¸¥à¸­à¸¢à¸¹à¹ˆ 2 à¸•à¸±à¸§à¹€à¸—à¹ˆà¸²à¸™à¸±à¹‰à¸™ à¹à¸¥à¸°à¸„à¸§à¸£à¹ƒà¸Šà¹‰à¹à¸­à¸›à¹€à¸žà¸µà¸¢à¸‡à¸•à¸±à¸§à¹€à¸”à¸µà¸¢à¸§à¸•à¹ˆà¸­ sensor pair à¹ƒà¸™à¹€à¸§à¸¥à¸²à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™
+มีแอปที่ดูแลอยู่ 2 ตัวเท่านั้น และควรใช้แอปเพียงตัวเดียวต่อ sensor pair ในเวลาเดียวกัน
 
-| à¸ªà¹ˆà¸§à¸™à¸›à¸£à¸°à¸à¸­à¸š | à¸Šà¸·à¹ˆà¸­à¸­à¸¢à¹ˆà¸²à¸‡à¹€à¸›à¹‡à¸™à¸—à¸²à¸‡à¸à¸²à¸£ | Platform / Hardware | à¹€à¸—à¸„à¹‚à¸™à¹‚à¸¥à¸¢à¸µ | à¸«à¸™à¹‰à¸²à¸—à¸µà¹ˆà¸«à¸¥à¸±à¸ |
+| ส่วนประกอบ | ชื่ออย่างเป็นทางการ | Platform / Hardware | เทคโนโลยี | หน้าที่หลัก |
 |---|---|---|---|---|
-| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | à¹€à¸Šà¸·à¹ˆà¸­à¸¡à¸•à¹ˆà¸­ BLE, à¸”à¸¹à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸ªà¸”, à¸šà¸±à¸™à¸—à¸¶à¸ session, à¸ˆà¸±à¸”à¸à¸²à¸£à¹à¸¥à¸° export à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ |
-| Windows | **WheelAthlete Windows Research Application** | Windows 10/11 | Python / PySide6 | à¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹à¸šà¸š reliability-first, QC, recovery, workflow à¸‡à¸²à¸™à¸§à¸´à¸ˆà¸±à¸¢ à¹à¸¥à¸° MODEL à¹à¸šà¸šà¹€à¸ªà¸£à¸´à¸¡ |
-| Firmware | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 | PlatformIO | à¸­à¹ˆà¸²à¸™ IMU à¹à¸¥à¸°à¸ªà¹ˆà¸‡à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸œà¹ˆà¸²à¸™ BLE |
-| Firmware | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense | PlatformIO | à¸­à¹ˆà¸²à¸™ IMU à¹à¸¥à¸°à¸ªà¹ˆà¸‡à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸œà¹ˆà¸²à¸™ BLE |
+| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | เชื่อมต่อ BLE, ดูข้อมูลสด, บันทึก session, จัดการและ export ข้อมูล |
+| Windows | **WheelAthlete Windows Research Application** | Windows 10/11 | Python / PySide6 | เก็บข้อมูลแบบ reliability-first, QC, recovery, workflow งานวิจัย และ MODEL แบบเสริม |
+| Firmware | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 | PlatformIO | อ่าน IMU และส่งข้อมูลผ่าน BLE |
+| Firmware | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense | PlatformIO | อ่าน IMU และส่งข้อมูลผ่าน BLE |
 
-Flutter Windows, Flutter Web à¹à¸¥à¸° GUI à¸£à¸¸à¹ˆà¸™à¹€à¸à¹ˆà¸²à¹à¸šà¸š Tkinter à¹„à¸¡à¹ˆà¸­à¸¢à¸¹à¹ˆà¹ƒà¸™ product surface à¸—à¸µà¹ˆà¸”à¸¹à¹à¸¥à¹à¸¥à¹‰à¸§
+Flutter Windows, Flutter Web และ GUI รุ่นเก่าแบบ Tkinter ไม่อยู่ใน product surface ที่ดูแลแล้ว
 
-## à¹‚à¸„à¸£à¸‡à¸ªà¸£à¹‰à¸²à¸‡ Repository
+## โครงสร้าง Repository
 
 ```text
 WheelAthelse/
-â”œâ”€â”€ applications/
-â”‚   â”œâ”€â”€ wheelathlete_mobile/              # Flutter â€” iOS / Android
-â”‚   â”‚   â”œâ”€â”€ android/
-â”‚   â”‚   â”œâ”€â”€ ios/
-â”‚   â”‚   â”œâ”€â”€ lib/
-â”‚   â”‚   â”œâ”€â”€ test/
-â”‚   â”‚   â””â”€â”€ pubspec.yaml
-â”‚   â”‚
-â”‚   â””â”€â”€ wheelathlete_windows/             # Python / PySide6 â€” Windows
-â”‚       â”œâ”€â”€ tools/
-â”‚       â”‚   â”œâ”€â”€ pc_acquisition/           # BLE acquisition daemon
-â”‚       â”‚   â””â”€â”€ pc_gui/                   # PySide6 UI + MODEL adapter
-â”‚       â”œâ”€â”€ packaging/
-â”‚       â”‚   â””â”€â”€ windows/                  # PyInstaller + Inno Setup
-â”‚       â”œâ”€â”€ run_wheelathlete_windows.bat
-â”‚       â”œâ”€â”€ build/                        # generated, à¹„à¸¡à¹ˆà¹€à¸à¹‡à¸šà¹ƒà¸™ Git
-â”‚       â””â”€â”€ release/                      # generated, à¹„à¸¡à¹ˆà¹€à¸à¹‡à¸šà¹ƒà¸™ Git
-â”‚
-â”œâ”€â”€ hardware_firmware/
-â”‚   â”œâ”€â”€ m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
-â”‚   â””â”€â”€ xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
-â”‚
-â”œâ”€â”€ assets/                               # icon à¹à¸¥à¸° asset à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¸£à¹ˆà¸§à¸¡à¸à¸±à¸™
-â”œâ”€â”€ docs/                                 # BLE spec, test plan, protocol, wiki
-â”œâ”€â”€ .project/                             # à¸ªà¸–à¸²à¸™à¸°à¹à¸¥à¸°à¹€à¸­à¸à¸ªà¸²à¸£à¸§à¸´à¸¨à¸§à¸à¸£à¸£à¸¡à¸‚à¸­à¸‡à¹‚à¸›à¸£à¹€à¸ˆà¸à¸•à¹Œ
-â”œâ”€â”€ VERSION                               # à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™à¸«à¸¥à¸±à¸à¸‚à¸­à¸‡à¸£à¸°à¸šà¸š
-â”œâ”€â”€ README.md
-â””â”€â”€ README.th.md
+├── applications/
+│   ├── wheelathlete_mobile/              # Flutter — iOS / Android
+│   │   ├── android/
+│   │   ├── ios/
+│   │   ├── lib/
+│   │   ├── test/
+│   │   └── pubspec.yaml
+│   │
+│   └── wheelathlete_windows/             # Python / PySide6 — Windows
+│       ├── tools/
+│       │   ├── pc_acquisition/           # BLE acquisition daemon
+│       │   └── pc_gui/                   # PySide6 UI + MODEL adapter
+│       ├── packaging/
+│       │   └── windows/                  # PyInstaller + Inno Setup
+│       ├── run_wheelathlete_windows.bat
+│       ├── build/                        # generated, ไม่เก็บใน Git
+│       └── release/                      # generated, ไม่เก็บใน Git
+│
+├── hardware_firmware/
+│   ├── m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
+│   └── xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
+│
+├── assets/                               # icon และ asset ที่ใช้ร่วมกัน
+├── docs/                                 # BLE spec, test plan, protocol, wiki
+├── .project/                             # สถานะและเอกสารวิศวกรรมของโปรเจกต์
+├── VERSION                               # เวอร์ชันหลักของระบบ
+├── README.md
+└── README.th.md
 ```
 
-à¹„à¸Ÿà¸¥à¹Œà¸—à¸µà¹ˆ generate à¸ˆà¸²à¸à¸à¸²à¸£ build à¹€à¸Šà¹ˆà¸™ `build/`, `release/`, `.pio/`, Flutter generated files, Python cache à¹à¸¥à¸°à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ session à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¸ˆà¸£à¸´à¸‡ à¸ˆà¸°à¹„à¸¡à¹ˆà¸–à¸¹à¸à¹€à¸à¹‡à¸šà¹ƒà¸™ Git
+ไฟล์ที่ generate จากการ build เช่น `build/`, `release/`, `.pio/`, Flutter generated files, Python cache และข้อมูล session ที่บันทึกจริง จะไม่ถูกเก็บใน Git
 
-## à¸ à¸²à¸žà¸£à¸§à¸¡à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™à¸‚à¸­à¸‡à¸£à¸°à¸šà¸š
+## ภาพรวมการทำงานของระบบ
 
 ```text
- IMU à¸¥à¹‰à¸­à¸‹à¹‰à¸²à¸¢                           IMU à¸¥à¹‰à¸­à¸‚à¸§à¸²
+ IMU ล้อซ้าย                           IMU ล้อขวา
       |                                     |
       +--------------- BLE -----------------+
                          |
@@ -78,7 +78,7 @@ WheelAthelse/
  WheelAthlete Mobile       WheelAthlete Windows
  Application               Research Application
  Flutter / Dart             PySide6 GUI
- à¹€à¸Šà¸·à¹ˆà¸­à¸¡ BLE à¹‚à¸”à¸¢à¸•à¸£à¸‡              |
+ เชื่อม BLE โดยตรง              |
                                 v
                           localhost IPC
                                 |
@@ -94,27 +94,27 @@ WheelAthelse/
                          optional offline MODEL
 ```
 
-Firmware à¸—à¸±à¹‰à¸‡à¸ªà¸­à¸‡à¸Šà¸™à¸´à¸”à¹ƒà¸Šà¹‰ BLE contract à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™ à¹‚à¸”à¸¢ specification à¸«à¸¥à¸±à¸à¸­à¸¢à¸¹à¹ˆà¸—à¸µà¹ˆ [`docs/ble-protocol.md`](docs/ble-protocol.md)
+Firmware ทั้งสองชนิดใช้ BLE contract เดียวกัน โดย specification หลักอยู่ที่ [`docs/ble-protocol.md`](docs/ble-protocol.md)
 
 ## Applications
 
 ### WheelAthlete Mobile Application
 
-à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡: [`applications/wheelathlete_mobile/`](applications/wheelathlete_mobile/)
+ตำแหน่ง: [`applications/wheelathlete_mobile/`](applications/wheelathlete_mobile/)
 
-à¸„à¸§à¸²à¸¡à¸ªà¸²à¸¡à¸²à¸£à¸–à¸«à¸¥à¸±à¸:
+ความสามารถหลัก:
 
-- à¹€à¸Šà¸·à¹ˆà¸­à¸¡à¸•à¹ˆà¸­ sensor à¸¥à¹‰à¸­à¸‹à¹‰à¸²à¸¢à¹à¸¥à¸°à¸‚à¸§à¸²à¸œà¹ˆà¸²à¸™ BLE
-- à¹à¸ªà¸”à¸‡ Accel XYZ à¹à¸¥à¸° Gyro XYZ à¹à¸šà¸š real-time
-- synchronize clock à¹à¸¥à¸°à¹€à¸§à¸¥à¸²à¹€à¸£à¸´à¹ˆà¸¡à¸šà¸±à¸™à¸—à¸¶à¸à¸‚à¸­à¸‡à¸ªà¸­à¸‡à¸šà¸­à¸£à¹Œà¸”
-- à¸ˆà¸±à¸”à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹€à¸›à¹‡à¸™ topic / trial / session
-- à¹ƒà¸Šà¹‰ protocol template à¹à¸¥à¸° experiment tracking
-- à¹€à¸žà¸´à¹ˆà¸¡ tag, search, filter à¹à¸¥à¸° preview session
-- à¹à¸ªà¸”à¸‡ QC, quality indicator à¹à¸¥à¸°à¸ªà¸–à¸´à¸•à¸´
-- export à¹€à¸›à¹‡à¸™ CSV, Excel, ZIP à¹à¸¥à¸° share à¸œà¹ˆà¸²à¸™à¸£à¸°à¸šà¸šà¸›à¸à¸´à¸šà¸±à¸•à¸´à¸à¸²à¸£
-- à¸£à¸­à¸‡à¸£à¸±à¸š Android à¹à¸¥à¸° iOS à¹€à¸—à¹ˆà¸²à¸™à¸±à¹‰à¸™
+- เชื่อมต่อ sensor ล้อซ้ายและขวาผ่าน BLE
+- แสดง Accel XYZ และ Gyro XYZ แบบ real-time
+- synchronize clock และเวลาเริ่มบันทึกของสองบอร์ด
+- จัดข้อมูลเป็น topic / trial / session
+- ใช้ protocol template และ experiment tracking
+- เพิ่ม tag, search, filter และ preview session
+- แสดง QC, quality indicator และสถิติ
+- export เป็น CSV, Excel, ZIP และ share ผ่านระบบปฏิบัติการ
+- รองรับ Android และ iOS เท่านั้น
 
-à¹€à¸£à¸´à¹ˆà¸¡à¹ƒà¸Šà¹‰à¸‡à¸²à¸™:
+เริ่มใช้งาน:
 
 ```bash
 cd applications/wheelathlete_mobile
@@ -122,7 +122,7 @@ flutter pub get
 flutter run -d <device-id>
 ```
 
-à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¹‚à¸„à¹‰à¸”:
+ตรวจสอบโค้ด:
 
 ```bash
 cd applications/wheelathlete_mobile
@@ -137,68 +137,68 @@ Build release:
 flutter build apk --release
 flutter build appbundle --release
 
-# iOS â€” à¸•à¹‰à¸­à¸‡à¹ƒà¸Šà¹‰ macOS + Xcode
+# iOS — ต้องใช้ macOS + Xcode
 flutter build ios --release
 ```
 
 ### WheelAthlete Windows Research Application
 
-à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡: [`applications/wheelathlete_windows/`](applications/wheelathlete_windows/)
+ตำแหน่ง: [`applications/wheelathlete_windows/`](applications/wheelathlete_windows/)
 
-Windows Application à¹ƒà¸Šà¹‰à¹‚à¸„à¸£à¸‡à¸ªà¸£à¹‰à¸²à¸‡à¹à¸šà¸š 2 process à¹€à¸žà¸·à¹ˆà¸­à¹à¸¢à¸à¹€à¸ªà¹‰à¸™à¸—à¸²à¸‡à¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸ˆà¸£à¸´à¸‡à¸­à¸­à¸à¸ˆà¸²à¸ UI:
+Windows Application ใช้โครงสร้างแบบ 2 process เพื่อแยกเส้นทางเก็บข้อมูลจริงออกจาก UI:
 
-- **Acquisition daemon** à¸”à¸¹à¹à¸¥ BLE, packet parsing, synchronization, sequence/loss accounting, à¸à¸²à¸£à¹€à¸‚à¸µà¸¢à¸™ journal, QC à¹à¸¥à¸° recovery
-- **PySide6 GUI** à¸”à¸¹à¹à¸¥à¸à¸²à¸£à¸„à¸§à¸šà¸„à¸¸à¸¡, status, preview, Results, Diagnostics, export à¹à¸¥à¸° MODEL à¹à¸šà¸šà¹€à¸ªà¸£à¸´à¸¡
+- **Acquisition daemon** ดูแล BLE, packet parsing, synchronization, sequence/loss accounting, การเขียน journal, QC และ recovery
+- **PySide6 GUI** ดูแลการควบคุม, status, preview, Results, Diagnostics, export และ MODEL แบบเสริม
 
-GUI à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆ authoritative raw-data path à¸”à¸±à¸‡à¸™à¸±à¹‰à¸™ chart à¸—à¸µà¹ˆà¸Šà¹‰à¸², model inference à¸«à¸£à¸·à¸­à¸à¸²à¸£ restart GUI à¸ˆà¸°à¹„à¸¡à¹ˆà¸„à¸§à¸£à¸—à¸³à¹ƒà¸«à¹‰à¹€à¸ªà¹‰à¸™à¸—à¸²à¸‡à¹€à¸à¹‡à¸š raw BLE data à¸«à¸¢à¸¸à¸”à¸«à¸£à¸·à¸­à¸ªà¸¹à¸à¸«à¸²à¸¢à¹‚à¸”à¸¢à¹€à¸‡à¸µà¸¢à¸š
+GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart ที่ช้า, model inference หรือการ restart GUI จะไม่ควรทำให้เส้นทางเก็บ raw BLE data หยุดหรือสูญหายโดยเงียบ
 
-à¸«à¸™à¹‰à¸²à¸«à¸¥à¸±à¸à¸‚à¸­à¸‡ Windows Application:
+หน้าหลักของ Windows Application:
 
-- **Dashboard** â€” à¸à¸²à¸£à¹€à¸Šà¸·à¹ˆà¸­à¸¡à¸•à¹ˆà¸­à¸šà¸­à¸£à¹Œà¸”à¹à¸¥à¸°à¸ à¸²à¸žà¸£à¸§à¸¡à¸£à¸°à¸šà¸š
-- **Acquisition** â€” live preview à¹à¸¥à¸°à¸„à¸§à¸šà¸„à¸¸à¸¡à¸à¸²à¸£à¸šà¸±à¸™à¸—à¸¶à¸à¹à¸šà¸š synchronized
-- **Results** â€” session à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹à¸¥à¹‰à¸§, QC, à¹à¸à¹‰ metadata, export à¹à¸¥à¸°à¸¥à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥
-- **MODEL** â€” à¸§à¸´à¹€à¸„à¸£à¸²à¸°à¸«à¹Œ trajectory à¹à¸šà¸š offline
-- **Diagnostics** â€” à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸”à¹‰à¸²à¸™ acquisition à¹à¸¥à¸° data integrity
+- **Dashboard** — การเชื่อมต่อบอร์ดและภาพรวมระบบ
+- **Acquisition** — live preview และควบคุมการบันทึกแบบ synchronized
+- **Results** — session ที่บันทึกแล้ว, QC, แก้ metadata, export และลบข้อมูล
+- **MODEL** — วิเคราะห์ trajectory แบบ offline
+- **Diagnostics** — ข้อมูลด้าน acquisition และ data integrity
 
-à¹€à¸›à¸´à¸”à¸ˆà¸²à¸ source:
+เปิดจาก source:
 
 ```bat
 cd applications\wheelathlete_windows
 run_wheelathlete_windows.bat
 ```
 
-à¹‚à¸«à¸¡à¸” Demo:
+โหมด Demo:
 
 ```bat
 cd applications\wheelathlete_windows
 run_wheelathlete_windows.bat --demo
 ```
 
-à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ default à¸šà¸™ Windows:
+ตำแหน่งข้อมูล default บน Windows:
 
 - Sessions: `~/Documents/WheelAthlete/PC Sessions`
 - GUI log: `~/Documents/WheelAthlete/Logs/wheelathlete-windows.log`
 - Experiment presets: `~/Documents/WheelAthlete/experiments.json`
 
-à¹€à¸­à¸à¸ªà¸²à¸£ Windows à¹à¸šà¸šà¸¥à¸°à¹€à¸­à¸µà¸¢à¸”: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
+เอกสาร Windows แบบละเอียด: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
 
-### MODEL à¹à¸šà¸šà¹€à¸ªà¸£à¸´à¸¡
+### MODEL แบบเสริม
 
-PyTorch à¹à¸¥à¸° dependency à¸‚à¸­à¸‡ model à¹à¸¢à¸à¸ˆà¸²à¸ runtime à¸«à¸¥à¸±à¸à¸‚à¸­à¸‡à¸£à¸°à¸šà¸šà¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥ à¹€à¸žà¸·à¹ˆà¸­à¹„à¸¡à¹ˆà¹ƒà¸«à¹‰à¸à¸²à¸£à¹ƒà¸Šà¹‰à¸‡à¸²à¸™à¸›à¸à¸•à¸´à¸•à¹‰à¸­à¸‡à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡ ML runtime à¸‚à¸™à¸²à¸”à¹ƒà¸«à¸à¹ˆ
+PyTorch และ dependency ของ model แยกจาก runtime หลักของระบบเก็บข้อมูล เพื่อไม่ให้การใช้งานปกติต้องติดตั้ง ML runtime ขนาดใหญ่
 
 ```bat
 python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
 ```
 
-MODEL à¹€à¸›à¹‡à¸™ workflow à¹à¸šà¸š offline à¹à¸¥à¸°à¹€à¸›à¹‡à¸™ optional feature à¸•à¹ˆà¸­à¹ƒà¸«à¹‰à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡ PyTorch à¸«à¸£à¸·à¸­à¹„à¸¡à¹ˆà¸¡à¸µ compatible model à¸à¹‡à¸¢à¸±à¸‡à¹ƒà¸Šà¹‰ Recording, Results, Export à¹à¸¥à¸° Diagnostics à¹„à¸”à¹‰à¸•à¸²à¸¡à¸›à¸à¸•à¸´
+MODEL เป็น workflow แบบ offline และเป็น optional feature ต่อให้ไม่ได้ติดตั้ง PyTorch หรือไม่มี compatible model ก็ยังใช้ Recording, Results, Export และ Diagnostics ได้ตามปกติ
 
 ## Hardware & Firmware
 
-Firmware à¸—à¸±à¹‰à¸‡à¸ªà¸­à¸‡ target à¹ƒà¸Šà¹‰ WheelAthlete BLE contract à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™ à¹à¸¥à¸°à¸£à¸­à¸‡à¸£à¸±à¸š wheel identity, sampling rate, synchronized lifecycle, battery, sequence accounting, replay/recovery à¹à¸¥à¸° acquisition-health telemetry
+Firmware ทั้งสอง target ใช้ WheelAthlete BLE contract เดียวกัน และรองรับ wheel identity, sampling rate, synchronized lifecycle, battery, sequence accounting, replay/recovery และ acquisition-health telemetry
 
 ### WheelAthlete M5StickC Plus2 Firmware
 
-à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡: [`hardware_firmware/m5stickc_plus2/`](hardware_firmware/m5stickc_plus2/)
+ตำแหน่ง: [`hardware_firmware/m5stickc_plus2/`](hardware_firmware/m5stickc_plus2/)
 
 ```bash
 cd hardware_firmware/m5stickc_plus2
@@ -212,7 +212,7 @@ pio run -e right -t upload
 
 ### WheelAthlete XIAO nRF52840 Sense Firmware
 
-à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡: [`hardware_firmware/xiao_nrf52840_sense/`](hardware_firmware/xiao_nrf52840_sense/)
+ตำแหน่ง: [`hardware_firmware/xiao_nrf52840_sense/`](hardware_firmware/xiao_nrf52840_sense/)
 
 ```bash
 cd hardware_firmware/xiao_nrf52840_sense
@@ -226,81 +226,81 @@ pio run -e right -t upload
 
 ## Build Windows Installer
 
-à¸ªà¸´à¹ˆà¸‡à¸—à¸µà¹ˆà¸•à¹‰à¸­à¸‡à¸¡à¸µ:
+สิ่งที่ต้องมี:
 
 - Python 3.10+
 - PyInstaller
 - Inno Setup 6
 
-Build portable package à¹à¸¥à¸° installer:
+Build portable package และ installer:
 
 ```bat
 cd applications\wheelathlete_windows
 packaging\windows\build_installer.bat
 ```
 
-Output à¸ˆà¸°à¸­à¸¢à¸¹à¹ˆà¸—à¸µà¹ˆ:
+Output จะอยู่ที่:
 
 ```text
 applications/wheelathlete_windows/release/
-â”œâ”€â”€ WheelAthlete-1.8.0-portable.zip
-â””â”€â”€ WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.0-portable.zip
+└── WheelAthleteSetup-1.8.0.exe
 ```
 
-à¸—à¸±à¹‰à¸‡ portable package à¹à¸¥à¸° installer à¸ˆà¸° bundle `WheelAthleteDaemon.exe` à¹„à¸›à¸”à¹‰à¸§à¸¢
+ทั้ง portable package และ installer จะ bundle `WheelAthleteDaemon.exe` ไปด้วย
 
-à¸£à¸²à¸¢à¸¥à¸°à¹€à¸­à¸µà¸¢à¸” packaging: [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md)
+รายละเอียด packaging: [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md)
 
-## à¸£à¸°à¸šà¸šà¸­à¸±à¸›à¹€à¸”à¸•à¹à¸­à¸›à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´
+## ระบบอัปเดตแอปอัตโนมัติ
 
-Flutter Mobile à¹à¸¥à¸° Python Windows à¹ƒà¸Šà¹‰ manifest à¸à¸¥à¸²à¸‡à¸ˆà¸²à¸ GitHub Releases à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™:
+Flutter Mobile และ Python Windows ใช้ manifest กลางจาก GitHub Releases เดียวกัน:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-à¹„à¸Ÿà¸¥à¹Œà¸—à¸µà¹ˆà¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸”à¸—à¸¸à¸à¹„à¸Ÿà¸¥à¹Œà¸¡à¸µà¸—à¸±à¹‰à¸‡à¸‚à¸™à¸²à¸”à¹à¸šà¸š exact bytes à¹à¸¥à¸° SHA-256 à¸­à¸¢à¸¹à¹ˆà¹ƒà¸™ `latest.json` à¹€à¸žà¸·à¹ˆà¸­à¹ƒà¸«à¹‰ client à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸à¹ˆà¸­à¸™à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡
+ไฟล์ที่ดาวน์โหลดทุกไฟล์มีทั้งขนาดแบบ exact bytes และ SHA-256 อยู่ใน `latest.json` เพื่อให้ client ตรวจสอบก่อนติดตั้ง
 
-- **Android:** release app à¸•à¸£à¸§à¸ˆà¸­à¸±à¸›à¹€à¸”à¸•à¸«à¸¥à¸±à¸‡à¹€à¸›à¸´à¸”à¹à¸­à¸›à¹à¸¥à¸°à¸—à¸¸à¸ 6 à¸Šà¸±à¹ˆà¸§à¹‚à¸¡à¸‡ à¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸”à¹€à¸‰à¸žà¸²à¸° APK à¸ˆà¸²à¸ HTTPS GitHub Release à¸‚à¸­à¸‡ repository à¸™à¸µà¹‰ à¸•à¸£à¸§à¸ˆà¸‚à¸™à¸²à¸”à¹à¸¥à¸° SHA-256 à¹à¸¥à¹‰à¸§à¹€à¸›à¸´à¸” Android system installer à¹ƒà¸«à¹‰à¸œà¸¹à¹‰à¹ƒà¸Šà¹‰à¸à¸”à¸¢à¸·à¸™à¸¢à¸±à¸™ à¸à¸²à¸£à¸­à¸±à¸›à¹€à¸”à¸• APK à¸•à¹ˆà¸­à¹€à¸™à¸·à¹ˆà¸­à¸‡à¸ˆà¸³à¹€à¸›à¹‡à¸™à¸•à¹‰à¸­à¸‡à¹ƒà¸Šà¹‰ release signing key à¹€à¸”à¸´à¸¡à¸—à¸¸à¸à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™ à¸”à¸±à¸‡à¸™à¸±à¹‰à¸™ GitHub release workflow à¸ˆà¸°à¸«à¸¢à¸¸à¸”à¸—à¸±à¸™à¸—à¸µà¸«à¸²à¸à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¸•à¸±à¹‰à¸‡ signing secrets
-- **iOS:** à¹ƒà¸Šà¹‰ manifest à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™à¸ªà¸³à¸«à¸£à¸±à¸šà¸•à¸£à¸§à¸ˆà¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™ à¹à¸•à¹ˆà¸à¸²à¸£à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸•à¹‰à¸­à¸‡à¸ªà¹ˆà¸‡à¸•à¹ˆà¸­à¹„à¸› App Store/TestFlight à¹€à¸žà¸£à¸²à¸° iOS à¹„à¸¡à¹ˆà¸­à¸™à¸¸à¸à¸²à¸•à¹ƒà¸«à¹‰à¹à¸­à¸›à¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸” binary à¹à¸¥à¹‰à¸§à¹à¸—à¸™à¸—à¸µà¹ˆà¸•à¸±à¸§à¹€à¸­à¸‡à¹‚à¸”à¸¢à¸•à¸£à¸‡
-- **Windows:** à¸•à¸±à¸§à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸ˆà¸£à¸´à¸‡à¸—à¸µà¹ˆ build à¸”à¹‰à¸§à¸¢ PyInstaller/Inno Setup à¸ˆà¸°à¸•à¸£à¸§à¸ˆà¸­à¸±à¸›à¹€à¸”à¸•à¸«à¸¥à¸±à¸‡à¹€à¸›à¸´à¸”à¹à¸­à¸›à¹à¸¥à¸°à¸—à¸¸à¸ 6 à¸Šà¸±à¹ˆà¸§à¹‚à¸¡à¸‡ à¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸” installer à¹à¸¥à¹‰à¸§à¸•à¸£à¸§à¸ˆ size + SHA-256 à¸à¹ˆà¸­à¸™ update AppId à¹€à¸”à¸´à¸¡à¹à¸¥à¸°à¹€à¸›à¸´à¸” WheelAthlete à¹ƒà¸«à¸¡à¹ˆà¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´
-- **à¸„à¸§à¸²à¸¡à¸›à¸¥à¸­à¸”à¸ à¸±à¸¢à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¹€à¸à¹‡à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥:** Mobile à¹à¸¥à¸° Windows à¸ˆà¸°à¹„à¸¡à¹ˆà¹€à¸£à¸´à¹ˆà¸¡à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸­à¸±à¸›à¹€à¸”à¸•à¸‚à¸“à¸° Live preview, countdown à¸«à¸£à¸·à¸­ recording à¸à¸³à¸¥à¸±à¸‡à¸—à¸³à¸‡à¸²à¸™
+- **Android:** release app ตรวจอัปเดตหลังเปิดแอปและทุก 6 ชั่วโมง ดาวน์โหลดเฉพาะ APK จาก HTTPS GitHub Release ของ repository นี้ ตรวจขนาดและ SHA-256 แล้วเปิด Android system installer ให้ผู้ใช้กดยืนยัน การอัปเดต APK ต่อเนื่องจำเป็นต้องใช้ release signing key เดิมทุกเวอร์ชัน ดังนั้น GitHub release workflow จะหยุดทันทีหากยังไม่ได้ตั้ง signing secrets
+- **iOS:** ใช้ manifest เดียวกันสำหรับตรวจเวอร์ชัน แต่การติดตั้งต้องส่งต่อไป App Store/TestFlight เพราะ iOS ไม่อนุญาตให้แอปดาวน์โหลด binary แล้วแทนที่ตัวเองโดยตรง
+- **Windows:** ตัวติดตั้งจริงที่ build ด้วย PyInstaller/Inno Setup จะตรวจอัปเดตหลังเปิดแอปและทุก 6 ชั่วโมง ดาวน์โหลด installer แล้วตรวจ size + SHA-256 ก่อน update AppId เดิมและเปิด WheelAthlete ใหม่อัตโนมัติ
+- **ความปลอดภัยระหว่างเก็บข้อมูล:** Mobile และ Windows จะไม่เริ่มติดตั้งอัปเดตขณะ Live preview, countdown หรือ recording กำลังทำงาน
 
-à¸£à¸°à¸šà¸š release à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´à¸­à¸¢à¸¹à¹ˆà¸—à¸µà¹ˆ `.github/workflows/release.yml` à¹€à¸¡à¸·à¹ˆà¸­à¸ªà¸£à¹‰à¸²à¸‡ tag `v<version>` à¸£à¸°à¸šà¸šà¸ˆà¸° test/build à¸—à¸±à¹‰à¸‡ Android à¹à¸¥à¸° Windows, à¸ªà¸£à¹‰à¸²à¸‡ `latest.json` à¹à¸¥à¸° publish APK + EXE + manifest à¹ƒà¸™ GitHub Release à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™ à¸”à¸¹à¸£à¸²à¸¢à¸¥à¸°à¹€à¸­à¸µà¸¢à¸”à¸—à¸µà¹ˆ [`release/README.md`](release/README.md)
+ระบบ release อัตโนมัติอยู่ที่ `.github/workflows/release.yml` เมื่อสร้าง tag `v<version>` ระบบจะ test/build ทั้ง Android และ Windows, สร้าง `latest.json` และ publish APK + EXE + manifest ใน GitHub Release เดียวกัน ดูรายละเอียดที่ [`release/README.md`](release/README.md)
 
-> à¸«à¸¡à¸²à¸¢à¹€à¸«à¸•à¸¸ bootstrap: à¹à¸­à¸›à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™à¹€à¸à¹ˆà¸²à¸—à¸µà¹ˆà¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸à¹ˆà¸­à¸™à¸¡à¸µ updater à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¸­à¸±à¸›à¹€à¸”à¸•à¸•à¸±à¸§à¹€à¸­à¸‡à¹„à¸”à¹‰ à¸•à¹‰à¸­à¸‡à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡ updater-enabled release à¸„à¸£à¸±à¹‰à¸‡à¹à¸£à¸à¸”à¹‰à¸§à¸¢à¸•à¸™à¹€à¸­à¸‡ 1 à¸„à¸£à¸±à¹‰à¸‡ à¸«à¸¥à¸±à¸‡à¸ˆà¸²à¸à¸™à¸±à¹‰à¸™à¸ˆà¸¶à¸‡à¹ƒà¸Šà¹‰à¸­à¸±à¸›à¹€à¸”à¸•à¹ƒà¸™à¹à¸­à¸›à¹„à¸”à¹‰
+> หมายเหตุ bootstrap: แอปเวอร์ชันเก่าที่ติดตั้งก่อนมี updater ไม่สามารถอัปเดตตัวเองได้ ต้องติดตั้ง updater-enabled release ครั้งแรกด้วยตนเอง 1 ครั้ง หลังจากนั้นจึงใช้อัปเดตในแอปได้
 
 ## Data Integrity
 
 ### Mobile
 
-Mobile Application à¹€à¸à¹‡à¸š session à¸•à¸²à¸¡à¹‚à¸„à¸£à¸‡à¸ªà¸£à¹‰à¸²à¸‡ topic / trial / session à¹à¸¥à¸°à¸ªà¸²à¸¡à¸²à¸£à¸– export à¹€à¸›à¹‡à¸™ CSV, metadata, Excel à¹à¸¥à¸° ZIP
+Mobile Application เก็บ session ตามโครงสร้าง topic / trial / session และสามารถ export เป็น CSV, metadata, Excel และ ZIP
 
 ### Windows
 
-Acquisition daemon à¹€à¸‚à¸µà¸¢à¸™à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸«à¸¥à¸±à¸à¸¥à¸‡ append-only `.waj` journal à¹‚à¸”à¸¢à¸–à¸·à¸­ journal à¸™à¸µà¹‰à¹€à¸›à¹‡à¸™ authoritative record à¸ªà¹ˆà¸§à¸™ CSV à¹à¸¥à¸° summary à¹€à¸›à¹‡à¸™à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸—à¸µà¹ˆ derive à¸¡à¸²à¸ˆà¸²à¸ journal
+Acquisition daemon เขียนข้อมูลหลักลง append-only `.waj` journal โดยถือ journal นี้เป็น authoritative record ส่วน CSV และ summary เป็นข้อมูลที่ derive มาจาก journal
 
-à¹„à¸Ÿà¸¥à¹Œ `.open` à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸¡à¹ˆà¸ªà¸¡à¸šà¸¹à¸£à¸“à¹Œà¸ªà¸²à¸¡à¸²à¸£à¸–à¸—à¸³ recovery à¹„à¸”à¹‰
+ไฟล์ `.open` ที่บันทึกไม่สมบูรณ์สามารถทำ recovery ได้
 
-à¹€à¸¡à¸·à¹ˆà¸­ finalize à¹à¸¥à¹‰à¸§ à¸£à¸°à¸šà¸šà¹ƒà¸Šà¹‰à¸Šà¸·à¹ˆà¸­à¹„à¸Ÿà¸¥à¹Œà¸—à¸µà¹ˆà¸­à¹ˆà¸²à¸™à¸‡à¹ˆà¸²à¸¢à¸•à¸²à¸¡ topic / trial / athlete à¹à¸•à¹ˆà¸¢à¸±à¸‡à¸„à¸‡ internal session UUID à¹€à¸”à¸´à¸¡à¹„à¸§à¹‰
+เมื่อ finalize แล้ว ระบบใช้ชื่อไฟล์ที่อ่านง่ายตาม topic / trial / athlete แต่ยังคง internal session UUID เดิมไว้
 
-**à¸„à¹ˆà¸²à¸—à¸µà¹ˆà¹€à¸«à¹‡à¸™à¹ƒà¸™ preview, chart à¹à¸¥à¸°à¸œà¸¥ MODEL à¹„à¸¡à¹ˆà¸–à¸·à¸­à¹€à¸›à¹‡à¸™ authoritative research record**
+**ค่าที่เห็นใน preview, chart และผล MODEL ไม่ถือเป็น authoritative research record**
 
-## BLE Protocol à¹à¸¥à¸° Synchronization
+## BLE Protocol และ Synchronization
 
-Specification à¸«à¸¥à¸±à¸: [`docs/ble-protocol.md`](docs/ble-protocol.md)
+Specification หลัก: [`docs/ble-protocol.md`](docs/ble-protocol.md)
 
-Protocol version à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™: `1.8.0`
+Protocol version ปัจจุบัน: `1.8.0`
 
-à¸à¸¥à¹„à¸à¸”à¹‰à¸²à¸™ reliability à¸—à¸µà¹ˆà¸ªà¸³à¸„à¸±à¸:
+กลไกด้าน reliability ที่สำคัญ:
 
 - explicit recording lifecycle acknowledgement
-- synchronized start à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸¥à¹‰à¸­à¸‹à¹‰à¸²à¸¢à¹à¸¥à¸°à¸‚à¸§à¸²
-- clock synchronization à¹à¸¥à¸° drift mapping
+- synchronized start ระหว่างล้อซ้ายและขวา
+- clock synchronization และ drift mapping
 - sequence accounting
 - acquisition-health telemetry
 - replay / recovery
-- strict packet parsing à¹à¸¥à¸° QC
+- strict packet parsing และ QC
 
 ## Verification
 
@@ -332,7 +332,7 @@ pio run -e left
 pio run -e right
 ```
 
-Automated test à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¹à¸—à¸™ physical acceptance test à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¸šà¸­à¸£à¹Œà¸”à¸ˆà¸£à¸´à¸‡ 2 à¸•à¸±à¸§à¸ à¸²à¸¢à¹ƒà¸•à¹‰à¸ªà¸ à¸²à¸ž RF à¸ˆà¸£à¸´à¸‡à¹„à¸”à¹‰à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”
+Automated test ไม่สามารถแทน physical acceptance test ที่ใช้บอร์ดจริง 2 ตัวภายใต้สภาพ RF จริงได้ทั้งหมด
 
 ## Version Matrix
 
@@ -345,27 +345,27 @@ Automated test à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¹à�
 | XIAO nRF52840 Sense firmware | `1.8.0` |
 | BLE protocol | `1.8.0` |
 
-à¹„à¸Ÿà¸¥à¹Œ [`VERSION`](VERSION) à¸—à¸µà¹ˆ root à¹€à¸›à¹‡à¸™ coordinated product version à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¸à¸±à¸š Windows packaging à¹à¸¥à¸° release validation
+ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation
 
-## à¹€à¸­à¸à¸ªà¸²à¸£à¸§à¸´à¸¨à¸§à¸à¸£à¸£à¸¡
+## เอกสารวิศวกรรม
 
-- [`docs/`](docs/) â€” protocol, workflow à¸ à¸²à¸„à¸ªà¸™à¸²à¸¡, test plan à¹à¸¥à¸° wiki
-- [`.project/`](.project/) â€” architecture, progress, engineering decision à¹à¸¥à¸°à¸ªà¸–à¸²à¸™à¸°à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸‚à¸­à¸‡à¹‚à¸›à¸£à¹€à¸ˆà¸à¸•à¹Œ
+- [`docs/`](docs/) — protocol, workflow ภาคสนาม, test plan และ wiki
+- [`.project/`](.project/) — architecture, progress, engineering decision และสถานะล่าสุดของโปรเจกต์
 
 ## License
 
-Proprietary â€” à¸à¸²à¸£à¹ƒà¸Šà¹‰à¸‡à¸²à¸™ à¹à¸ˆà¸à¸ˆà¹ˆà¸²à¸¢ à¸«à¸£à¸·à¸­à¹à¸à¹‰à¹„à¸‚ source code à¸•à¹‰à¸­à¸‡à¹„à¸”à¹‰à¸£à¸±à¸šà¸­à¸™à¸¸à¸à¸²à¸•à¸ˆà¸²à¸à¸œà¸¹à¹‰à¸”à¸¹à¹à¸¥à¹‚à¸›à¸£à¹€à¸ˆà¸à¸•à¹Œ
+Proprietary — การใช้งาน แจกจ่าย หรือแก้ไข source code ต้องได้รับอนุญาตจากผู้ดูแลโปรเจกต์
 
-## à¸à¸²à¸£à¸­à¸±à¸›à¹€à¸”à¸•à¸‹à¸­à¸Ÿà¸•à¹Œà¹à¸§à¸£à¹Œà¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´
+## การอัปเดตซอฟต์แวร์อัตโนมัติ
 
-WheelAthlete Mobile à¹à¸¥à¸° WheelAthlete Windows à¹ƒà¸Šà¹‰ manifest à¸à¸¥à¸²à¸‡à¸Šà¸¸à¸”à¹€à¸”à¸µà¸¢à¸§à¸ˆà¸²à¸ GitHub Releases à¹à¸¥à¸°à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¹„à¸Ÿà¸¥à¹Œà¸”à¹‰à¸§à¸¢à¸‚à¸™à¸²à¸”à¸ˆà¸£à¸´à¸‡à¹à¸¥à¸° SHA-256 à¸à¹ˆà¸­à¸™à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡:
+WheelAthlete Mobile และ WheelAthlete Windows ใช้ manifest กลางชุดเดียวจาก GitHub Releases และตรวจสอบไฟล์ด้วยขนาดจริงและ SHA-256 ก่อนติดตั้ง:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-- **Android:** release build à¸ˆà¸°à¸•à¸£à¸§à¸ˆà¸­à¸±à¸›à¹€à¸”à¸•à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´ à¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸” APK à¸—à¸µà¹ˆà¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¹à¸¥à¹‰à¸§ à¹à¸¥à¸°à¹€à¸›à¸´à¸”à¸«à¸™à¹‰à¸²à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸‚à¸­à¸‡ Android à¸œà¸¹à¹‰à¹ƒà¸Šà¹‰à¸¢à¸±à¸‡à¸•à¹‰à¸­à¸‡à¸à¸”à¸¢à¸·à¸™à¸¢à¸±à¸™à¹€à¸­à¸‡ à¹à¸¥à¸° APK à¸—à¸¸à¸ public release à¸•à¹‰à¸­à¸‡à¹€à¸‹à¹‡à¸™à¸”à¹‰à¸§à¸¢ release key à¹€à¸”à¸´à¸¡à¸žà¸£à¹‰à¸­à¸¡à¹€à¸žà¸´à¹ˆà¸¡ `versionCode` à¸—à¸¸à¸à¸„à¸£à¸±à¹‰à¸‡
-- **iOS:** à¸•à¸£à¸§à¸ˆ manifest à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™ à¹à¸•à¹ˆà¸à¸²à¸£à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸•à¹‰à¸­à¸‡à¸œà¹ˆà¸²à¸™ App Store/TestFlight à¸•à¸²à¸¡à¸‚à¹‰à¸­à¸à¸³à¸«à¸™à¸”à¸‚à¸­à¸‡ iOS
-- **Windows:** à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™à¸—à¸µà¹ˆà¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸”à¹‰à¸§à¸¢ PyInstaller/Inno Setup à¸ˆà¸°à¸•à¸£à¸§à¸ˆà¸«à¸¥à¸±à¸‡à¹€à¸›à¸´à¸”à¹‚à¸›à¸£à¹à¸à¸£à¸¡à¹à¸¥à¸°à¸—à¸¸à¸ 6 à¸Šà¸±à¹ˆà¸§à¹‚à¸¡à¸‡ à¸”à¸²à¸§à¸™à¹Œà¹‚à¸«à¸¥à¸” installer à¸—à¸µà¹ˆà¸•à¸£à¸§à¸ˆ SHA-256 à¹à¸¥à¹‰à¸§ à¹„à¸¡à¹ˆà¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡ Live/Countdown/Recording à¸ˆà¸²à¸à¸™à¸±à¹‰à¸™à¸›à¸´à¸”à¹‚à¸›à¸£à¹à¸à¸£à¸¡ à¸­à¸±à¸›à¹€à¸”à¸•à¹à¸šà¸š silent à¹à¸¥à¸°à¹€à¸›à¸´à¸” WheelAthlete à¸à¸¥à¸±à¸šà¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´ à¸ªà¹ˆà¸§à¸™ source/portable build à¸ˆà¸°à¹„à¸¡à¹ˆà¹€à¸‚à¸µà¸¢à¸™à¸—à¸±à¸šà¸•à¸±à¸§à¹€à¸­à¸‡
+- **Android:** release build จะตรวจอัปเดตอัตโนมัติ ดาวน์โหลด APK ที่ตรวจสอบแล้ว และเปิดหน้าติดตั้งของ Android ผู้ใช้ยังต้องกดยืนยันเอง และ APK ทุก public release ต้องเซ็นด้วย release key เดิมพร้อมเพิ่ม `versionCode` ทุกครั้ง
+- **iOS:** ตรวจ manifest เดียวกัน แต่การติดตั้งต้องผ่าน App Store/TestFlight ตามข้อกำหนดของ iOS
+- **Windows:** เวอร์ชันที่ติดตั้งด้วย PyInstaller/Inno Setup จะตรวจหลังเปิดโปรแกรมและทุก 6 ชั่วโมง ดาวน์โหลด installer ที่ตรวจ SHA-256 แล้ว ไม่ติดตั้งระหว่าง Live/Countdown/Recording จากนั้นปิดโปรแกรม อัปเดตแบบ silent และเปิด WheelAthlete กลับอัตโนมัติ ส่วน source/portable build จะไม่เขียนทับตัวเอง
 
-`.github/workflows/release.yml` à¹€à¸›à¹‡à¸™à¸•à¸±à¸§ build Android + Windows à¹à¸¥à¸°à¸ªà¸£à¹‰à¸²à¸‡ `latest.json` à¸ˆà¸²à¸ binary à¸ˆà¸£à¸´à¸‡ à¸£à¸¸à¹ˆà¸™ production à¹à¸£à¸à¸—à¸µà¹ˆà¸¡à¸µ updater à¸•à¹‰à¸­à¸‡à¸•à¸´à¸”à¸•à¸±à¹‰à¸‡à¸”à¹‰à¸§à¸¢à¸•à¸™à¹€à¸­à¸‡à¸«à¸™à¸¶à¹ˆà¸‡à¸„à¸£à¸±à¹‰à¸‡à¸ªà¸³à¸«à¸£à¸±à¸šà¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸—à¸µà¹ˆà¸¢à¸±à¸‡à¹ƒà¸Šà¹‰à¸£à¸¸à¹ˆà¸™à¹€à¸à¹ˆà¸²à¸‹à¸¶à¹ˆà¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸£à¸°à¸šà¸š updater à¸£à¸²à¸¢à¸¥à¸°à¹€à¸­à¸µà¸¢à¸” signing à¹à¸¥à¸° release à¸­à¸¢à¸¹à¹ˆà¸—à¸µà¹ˆ `release/README.md`
+`.github/workflows/release.yml` เป็นตัว build Android + Windows และสร้าง `latest.json` จาก binary จริง รุ่น production แรกที่มี updater ต้องติดตั้งด้วยตนเองหนึ่งครั้งสำหรับเครื่องที่ยังใช้รุ่นเก่าซึ่งไม่มีระบบ updater รายละเอียด signing และ release อยู่ที่ `release/README.md`

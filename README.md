@@ -9,14 +9,14 @@ WheelAthlete synchronizes left- and right-wheel inertial sensors, records resear
 > **Firmware:** `1.8.0`
 > **BLE protocol:** `1.8.0`
 > **Windows package:** `1.8.0`
-> **Language:** English | [à¹„à¸—à¸¢](README.th.md)
+> **Language:** English | [ไทย](README.th.md)
 
 ## Product architecture
 
 WheelAthlete is organized into two top-level product domains:
 
-1. **Applications** â€” operator-facing software.
-2. **Hardware & Firmware** â€” embedded sensor firmware.
+1. **Applications** — operator-facing software.
+2. **Hardware & Firmware** — embedded sensor firmware.
 
 There are two maintained operator applications. Use only one operator application with a given left/right sensor pair at a time.
 
@@ -33,34 +33,34 @@ The retired Flutter Windows target, Flutter Web scaffold, and legacy Tkinter des
 
 ```text
 WheelAthelse/
-â”œâ”€â”€ applications/
-â”‚   â”œâ”€â”€ wheelathlete_mobile/              # Flutter â€” iOS / Android
-â”‚   â”‚   â”œâ”€â”€ android/
-â”‚   â”‚   â”œâ”€â”€ ios/
-â”‚   â”‚   â”œâ”€â”€ lib/
-â”‚   â”‚   â”œâ”€â”€ test/
-â”‚   â”‚   â””â”€â”€ pubspec.yaml
-â”‚   â”‚
-â”‚   â””â”€â”€ wheelathlete_windows/             # Python / PySide6 â€” Windows
-â”‚       â”œâ”€â”€ tools/
-â”‚       â”‚   â”œâ”€â”€ pc_acquisition/           # Authoritative BLE acquisition daemon
-â”‚       â”‚   â””â”€â”€ pc_gui/                   # Operator UI + optional MODEL adapter
-â”‚       â”œâ”€â”€ packaging/
-â”‚       â”‚   â””â”€â”€ windows/                  # PyInstaller + Inno Setup
-â”‚       â”œâ”€â”€ run_wheelathlete_windows.bat
-â”‚       â”œâ”€â”€ build/                        # Generated, ignored
-â”‚       â””â”€â”€ release/                      # Generated, ignored
-â”‚
-â”œâ”€â”€ hardware_firmware/
-â”‚   â”œâ”€â”€ m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
-â”‚   â””â”€â”€ xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
-â”‚
-â”œâ”€â”€ assets/                               # Product icons and shared assets
-â”œâ”€â”€ docs/                                 # BLE specification, testing, protocols, wiki
-â”œâ”€â”€ .project/                             # Canonical engineering/project state
-â”œâ”€â”€ VERSION                               # Coordinated semantic release version
-â”œâ”€â”€ README.md
-â””â”€â”€ README.th.md
+├── applications/
+│   ├── wheelathlete_mobile/              # Flutter — iOS / Android
+│   │   ├── android/
+│   │   ├── ios/
+│   │   ├── lib/
+│   │   ├── test/
+│   │   └── pubspec.yaml
+│   │
+│   └── wheelathlete_windows/             # Python / PySide6 — Windows
+│       ├── tools/
+│       │   ├── pc_acquisition/           # Authoritative BLE acquisition daemon
+│       │   └── pc_gui/                   # Operator UI + optional MODEL adapter
+│       ├── packaging/
+│       │   └── windows/                  # PyInstaller + Inno Setup
+│       ├── run_wheelathlete_windows.bat
+│       ├── build/                        # Generated, ignored
+│       └── release/                      # Generated, ignored
+│
+├── hardware_firmware/
+│   ├── m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
+│   └── xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
+│
+├── assets/                               # Product icons and shared assets
+├── docs/                                 # BLE specification, testing, protocols, wiki
+├── .project/                             # Canonical engineering/project state
+├── VERSION                               # Coordinated semantic release version
+├── README.md
+└── README.th.md
 ```
 
 Generated build output, PlatformIO `.pio/`, Flutter generated files, Python caches, and collected research sessions are intentionally excluded from Git.
@@ -137,7 +137,7 @@ Release builds:
 flutter build apk --release
 flutter build appbundle --release
 
-# iOS â€” requires macOS + Xcode
+# iOS — requires macOS + Xcode
 flutter build ios --release
 ```
 
@@ -154,11 +154,11 @@ The GUI is intentionally not the authoritative raw-data path. A slow chart, mode
 
 Current operator sections:
 
-- **Dashboard** â€” board connection and system overview;
-- **Acquisition** â€” synchronized preview and recording controls;
-- **Results** â€” finalized sessions, QC, metadata editing, export, and delete;
-- **MODEL** â€” optional offline trajectory reconstruction;
-- **Diagnostics** â€” acquisition and integrity information.
+- **Dashboard** — board connection and system overview;
+- **Acquisition** — synchronized preview and recording controls;
+- **Results** — finalized sessions, QC, metadata editing, export, and delete;
+- **MODEL** — optional offline trajectory reconstruction;
+- **Diagnostics** — acquisition and integrity information.
 
 Run from source:
 
@@ -243,8 +243,8 @@ Generated output:
 
 ```text
 applications/wheelathlete_windows/release/
-â”œâ”€â”€ WheelAthlete-1.8.0-portable.zip
-â””â”€â”€ WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.0-portable.zip
+└── WheelAthleteSetup-1.8.0.exe
 ```
 
 The installer and portable package bundle `WheelAthleteDaemon.exe`. Packaging details are documented in [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md).
@@ -345,8 +345,8 @@ The root [`VERSION`](VERSION) file is the coordinated product version used by Wi
 
 ## Engineering documentation
 
-- [`docs/`](docs/) â€” protocol, field workflow, test plans, and wiki documentation
-- [`.project/`](.project/) â€” current architecture, progress, engineering decisions, and project state
+- [`docs/`](docs/) — protocol, field workflow, test plans, and wiki documentation
+- [`.project/`](.project/) — current architecture, progress, engineering decisions, and project state
 
 ## License
 
