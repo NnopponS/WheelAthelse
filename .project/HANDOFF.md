@@ -35,3 +35,7 @@ The current mobile model cannot acquire chair yaw merely through a display or sc
 ## Housekeeping and recovery
 
 Use one STATUS and one HANDOFF, and one conclusion per phase. Keep temporary work under `.project/local/`. The old trackers, duplicated final reports, prior evidence and scripts were moved to `.project/local/legacy/`; their byte hashes and a verified ZIP are retained. They are historical evidence, not active instructions. Nothing in the original staged research tree was discarded.
+
+## Published implementation
+
+The source implementation was committed as `266b6929c917` and its normal push to the named feature branch was verified. The branch may additionally contain this documentation-only receipt. Main/release references and the separate research index are unchanged. Hosted source verification was running at the source-push check; do not treat that as a CI pass. Detailed local command/remote evidence is in `local/branch-handoff-2026-09-08/publication.json`.

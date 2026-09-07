@@ -93,5 +93,15 @@
     "independent motion-reference data and P3 model selection",
     "accepted classical model port to mobile",
     "installed-device and athlete/coach acceptance"
-  ]
+  ],
+  "publication": {
+    "repository": "NnopponS/WheelAthelse",
+    "branch": "feature/dual-imu-coaching-analysis",
+    "source_commit": "266b6929c91760985c4a9b29cec6928495b13d8e",
+    "remote_source_commit_verified": true,
+    "main_and_release_refs_unchanged": true,
+    "source_workflow_started": true,
+    "hosted_ci_at_source_push": "in_progress",
+    "note": "Current branch tip may include documentation-only handoff commits. The local receipt records the final remote SHA. Hosted CI is not represented as passed."
+  }
 }

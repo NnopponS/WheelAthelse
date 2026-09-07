@@ -27,7 +27,7 @@ Fresh source verification after organization and hardening passed **148 Windows 
 
 This branch additionally rejects mixed mobile timestamp domains and hidden sequence gaps, aligns Python metadata validation with Dart, and moves long mobile export serialization/hashing off the UI isolate. The 8,000-point export regression retains the complete CSV and correct selected-window metadata.
 
-The branch is ready for the explicitly requested normal push. The final remote SHA/ref checks and any GitHub Actions state are recorded in the local publication receipt; source tests alone do not imply hosted CI completion.
+The implementation was committed as `266b6929c917` and pushed to `feature/dual-imu-coaching-analysis`. The remote source commit was verified against the local commit; main and release references were unchanged. The source-verification workflow started on GitHub. Hosted CI completion is separate from the passing local checks; consult its latest run rather than inferring success. The local publication receipt records the final branch tip and observed CI status.
 
 Eleven shared analytical cases are public fixtures, not athlete ground truth. The previous read-only smoke prepared 56 journals; one journal received full inference/export. This is not 56 accuracy trials.
 
