@@ -8,8 +8,10 @@
     "biwheel3d/infer_eval.py",
     "biwheel3d/schema.py",
     "biwheel3d/yaw_ab.py",
-    "results/xy_yaw/current_best/summary.json",
     "LICENSE"
   ],
-  "integration_note": "Imports were made package-relative. pause_segments.py was absent from the source snapshot, so WheelAthlete supplies the documented >=1 s quiet-pause helper required by yaw_ab.shift_heading_bursts()."
+  "derived_runtime_files": [
+    "BiWheel3D-XY-Yaw-current_best.json"
+  ],
+  "integration_note": "Imports were made package-relative. The compact current_best recipe retains only runtime calibration values from the original evaluation summary; per-trial evaluation data is intentionally not bundled. pause_segments.py is the documented >=1 s quiet-pause helper required by yaw_ab.shift_heading_bursts()."
 }

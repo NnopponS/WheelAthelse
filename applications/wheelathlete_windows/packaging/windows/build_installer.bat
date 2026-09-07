@@ -32,10 +32,11 @@ python -m PyInstaller --noconfirm --clean --windowed ^
   --name WheelAthlete ^
   --icon "%REPO_ROOT%\assets\wheelathlete-logo.ico" ^
   --add-data "%REPO_ROOT%\VERSION;." ^
-  --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\current_best_summary.json;tools\pc_gui\biwheel3d_runtime" ^
+  --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BiWheel3D-XY-Yaw-current_best.json;tools\pc_gui\biwheel3d_runtime" ^
   --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\SOURCE.json;tools\pc_gui\biwheel3d_runtime" ^
   --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BIWHEEL3D_LICENSE.txt;tools\pc_gui\biwheel3d_runtime" ^
   --collect-submodules tools.pc_gui.biwheel3d_runtime ^
+  --collect-all onnxruntime ^
   --exclude-module torch --exclude-module torchvision --exclude-module torchaudio ^
   --exclude-module tensorflow --exclude-module keras --exclude-module matplotlib ^
   --exclude-module scipy --exclude-module yaml ^
@@ -59,6 +60,18 @@ if errorlevel 1 exit /b 1
 copy /y "%OUT_DIR%\WheelAthleteDaemon.exe" "%OUT_DIR%\WheelAthlete\_internal\WheelAthleteDaemon.exe" >nul
 if errorlevel 1 exit /b 1
 copy /y "tools\pc_gui\README.md" "%OUT_DIR%\WheelAthlete\README.txt" >nul
+
+if not exist "%REPO_ROOT%\applications\wheelathlete_mobile\assets\models\wheelathlete_biwheel3d_m4.onnx" (
+  echo ERROR: Bundled BiWheel3D ONNX model was not found.
+  exit /b 1
+)
+if not exist "%OUT_DIR%\WheelAthlete\Model" mkdir "%OUT_DIR%\WheelAthlete\Model"
+copy /y "%REPO_ROOT%\applications\wheelathlete_mobile\assets\models\wheelathlete_biwheel3d_m4.onnx" "%OUT_DIR%\WheelAthlete\Model\wheelathlete_biwheel3d_m4.onnx" >nul
+if errorlevel 1 exit /b 1
+copy /y "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BiWheel3D-XY-Yaw-current_best.json" "%OUT_DIR%\WheelAthlete\Model\BiWheel3D-XY-Yaw-current_best.json" >nul
+if errorlevel 1 exit /b 1
+copy /y "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BIWHEEL3D_LICENSE.txt" "%OUT_DIR%\WheelAthlete\Model\BIWHEEL3D_LICENSE.txt" >nul
+if errorlevel 1 exit /b 1
 
 powershell -NoProfile -Command "Compress-Archive -Path '%OUT_DIR%\WheelAthlete' -DestinationPath '%OUT_DIR%\WheelAthlete-%APP_VERSION%-portable.zip' -Force"
 if errorlevel 1 exit /b 1
@@ -85,5 +98,5 @@ echo Windows artifacts created under %WINDOWS_APP_ROOT%\release:
 echo   %OUT_DIR%\WheelAthlete-%APP_VERSION%-portable.zip
 echo   %OUT_DIR%\WheelAthleteSetup-%APP_VERSION%.exe
 echo.
-echo The installer and portable package both bundle WheelAthleteDaemon.exe.
+echo The installer and portable package bundle WheelAthleteDaemon.exe and the default Model library.
 endlocal

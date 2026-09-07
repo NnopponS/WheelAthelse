@@ -6,6 +6,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault(
+    "WHEELATHLETE_MODEL_DIR",
+    str(Path(__file__).resolve().parent / "_empty_model_library"),
+)
 
 from tools.pc_gui.controller import DemoController
 from tools.pc_gui.main_window import MainWindow
@@ -31,19 +35,19 @@ def _close(controller: DemoController, window: MainWindow) -> None:
     _APP.processEvents()
 
 
-def _sample_result() -> dict:
+def _sample_result(*, net_yaw_deg: float | None = 12.5) -> dict:
     return {
         "session_id": "demo_sprint_01",
         "topic": "Sprint",
         "trial_number": 1,
-        "model_label": "TCN + BiLSTM M4 — validated",
+        "model_label": "BiWheel3D test model",
         "xy": [(0.0, 0.0), (0.5, 0.1), (1.0, 0.4), (1.4, 0.8)],
         "point_count": 4,
         "path_length_m": 1.72,
         "endpoint_m": 1.61,
-        "net_yaw_deg": 12.5,
-        "yaw_source": "chassis",
-        "yaw_delay_frames": 27,
+        "net_yaw_deg": net_yaw_deg,
+        "yaw_source": "chassis" if net_yaw_deg is not None else "XY output only",
+        "yaw_delay_frames": 27 if net_yaw_deg is not None else 0,
         "preprocess": {
             "aligned_samples": 20,
             "model_steps": 4,
@@ -74,7 +78,8 @@ def test_results_selection_can_be_opened_in_model_page():
     assert str(window.model.session_combo.currentData()) == session_id
     assert window.model.model_combo.count() >= 1
     assert window.model.chart_view.accessibleName() == "trajectoryChart"
-    assert not window.model.browse_model_button.isVisible()
+    assert window.model.browse_model_button.isVisible()
+    assert window.model.browse_model_button.isEnabled()
 
     _close(controller, window)
 
@@ -111,19 +116,22 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     y_units_per_px = y_span / plot.height()
     assert x_units_per_px == pytest.approx(y_units_per_px, rel=0.01)
 
+    model._on_analysis_ready(_sample_result(net_yaw_deg=None))
+    assert model.metric_yaw.text() == "—"
+
     _close(controller, window)
 
 
-
-def test_model_page_uses_current_best_and_hides_legacy_checkpoint_browser():
+def test_model_page_uses_current_best_and_exposes_model_browser():
     controller, window = _window()
     model = window.model
     _APP.processEvents()
 
     assert model.model_combo.count() == 1
     assert "XY + Yaw" in model.model_combo.currentText()
-    assert "current_best_summary.json" in model.model_detail.text()
-    assert "external checkout required" in model.runtime_label.text()
-    assert not model.browse_model_button.isVisible()
+    assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
+    assert "recipe ready" in model.runtime_label.text()
+    assert not model.browse_model_button.isHidden()
+    assert "ONNX" in model.browse_model_button.toolTip()
 
     _close(controller, window)

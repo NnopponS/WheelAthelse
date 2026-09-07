@@ -73,7 +73,9 @@ from .model_inference import (
     ModelSpec,
     custom_model_spec,
     discover_compatible_models,
+    model_library_root,
     model_runtime_status,
+    model_spec_runtime_status,
     run_session_model,
 )
 from .state import AppViewState
@@ -2500,7 +2502,7 @@ class ModelPage(QWidget):
         root.addLayout(
             _page_header(
                 "MODEL",
-                "Choose a finalized recording and run the current BiWheel3D XY + Yaw estimator locally. No PyTorch checkpoint or model server is required.",
+                "Choose a finalized recording and a local BiWheel3D model. Browse your Model folder or add another compatible ONNX/recipe file.",
             )
         )
 
@@ -2510,7 +2512,7 @@ class ModelPage(QWidget):
         controls_layout.setHorizontalSpacing(12)
         controls_layout.setVerticalSpacing(8)
 
-        model_label = QLabel("Trajectory method")
+        model_label = QLabel("Model")
         model_label.setObjectName("cardTitle")
         self.model_combo = QComboBox()
         self.model_combo.setObjectName("modelCheckpointCombo")
@@ -2526,8 +2528,7 @@ class ModelPage(QWidget):
 
         self.browse_model_button = _button("Browse model…", "browseModelCheckpointButton")
         self.browse_model_button.setAccessibleName("browseModelCheckpointButton")
-        self.browse_model_button.setToolTip("Legacy checkpoint browsing is hidden because current BiWheel3D no longer ships the TCN + BiLSTM stack")
-        self.browse_model_button.hide()
+        self.browse_model_button.setToolTip("Browse a BiWheel3D ONNX model or XY + Yaw recipe JSON")
         self.refresh_models_button = _button("Refresh models", "refreshModelListButton")
         self.generate_button = _button("Generate 2D trajectory", "generateTrajectoryButton", primary=True)
         self.generate_button.setAccessibleName("generateTrajectoryButton")
@@ -2562,7 +2563,7 @@ class ModelPage(QWidget):
         self.metric_points = QLabel("—")
         self.metric_path = QLabel("—")
         self.metric_endpoint = QLabel("—")
-        self.metric_yaw = QLabel("-")
+        self.metric_yaw = QLabel("—")
         metric_items = [
             ("Model", self.metric_model),
             ("Recording", self.metric_session),
@@ -2623,7 +2624,7 @@ class ModelPage(QWidget):
         style_chart_surface(self.chart, self.chart_view)
         trajectory_layout.addWidget(self.chart_view, 1)
 
-        self.status_label = QLabel("BiWheel3D current_best runs locally on finalized data. Results are previews and do not modify recorded evidence.")
+        self.status_label = QLabel("Models run locally on finalized data. Results are previews and do not modify recorded evidence.")
         self.status_label.setObjectName("mutedText")
         self.status_label.setWordWrap(True)
         trajectory_layout.addWidget(self.status_label)
@@ -2646,7 +2647,7 @@ class ModelPage(QWidget):
         if isinstance(current, ModelSpec):
             current_key = current.key
         default_models = discover_compatible_models(self.repo_root)
-        if isinstance(current, ModelSpec) and current.key.startswith("custom:"):
+        if isinstance(current, ModelSpec):
             if all(spec.checkpoint != current.checkpoint for spec in default_models):
                 default_models.append(current)
         self._models = default_models
@@ -2662,9 +2663,8 @@ class ModelPage(QWidget):
                     break
         self.model_combo.blockSignals(False)
         ready, detail = model_runtime_status(self.repo_root)
-        self.runtime_label.setText(("Ready · " if ready else "Unavailable · ") + detail)
-        has_model = isinstance(self.model_combo.currentData(), ModelSpec)
-        self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0)
+        if not ready:
+            self.runtime_label.setText("Unavailable · " + detail)
         self._update_model_detail()
 
     def update_sessions(self, sessions: list[dict[str, Any]]) -> None:
@@ -2686,9 +2686,11 @@ class ModelPage(QWidget):
         if current_id:
             self.select_session(current_id)
         self.session_combo.blockSignals(False)
-        ready, _ = model_runtime_status(self.repo_root)
-        has_model = isinstance(self.model_combo.currentData(), ModelSpec)
-        self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0 and not self._running)
+        spec = self.model_combo.currentData()
+        ready = False
+        if isinstance(spec, ModelSpec):
+            ready, _ = model_spec_runtime_status(spec)
+        self.generate_button.setEnabled(ready and self.session_combo.count() > 0 and not self._running)
 
     def select_session(self, session_id: str) -> bool:
         for index in range(self.session_combo.count()):
@@ -2700,31 +2702,38 @@ class ModelPage(QWidget):
     def _update_model_detail(self) -> None:
         spec = self.model_combo.currentData()
         if isinstance(spec, ModelSpec):
-            checkpoint_text = str(spec.checkpoint) if spec.key.startswith("custom:") else spec.checkpoint.name
-            self.model_detail.setText(f"{spec.description}  ·  {checkpoint_text}")
+            self.model_detail.setText(f"{spec.description}  ·  {spec.checkpoint}")
+            ready, detail = model_spec_runtime_status(spec)
+            self.runtime_label.setText(("Ready · " if ready else "Unavailable · ") + detail)
+            self.generate_button.setEnabled(
+                ready and self.session_combo.count() > 0 and not self._running
+            )
         else:
-            self.model_detail.setText("No model selected. Choose a discovered model or Browse model…")
+            self.model_detail.setText(
+                f"No compatible model selected. Browse a .onnx or recipe .json file. Model folder: {model_library_root()}"
+            )
+            self.runtime_label.setText(f"Model folder · {model_library_root()}")
+            self.generate_button.setEnabled(False)
 
     def browse_model(self) -> None:
         current = self.model_combo.currentData()
-        if isinstance(current, ModelSpec):
+        if isinstance(current, ModelSpec) and current.checkpoint.is_file():
             initial_dir = str(current.checkpoint.parent)
         else:
-            initial_dir = str(self.repo_root / "BiWheel3D" / "checkpoints")
+            initial_dir = str(model_library_root())
         chosen, _filter = QFileDialog.getOpenFileName(
             self,
-            "Select BiWheel3D model checkpoint",
+            "Select BiWheel3D model",
             initial_dir,
-            "PyTorch checkpoints (*.pt *.pth);;All files (*.*)",
+            "BiWheel3D models (*.onnx *.json);;ONNX models (*.onnx);;Recipe JSON (*.json);;All files (*.*)",
         )
         if not chosen:
             return
         path = Path(chosen).expanduser().resolve()
-        if path.suffix.lower() not in {".pt", ".pth"}:
-            self.status_label.setText("MODEL error · Choose a PyTorch .pt or .pth checkpoint.")
-            return
-        if not path.is_file():
-            self.status_label.setText(f"MODEL error · Model checkpoint not found: {path}")
+        try:
+            spec = custom_model_spec(path)
+        except Exception as exc:
+            self.status_label.setText(f"MODEL error · {exc}")
             return
 
         for index in range(self.model_combo.count()):
@@ -2734,15 +2743,13 @@ class ModelPage(QWidget):
                 self._update_model_detail()
                 return
 
-        spec = custom_model_spec(path)
         self._models.append(spec)
         self.model_combo.addItem(spec.label, spec)
         self.model_combo.setCurrentIndex(self.model_combo.count() - 1)
         self.status_label.setText(
-            "Custom checkpoint selected. Compatibility and normalization will be validated when Generate is pressed."
+            f"Selected {spec.label}. Compatibility is validated locally before inference."
         )
-        ready, _ = model_runtime_status(self.repo_root)
-        self.generate_button.setEnabled(ready and self.session_combo.count() > 0 and not self._running)
+        self._update_model_detail()
 
     def generate_trajectory(self) -> None:
         if self._running:
@@ -2779,9 +2786,11 @@ class ModelPage(QWidget):
             self.generate_button.setEnabled(False)
             self.generate_button.setText("Generating…")
         else:
-            ready, _ = model_runtime_status(self.repo_root)
-            has_model = isinstance(self.model_combo.currentData(), ModelSpec)
-            self.generate_button.setEnabled(ready and has_model and self.session_combo.count() > 0)
+            spec = self.model_combo.currentData()
+            ready = False
+            if isinstance(spec, ModelSpec):
+                ready, _ = model_spec_runtime_status(spec)
+            self.generate_button.setEnabled(ready and self.session_combo.count() > 0)
             self.generate_button.setText("Generate 2D trajectory")
 
     def _on_analysis_failed(self, message: str) -> None:
@@ -2858,7 +2867,8 @@ class ModelPage(QWidget):
         self.metric_points.setText(f"{int(result.get('point_count') or 0):,}")
         self.metric_path.setText(f"{float(result.get('path_length_m') or 0.0):.2f} m")
         self.metric_endpoint.setText(f"{float(result.get('endpoint_m') or 0.0):.2f} m")
-        self.metric_yaw.setText(f"{float(result.get('net_yaw_deg') or 0.0):.1f} deg")
+        net_yaw = result.get("net_yaw_deg")
+        self.metric_yaw.setText("—" if net_yaw is None else f"{float(net_yaw):.1f} deg")
         self._apply_equal_aspect_ranges()
         QTimer.singleShot(0, self._apply_equal_aspect_ranges)
 

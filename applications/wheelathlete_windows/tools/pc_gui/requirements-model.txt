@@ -1,3 +1,5 @@
-# Current BiWheel3D XY + Yaw runtime for the experimental MODEL page.
-# The old TCN + BiLSTM / PyTorch stack was removed from the updated BiWheel3D tree.
+# Optional local trajectory-model dependencies for the Windows MODEL page.
+# NumPy powers the bundled BiWheel3D XY + Yaw recipe; ONNX Runtime enables
+# user-browsed / installer-seeded BiWheel3D learned models without PyTorch.
 numpy>=1.24
+onnxruntime>=1.18
