@@ -2536,9 +2536,11 @@ class ModelPage(QWidget):
         self.model_detail = QLabel("")
         self.model_detail.setObjectName("mutedText")
         self.model_detail.setWordWrap(True)
+        self.model_detail.hide()
         self.runtime_label = QLabel("")
         self.runtime_label.setObjectName("mutedText")
         self.runtime_label.setWordWrap(True)
+        self.runtime_label.hide()
 
         controls_layout.addWidget(model_label, 0, 0)
         controls_layout.addWidget(self.model_combo, 1, 0)
@@ -2547,8 +2549,6 @@ class ModelPage(QWidget):
         controls_layout.addWidget(self.session_combo, 1, 2)
         controls_layout.addWidget(self.refresh_models_button, 1, 3)
         controls_layout.addWidget(self.generate_button, 1, 4)
-        controls_layout.addWidget(self.model_detail, 2, 0, 1, 3)
-        controls_layout.addWidget(self.runtime_label, 2, 3, 1, 2)
         controls_layout.setColumnStretch(0, 2)
         controls_layout.setColumnStretch(2, 2)
         root.addWidget(controls)
@@ -2705,6 +2705,10 @@ class ModelPage(QWidget):
             self.model_detail.setText(f"{spec.description}  ·  {spec.checkpoint}")
             ready, detail = model_spec_runtime_status(spec)
             self.runtime_label.setText(("Ready · " if ready else "Unavailable · ") + detail)
+            self.model_combo.setToolTip(
+                f"{spec.description}\n{spec.checkpoint}\n"
+                + (("Ready · " if ready else "Unavailable · ") + detail)
+            )
             self.generate_button.setEnabled(
                 ready and self.session_combo.count() > 0 and not self._running
             )
@@ -2713,6 +2717,7 @@ class ModelPage(QWidget):
                 f"No compatible model selected. Browse a .onnx or recipe .json file. Model folder: {model_library_root()}"
             )
             self.runtime_label.setText(f"Model folder · {model_library_root()}")
+            self.model_combo.setToolTip(f"Model folder: {model_library_root()}")
             self.generate_button.setEnabled(False)
 
     def browse_model(self) -> None:
@@ -2760,15 +2765,17 @@ class ModelPage(QWidget):
             self.status_label.setText("Choose both a recording and a compatible model first.")
             return
 
+        recording_label = self.session_combo.currentText().strip() or session_id
         self._set_running(True)
         self.status_label.setText(
-            f"Running {spec.label} on {session_id}… This is offline analysis; recording is unaffected."
+            f"Running {spec.label} on {recording_label}… This is offline analysis; recording is unaffected."
         )
 
         def work() -> None:
             try:
                 session_data = self.controller.load_session_data(session_id)
                 result = run_session_model(self.repo_root, spec, session_data)
+                result["recording_label"] = recording_label
             except Exception as exc:  # worker boundary: surface a readable UI error
                 self.analysis_failed.emit(str(exc))
                 return
@@ -2861,9 +2868,17 @@ class ModelPage(QWidget):
         session_id = str(result.get("session_id") or "")
         topic = str(result.get("topic") or "Recording")
         trial = result.get("trial_number", "")
+        recording_label = str(result.get("recording_label") or "").strip()
+        if not recording_label and session_id == str(self.session_combo.currentData() or ""):
+            recording_label = self.session_combo.currentText().strip()
+        if not recording_label:
+            athlete = str(result.get("athlete") or "").strip()
+            recording_label = " · ".join(
+                part for part in (topic, f"Trial {trial}", athlete) if part
+            )
         self.chart.setTitle(f"{topic} · Trial {trial} · {model_label}")
         self.metric_model.setText(model_label)
-        self.metric_session.setText(session_id or "—")
+        self.metric_session.setText(recording_label or "—")
         self.metric_points.setText(f"{int(result.get('point_count') or 0):,}")
         self.metric_path.setText(f"{float(result.get('path_length_m') or 0.0):.2f} m")
         self.metric_endpoint.setText(f"{float(result.get('endpoint_m') or 0.0):.2f} m")

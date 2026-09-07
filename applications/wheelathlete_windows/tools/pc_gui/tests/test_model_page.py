@@ -40,6 +40,7 @@ def _sample_result(*, net_yaw_deg: float | None = 12.5) -> dict:
         "session_id": "demo_sprint_01",
         "topic": "Sprint",
         "trial_number": 1,
+        "recording_label": "Sprint · Trial 1 · Test Athlete · GOOD",
         "model_label": "BiWheel3D test model",
         "xy": [(0.0, 0.0), (0.5, 0.1), (1.0, 0.4), (1.4, 0.8)],
         "point_count": 4,
@@ -101,6 +102,7 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert model.metric_path.text() == "1.72 m"
     assert model.metric_endpoint.text() == "1.61 m"
     assert model.metric_yaw.text() == "12.5 deg"
+    assert model.metric_session.text() == "Sprint · Trial 1 · Test Athlete · GOOD"
     assert "Sprint" in model.chart.title()
     assert "native 100 Hz" in model.status_label.text()
     assert "Yaw: chassis, delay 27 frame(s)." in model.status_label.text()
@@ -131,6 +133,8 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     assert "XY + Yaw" in model.model_combo.currentText()
     assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
     assert "recipe ready" in model.runtime_label.text()
+    assert model.model_detail.isHidden()
+    assert model.runtime_label.isHidden()
     assert not model.browse_model_button.isHidden()
     assert "ONNX" in model.browse_model_button.toolTip()
 
