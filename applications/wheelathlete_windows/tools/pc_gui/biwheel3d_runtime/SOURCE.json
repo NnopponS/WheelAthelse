@@ -1,0 +1,15 @@
+{
+  "source_repository": "BiWheel3D friend working tree",
+  "source_commit": "5fbf9eedc89465e9c86191a0309c6ae8d4112635",
+  "source_version": "0.3.0",
+  "snapshot_date": "2026-09-07",
+  "copied_files": [
+    "biwheel3d/imu_frame.py",
+    "biwheel3d/infer_eval.py",
+    "biwheel3d/schema.py",
+    "biwheel3d/yaw_ab.py",
+    "results/xy_yaw/current_best/summary.json",
+    "LICENSE"
+  ],
+  "integration_note": "Imports were made package-relative. pause_segments.py was absent from the source snapshot, so WheelAthlete supplies the documented >=1 s quiet-pause helper required by yaw_ab.shift_heading_bursts()."
+}

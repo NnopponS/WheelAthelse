@@ -1,6 +1,3 @@
-# Optional dependencies for the experimental MODEL page.
-# Kept separate so the reliable acquisition app does not auto-install PyTorch.
+# Current BiWheel3D XY + Yaw runtime for the experimental MODEL page.
+# The old TCN + BiLSTM / PyTorch stack was removed from the updated BiWheel3D tree.
 numpy>=1.24
-scipy>=1.10
-torch>=2.0
-pyyaml>=6.0

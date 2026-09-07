@@ -2500,7 +2500,7 @@ class ModelPage(QWidget):
         root.addLayout(
             _page_header(
                 "MODEL",
-                "Choose a finalized recording and a compatible BiWheel3D checkpoint, then generate an offline 2D trajectory without touching the acquisition path.",
+                "Choose a finalized recording and run the current BiWheel3D XY + Yaw estimator locally. No PyTorch checkpoint or model server is required.",
             )
         )
 
@@ -2510,7 +2510,7 @@ class ModelPage(QWidget):
         controls_layout.setHorizontalSpacing(12)
         controls_layout.setVerticalSpacing(8)
 
-        model_label = QLabel("Model")
+        model_label = QLabel("Trajectory method")
         model_label.setObjectName("cardTitle")
         self.model_combo = QComboBox()
         self.model_combo.setObjectName("modelCheckpointCombo")
@@ -2526,7 +2526,8 @@ class ModelPage(QWidget):
 
         self.browse_model_button = _button("Browse model…", "browseModelCheckpointButton")
         self.browse_model_button.setAccessibleName("browseModelCheckpointButton")
-        self.browse_model_button.setToolTip("Choose a .pt or .pth checkpoint with Windows File Explorer")
+        self.browse_model_button.setToolTip("Legacy checkpoint browsing is hidden because current BiWheel3D no longer ships the TCN + BiLSTM stack")
+        self.browse_model_button.hide()
         self.refresh_models_button = _button("Refresh models", "refreshModelListButton")
         self.generate_button = _button("Generate 2D trajectory", "generateTrajectoryButton", primary=True)
         self.generate_button.setAccessibleName("generateTrajectoryButton")
@@ -2561,12 +2562,14 @@ class ModelPage(QWidget):
         self.metric_points = QLabel("—")
         self.metric_path = QLabel("—")
         self.metric_endpoint = QLabel("—")
+        self.metric_yaw = QLabel("-")
         metric_items = [
             ("Model", self.metric_model),
             ("Recording", self.metric_session),
             ("Model points", self.metric_points),
             ("Path length", self.metric_path),
             ("Endpoint", self.metric_endpoint),
+            ("Net yaw", self.metric_yaw),
         ]
         for column, (title, value) in enumerate(metric_items):
             title_label = QLabel(title)
@@ -2585,7 +2588,7 @@ class ModelPage(QWidget):
         self.chart.setTitle("Select a recording and generate a trajectory")
         self.chart.legend().setVisible(True)
         self.trajectory_series = QLineSeries()
-        self.trajectory_series.setName("Predicted path")
+        self.trajectory_series.setName("Estimated path")
         self.trajectory_series.setPen(QPen(QColor("#0f766e"), 2.4))
         self.start_series = QScatterSeries()
         self.start_series.setName("Start")
@@ -2620,7 +2623,7 @@ class ModelPage(QWidget):
         style_chart_surface(self.chart, self.chart_view)
         trajectory_layout.addWidget(self.chart_view, 1)
 
-        self.status_label = QLabel("MODEL is experimental. Results are previews and do not modify recorded evidence.")
+        self.status_label = QLabel("BiWheel3D current_best runs locally on finalized data. Results are previews and do not modify recorded evidence.")
         self.status_label.setObjectName("mutedText")
         self.status_label.setWordWrap(True)
         trajectory_layout.addWidget(self.status_label)
@@ -2855,6 +2858,7 @@ class ModelPage(QWidget):
         self.metric_points.setText(f"{int(result.get('point_count') or 0):,}")
         self.metric_path.setText(f"{float(result.get('path_length_m') or 0.0):.2f} m")
         self.metric_endpoint.setText(f"{float(result.get('endpoint_m') or 0.0):.2f} m")
+        self.metric_yaw.setText(f"{float(result.get('net_yaw_deg') or 0.0):.1f} deg")
         self._apply_equal_aspect_ranges()
         QTimer.singleShot(0, self._apply_equal_aspect_ranges)
 
@@ -2862,8 +2866,11 @@ class ModelPage(QWidget):
         warnings = list(preprocess.get("warnings") or [])
         detail = (
             f"{int(preprocess.get('aligned_samples') or 0):,} aligned IMU samples → "
-            f"{int(preprocess.get('model_steps') or 0):,} model steps at 20 Hz."
+            f"{int(preprocess.get('model_steps') or 0):,} trajectory steps at 20 Hz."
         )
+        yaw_source = str(result.get("yaw_source") or "unknown")
+        yaw_delay = int(result.get("yaw_delay_frames") or 0)
+        detail += f"  Yaw: {yaw_source}, delay {yaw_delay} frame(s)."
         if warnings:
             detail += "  Warning: " + " ".join(str(item) for item in warnings)
         else:
@@ -3241,3 +3248,4 @@ class MainWindow(QMainWindow):
         self.update_controller.stop()
         self.controller.close()
         event.accept()
+

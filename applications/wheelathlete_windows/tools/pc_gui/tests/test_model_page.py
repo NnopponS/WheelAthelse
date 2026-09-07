@@ -41,6 +41,9 @@ def _sample_result() -> dict:
         "point_count": 4,
         "path_length_m": 1.72,
         "endpoint_m": 1.61,
+        "net_yaw_deg": 12.5,
+        "yaw_source": "chassis",
+        "yaw_delay_frames": 27,
         "preprocess": {
             "aligned_samples": 20,
             "model_steps": 4,
@@ -69,13 +72,9 @@ def test_results_selection_can_be_opened_in_model_page():
     assert window.nav.currentRow() == 3
     assert window.stack.currentWidget() is window.model
     assert str(window.model.session_combo.currentData()) == session_id
-    repo_root = Path(__file__).resolve().parents[5]
-    if (repo_root / 'BiWheel3D').exists():
-        assert window.model.model_combo.count() >= 1
-    else:
-        assert window.model.model_combo.count() == 0
+    assert window.model.model_combo.count() >= 1
     assert window.model.chart_view.accessibleName() == "trajectoryChart"
-    assert window.model.browse_model_button.accessibleName() == "browseModelCheckpointButton"
+    assert not window.model.browse_model_button.isVisible()
 
     _close(controller, window)
 
@@ -96,8 +95,10 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert model.metric_points.text() == "4"
     assert model.metric_path.text() == "1.72 m"
     assert model.metric_endpoint.text() == "1.61 m"
+    assert model.metric_yaw.text() == "12.5 deg"
     assert "Sprint" in model.chart.title()
     assert "native 100 Hz" in model.status_label.text()
+    assert "Yaw: chassis, delay 27 frame(s)." in model.status_label.text()
 
     plot = model.chart.plotArea()
     assert plot.width() > 0
@@ -113,24 +114,16 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     _close(controller, window)
 
 
-def test_model_page_browse_can_select_checkpoint_from_file_explorer(monkeypatch, tmp_path: Path):
+
+def test_model_page_uses_current_best_and_hides_legacy_checkpoint_browser():
     controller, window = _window()
     model = window.model
-    checkpoint = tmp_path / "my_experiment.pt"
-    checkpoint.write_bytes(b"not-loaded-during-browse")
-
-    monkeypatch.setattr(
-        "tools.pc_gui.main_window.QFileDialog.getOpenFileName",
-        lambda *args, **kwargs: (str(checkpoint), "PyTorch checkpoints (*.pt *.pth)"),
-    )
-
-    model.browse_model()
     _APP.processEvents()
 
-    selected = model.model_combo.currentData()
-    assert selected is not None
-    assert selected.checkpoint == checkpoint.resolve()
-    assert "my_experiment" in model.model_combo.currentText()
-    assert str(checkpoint.resolve()) in model.model_detail.text()
+    assert model.model_combo.count() == 1
+    assert "XY + Yaw" in model.model_combo.currentText()
+    assert "current_best_summary.json" in model.model_detail.text()
+    assert "external checkout required" in model.runtime_label.text()
+    assert not model.browse_model_button.isVisible()
 
     _close(controller, window)

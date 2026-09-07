@@ -21,6 +21,35 @@ def sanitize_name(name: Any) -> str:
     return cleaned or "Untitled"
 
 
+def _recorded_board_scale(
+    meta: dict[str, Any],
+    side: str,
+    key: str,
+    *,
+    live_value: float,
+    fallback: float,
+) -> float:
+    """Prefer immutable recording metadata over the currently connected board state."""
+    boards = meta.get("boards")
+    if isinstance(boards, dict):
+        board = boards.get(side)
+        if isinstance(board, dict):
+            try:
+                saved = float(board.get(key))
+            except (TypeError, ValueError):
+                saved = 0.0
+            if math.isfinite(saved) and saved > 0.0:
+                return saved
+
+    try:
+        live = float(live_value)
+    except (TypeError, ValueError):
+        live = 0.0
+    if math.isfinite(live) and live > 0.0 and live != 1.0:
+        return live
+    return float(fallback)
+
+
 def resolve_session_files(root: Path | str, session_id: str) -> tuple[Path, Path, Path]:
     """Resolve UUID-internal sessions stored under legacy or friendly paths."""
     root_path = Path(root)
@@ -424,10 +453,29 @@ class AcquisitionController(BaseController):
         samples_r: list[dict[str, float]] = []
         gap_events: list[dict[str, Any]] = []
 
-        accel_scale_l = self.state.boards["L"].accel_scale if self.state.boards["L"].accel_scale not in (1.0, 0.0) else (16.0 / 32768.0)
-        gyro_scale_l = self.state.boards["L"].gyro_scale if self.state.boards["L"].gyro_scale not in (1.0, 0.0) else (2000.0 / 32768.0)
-        accel_scale_r = self.state.boards["R"].accel_scale if self.state.boards["R"].accel_scale not in (1.0, 0.0) else (16.0 / 32768.0)
-        gyro_scale_r = self.state.boards["R"].gyro_scale if self.state.boards["R"].gyro_scale not in (1.0, 0.0) else (2000.0 / 32768.0)
+        # Results must be decoded with the scales captured with that recording.
+        # Falling back to the currently connected board can silently reinterpret old
+        # data when its configured range differs (for example XIAO +/-4 g vs +/-16 g).
+        accel_scale_l = _recorded_board_scale(
+            meta, "L", "accel_scale",
+            live_value=self.state.boards["L"].accel_scale,
+            fallback=16.0 / 32768.0,
+        )
+        gyro_scale_l = _recorded_board_scale(
+            meta, "L", "gyro_scale",
+            live_value=self.state.boards["L"].gyro_scale,
+            fallback=2000.0 / 32768.0,
+        )
+        accel_scale_r = _recorded_board_scale(
+            meta, "R", "accel_scale",
+            live_value=self.state.boards["R"].accel_scale,
+            fallback=16.0 / 32768.0,
+        )
+        gyro_scale_r = _recorded_board_scale(
+            meta, "R", "gyro_scale",
+            live_value=self.state.boards["R"].gyro_scale,
+            fallback=2000.0 / 32768.0,
+        )
 
         if journal_path.exists():
             try:

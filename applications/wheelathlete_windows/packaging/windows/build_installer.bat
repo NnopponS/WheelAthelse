@@ -32,9 +32,13 @@ python -m PyInstaller --noconfirm --clean --windowed ^
   --name WheelAthlete ^
   --icon "%REPO_ROOT%\assets\wheelathlete-logo.ico" ^
   --add-data "%REPO_ROOT%\VERSION;." ^
+  --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\current_best_summary.json;tools\pc_gui\biwheel3d_runtime" ^
+  --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\SOURCE.json;tools\pc_gui\biwheel3d_runtime" ^
+  --add-data "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BIWHEEL3D_LICENSE.txt;tools\pc_gui\biwheel3d_runtime" ^
+  --collect-submodules tools.pc_gui.biwheel3d_runtime ^
   --exclude-module torch --exclude-module torchvision --exclude-module torchaudio ^
   --exclude-module tensorflow --exclude-module keras --exclude-module matplotlib ^
-  --exclude-module numpy --exclude-module scipy --exclude-module yaml ^
+  --exclude-module scipy --exclude-module yaml ^
   --distpath "%OUT_DIR%" --workpath "%WORK_DIR%\gui" --specpath "%WORK_DIR%\gui" ^
   --paths "%WINDOWS_APP_ROOT%" ^
   tools\pc_gui\__main__.py
