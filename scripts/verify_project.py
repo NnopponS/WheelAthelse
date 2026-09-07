@@ -1,7 +1,8 @@
 """Check current engineering docs and the publication boundary without dependencies.
 
 Run from any working directory. --staged reads staged content, not working copies.
-Private archives are deliberately excluded; no file is modified by this command.
+All candidate files are checked, including unchanged committed files in CI.
+Ignored private archives are excluded; no file is modified by this command.
 """
 from __future__ import annotations
 
@@ -38,8 +39,8 @@ def publication_errors(name: str, data: bytes) -> list[str]:
     if path.suffix.lower() in BAD_SUFFIXES:
         errors.append(f'{name}: generated, research, or signing artifact must not be published')
     if len(data) > 10 * 1024 * 1024:
-        errors.append(f'{name}: new/changed files above 10 MiB require a separate artifact review')
-    if path.suffix in TEXT_SUFFIXES:
+        errors.append(f'{name}: candidate files above 10 MiB require a separate artifact review')
+    if path.suffix.lower() in TEXT_SUFFIXES:
         text = data.decode('utf-8-sig', errors='replace')
         if SECRET.search(text):
             errors.append(f'{name}: possible credential/private key')
@@ -69,8 +70,8 @@ def check(staged: bool = False) -> dict:
                 errors.append(f'{name}: use a current canonical file or a topic subdirectory')
             elif len(parts) > 2 and parts[1] not in PROJECT_DIRS:
                 errors.append(f'{name}: unknown project-state directory')
-        if name in modified:
-            errors.extend(publication_errors(name, read(name)))
+        # A clean checkout has no diff, but still needs the publication audit.
+        errors.extend(publication_errors(name, read(name)))
     docs = sorted(name for name in names if name.endswith('.md') and (
         name.startswith('.project/') or name.startswith('docs/model_analysis/')))
     for name in docs:
@@ -108,6 +109,7 @@ def check(staged: bool = False) -> dict:
         errors.append('.project/local is not ignored by Git')
     return {'scope': 'staged' if staged else 'working-tree', 'candidate_files': len(names),
             'checked_documents': len(docs), 'checked_changed_files': len(modified),
+            'checked_publication_files': len(names),
             'errors': errors, 'passed': not errors}
 
 

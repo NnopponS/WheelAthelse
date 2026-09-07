@@ -23,7 +23,7 @@ Both source interfaces support original-index time/window selection and create-o
 
 ## Verification
 
-Fresh source verification after organization and hardening passed **148 Windows GUI/acquisition tests**, **705 Flutter tests**, and **198 tests in the unchanged separate research repository**. Flutter analyzer reports **No issues found**. The six new repository-hygiene tests and the shared update-manifest test also pass. Exact exit codes, timings and log hashes are in `reports/branch-validation.json`; detailed logs stay local-only.
+The latest maintenance pass passed **148 Windows GUI/acquisition tests**, **705 Flutter tests**, **14 repository-tooling tests**, and **one update-manifest test**. Flutter analyzer reports **No issues found**. Exact exit codes, timings and log hashes are in `reports/scheduled-agent-validation.json`. The earlier 198-test separate-research result remains recorded in `reports/branch-validation.json`; that suite was not rerun in this maintenance pass. Detailed logs remain local-only.
 
 This branch additionally rejects mixed mobile timestamp domains and hidden sequence gaps, aligns Python metadata validation with Dart, and moves long mobile export serialization/hashing off the UI isolate. The 8,000-point export regression retains the complete CSV and correct selected-window metadata.
 
@@ -34,3 +34,11 @@ Eleven shared analytical cases are public fixtures, not athlete ground truth. Th
 ## Open acceptance gates
 
 No independent moving wheel-marker reference mapped to both IMU clocks, accepted improved estimator, physical Android/iOS run, or athlete/coach sign-off has been added. P1 coverage remains 21/30, and difficult full-trajectory P2 failures remain unresolved. See `phases/P3.md` and `phases/P7.md` before claiming accuracy or changing defaults.
+
+## Hourly maintenance status
+
+The publication audit now checks the full candidate tree, including unchanged committed files in a clean checkout. Uppercase text suffixes no longer bypass the credential-pattern check. Eight Git-snapshot regression methods protect committed artifacts, staged content and unstaged repairs; the expanded 14-test suite failed six assertions before the fix and passes after it. This is a bounded publication guard, not proof that every possible secret format is detected.
+
+The local Windows task `WheelAthlete-Hourly-Verification` is configured hourly from 04:00 Asia/Bangkok on 2026-09-08. It runs `scripts/run_verification.py --suite all --timeout 300`, writes ignored evidence, skips overlapping task instances and has a 40-minute execution limit. The PC must be awake, the task owner logged in and AC power available; it does not wake the computer. A missed trigger can run when conditions allow.
+
+**This is verification-only scheduling, not an autonomous AI engineering agent.** The required GPT-6 Astra Pro-only agent schedule is not configured; no different model was substituted. See `history/scheduled-agent.md` and the maintenance report for execution evidence and remaining work.

@@ -27,3 +27,5 @@ Keep raw evidence, ad-hoc scripts, console logs, screenshots with participant in
 The complete pre-organization state was preserved byte-for-byte locally: unpacked under `local/legacy/` and in `local/branch-handoff-2026-09-08/project-state-before.zip`. The move manifest and original hashes are in that run folder. Historical scripts are archived for reference and must not be blindly rerun after relocation.
 
 Public contract and synthetic fixtures: `docs/model_analysis/`. Detailed phase conclusions: `phases/`. Historical private journal paths and names are intentionally not published.
+
+Scheduled maintenance history: [one canonical run log](history/scheduled-agent.md). Latest sanitized maintenance checks: [scheduled-agent-validation.json](reports/scheduled-agent-validation.json). The local verification schedule must not be confused with an enabled autonomous AI agent.

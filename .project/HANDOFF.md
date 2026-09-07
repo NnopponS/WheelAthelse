@@ -39,3 +39,13 @@ Use one STATUS and one HANDOFF, and one conclusion per phase. Keep temporary wor
 ## Published implementation
 
 The source implementation was committed as `266b6929c917` and its normal push to the named feature branch was verified. The branch may additionally contain this documentation-only receipt. Main/release references and the separate research index are unchanged. Hosted source verification was running at the source-push check; do not treat that as a CI pass. Detailed local command/remote evidence is in `local/branch-handoff-2026-09-08/publication.json`.
+
+## Hourly verification and future engineering runs
+
+Use `history/scheduled-agent.md` as the single chronological agent-run log and `reports/scheduled-agent-validation.json` for the latest sanitized maintenance evidence. Append meaningful engineering runs; do not manufacture an hourly code commit or new report document. Machine-specific scheduler receipts, regression logs and publication receipts for this run stay in `.project/local/scheduled-agent/2026-09-08T0322/`.
+
+The Windows task `WheelAthlete-Hourly-Verification` runs all source verification checks once per hour from 04:00 Asia/Bangkok, starting 2026-09-08. The registered action uses an absolute Python interpreter, absolute runner path and explicit project working directory. It needs an awake PC, a logged-in task owner and AC power. No overlapping scheduled instance, wake timer, elevated run level, signing, release, model promotion, automatic commit or automatic push is configured. Logs and summary JSON are written under `.project/local/verification/`. Use Task Scheduler to inspect, pause or change this specific job; do not create a duplicate.
+
+This task is **not** the requested autonomous engineering agent. The requested model remains GPT-6 Astra Pro only. No verified scheduler route for that requirement was available in this run, so do not claim that unattended AI development has been enabled. Do not silently replace the model. The installed task-management plugin did not expose callable actions to this chat.
+
+For a future authorized engineering run, re-read AGENTS and the current canonical documents, inspect actual Git/source state and the latest complete verification summary, check for concurrent work, then choose the highest-value implementable issue. Independent reference and grouped-capture evidence remain the gate for model selection; continue other useful regression-protected work rather than weakening accuracy gates.
