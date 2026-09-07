@@ -77,7 +77,8 @@ def test_prepare_dual_windows_matches_biwheel3d_contract_and_si_units():
     assert meta["target_hz"] == 100
     assert meta["model_steps"] == 100
     assert not meta["resampled"]
-    assert meta["warnings"] == []
+    assert any("Legacy timing" in warning for warning in meta["warnings"])
+    assert not meta["physical_sync_verified"]
 
 
 def test_prepare_dual_windows_resamples_non_native_rate_and_surfaces_warning():

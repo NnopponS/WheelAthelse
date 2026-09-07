@@ -1,148 +1,54 @@
-﻿# WheelAthlete â€” Current Architecture
+# WheelAthlete runtime architecture
 
-Updated: 2026-09-06
+Updated: 2026-09-08. The product has two maintained operator applications and two firmware targets. Neither Flutter Windows/Web nor the legacy Tkinter interface is maintained.
 
-## Repository topology
-
-WheelAthlete is organized into two explicit product domains: operator applications and embedded hardware firmware.
+## Product and repository boundaries
 
 ```text
-WheelAthelse/
-â”œâ”€â”€ applications/
-â”‚   â”œâ”€â”€ wheelathlete_mobile/          # WheelAthlete Mobile Application
-â”‚   â””â”€â”€ wheelathlete_windows/         # WheelAthlete Windows Research Application
-â”œâ”€â”€ hardware_firmware/
-â”‚   â”œâ”€â”€ m5stickc_plus2/               # WheelAthlete M5StickC Plus2 Firmware
-â”‚   â””â”€â”€ xiao_nrf52840_sense/          # WheelAthlete XIAO nRF52840 Sense Firmware
-â”œâ”€â”€ assets/
-â”œâ”€â”€ docs/
-â”œâ”€â”€ .project/
-â”œâ”€â”€ VERSION
-â”œâ”€â”€ README.md
-â””â”€â”€ README.th.md
+applications/wheelathlete_mobile/   Flutter, Android/iOS, direct BLE ownership
+applications/wheelathlete_windows/ Python/PySide6 GUI plus acquisition daemon
+hardware_firmware/m5stickc_plus2/  ESP32/M5StickC Plus2 sensor firmware
+hardware_firmware/xiao_nrf52840_sense/  nRF52840/LSM6DS3 sensor firmware
+docs/                             Protocol, capture guide, API contract, fixtures
+.project/                         Current state and ignored local evidence
+scripts/                          Portable verification and hygiene checks
 ```
 
-Generated build output, caches, PlatformIO `.pio/`, and collected research data are excluded from Git.
+`BiWheel3D/` is a separate local research repository, not an application dependency or a root submodule. The Windows app vendors a minimal attributed runtime. Do not overwrite its source/metadata to match an unaccepted research candidate.
 
-## Product topology
-
-Both operator applications use the same WheelAthlete BLE contract. Only one operator application should own a given left/right sensor pair at a time.
+## Acquisition ownership
 
 ```text
-Left wheel sensor â”€â”
-                   â”œâ”€â”€ BLE GATT â”€â”€ WheelAthlete Mobile Application
-Right wheel sensor â”˜                  Flutter / iOS / Android
-
-Left wheel sensor â”€â”
-                   â”œâ”€â”€ BLE GATT â”€â”€ Acquisition daemon â”€â”€ localhost IPC â”€â”€ PySide6 GUI
-Right wheel sensor â”˜                  WheelAthlete Windows Research Application
+Left/right wheel IMUs -> BLE -> Flutter mobile -> mobile-native session storage
+OR
+Left/right wheel IMUs -> BLE -> acquisition daemon -> append-only .waj journal
+                                                  -> bounded localhost IPC -> Qt GUI
 ```
 
-## WheelAthlete Mobile Application
+Only one operator application may own a given sensor pair at a time. Both clients use the contract in `docs/ble-protocol.md`. Configuration, lifecycle acknowledgements, sequence/loss accounting, clock/drift evidence and replay/recovery remain explicit. RSSI and a smooth chart are not data-integrity measurements.
 
-Location: `applications/wheelathlete_mobile/`
+On Windows, `tools/pc_acquisition` is authoritative for parsing, timing, journal writes, QC and recovery. `tools/pc_gui` handles control, preview, results and optional analysis. Disposable preview traffic may be bounded; raw data may not be silently dropped to keep a chart responsive. Incomplete journals must remain recoverable independently of GUI lifecycle.
 
-Supported product platforms:
+Mobile keeps direct BLE acquisition and its existing versioned session-storage/export format. It does not need the Windows daemon, an HTTP inference server or a replacement .waj storage layer.
 
-- Android
-- iOS
+## Offline analysis
 
-The mobile application owns BLE directly through `flutter_blue_plus`. It handles dual-wheel connection, synchronization, realtime preview, recording, session organization, QC presentation, and CSV/Excel/ZIP export.
+Windows loads finalized journals using immutable capture conversion scales and saved pre-START clock evidence. `analysis_timing.py` aligns/resamples SI input to 100 Hz and groups five samples for each 20 Hz model step. `model_inference.py` applies the frozen bundled classical XY+yaw recipe in a worker and preserves signed speed, unwrapped yaw/rate and declared frames. `analysis_contract.py` adds supported derivatives, finite/null validation and full-resolution window statistics.
 
-Flutter Windows and Web targets are retired and are not part of the maintained mobile source tree.
+Mobile prepares saved-time input and features in compute isolates and runs the existing M4 XY-only ONNX asset locally. Its matching contract does not make its predictions equivalent to the Windows estimator. Chair yaw/rate, signed forward speed and signed longitudinal acceleration remain unavailable. XY-derived magnitude and magnitude-change quantities are labeled separately.
 
-## WheelAthlete Windows Research Application
+Both UIs hold one full-session result. Time/window controls select source samples; they never rerun inference, reset pose or use chart decimation for statistics. CSV/JSON export creates a unique new directory with a content hash and final COMPLETE marker. Originals and previous exports are not overwritten. Mobile full-timeline export serialization/hashing runs outside the UI isolate.
 
-Location: `applications/wheelathlete_windows/`
+Models remain offline methods, not validated causal streaming estimators. Physical synchronization and motion accuracy require independent evidence beyond a saved clock map or passing unit tests.
 
-Main components:
+## Updates and packaging
 
-- `tools/pc_acquisition/` â€” authoritative BLE acquisition daemon
-- `tools/pc_gui/` â€” PySide6 operator interface and optional offline MODEL adapter
-- `run_wheelathlete_windows.bat` â€” source launcher
-- `packaging/windows/` â€” PyInstaller and Inno Setup packaging
+Existing update discovery consumes the stable GitHub release manifest, validates artifact size/hash and defers installation during acquisition. Android installation remains OS-approved and signing-key constrained. iOS delegates installation to App Store/TestFlight. Installed Windows builds use the Inno Setup identity; source/demo/portable runs do not replace themselves.
 
-Reliability boundary:
+Windows packaging source lives under `applications/wheelathlete_windows/packaging/windows/`; generated output stays in ignored build/release directories. The new `verify.yml` workflow only tests source and has read-only repository permissions; it does not sign, package, flash or publish. Existing release automation remains separate.
 
-```text
-BLE notification
-  -> acquisition daemon
-  -> strict parsing and sequence accounting
-  -> synchronization
-  -> append-only .waj journal
-  -> final QC / recovery
-  -> bounded localhost preview/status IPC
-  -> PySide6 GUI
-```
+The stable root VERSION, mobile version/build, firmware and BLE protocol metadata are unchanged by this feature branch. New source code on GitHub is not automatically an installed application update.
 
-The GUI is not the authoritative raw-data path. UI rendering, optional model inference, or GUI restart must not become the BLE storage bottleneck.
+## Evidence and current state
 
-Default Windows data locations:
-
-- Sessions: `~/Documents/WheelAthlete/PC Sessions`
-- GUI log: `~/Documents/WheelAthlete/Logs/wheelathlete-windows.log`
-- Experiment presets: `~/Documents/WheelAthlete/experiments.json`
-
-## Hardware & firmware
-
-Maintained targets:
-
-- `hardware_firmware/m5stickc_plus2/` â€” M5StickC Plus2 / ESP32
-- `hardware_firmware/xiao_nrf52840_sense/` â€” Seeed Studio XIAO nRF52840 Sense
-
-Both implement the same left/right BLE protocol and support configured wheel identity, 50/100/200 Hz sampling, synchronized lifecycle control, sensor ranges, battery reporting, sequence/loss accounting, replay/recovery, and acquisition-health telemetry.
-
-Canonical protocol: `docs/ble-protocol.md`.
-
-## Optional trajectory MODEL
-
-The Windows MODEL workflow is offline/optional and does not participate in authoritative acquisition. Compatible local BiWheel3D checkpoints may be discovered from the repository root when available. The existing TCN + BiLSTM model is buffered/offline research analysis rather than a zero-latency causal estimator.
-
-## Application update architecture
-
-Both user-facing applications consume one stable GitHub Releases manifest:
-
-```text
-https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
-```
-
-The release manifest is generated only from final build artifacts and carries schema/channel/version metadata plus exact byte size and SHA-256 for Android and Windows downloads.
-
-- Mobile release/profile builds perform a lightweight check after startup and every six hours. Android downloads a verified APK and delegates installation to the Android system package installer. iOS delegates installation to App Store/TestFlight.
-- Installed Windows PyInstaller/Inno builds check after startup and every six hours, verify the installer, then may relaunch through the stable Inno AppId.
-- Source/demo/portable Windows execution is never self-replacing.
-- Neither application starts installation while acquisition is active.
-- Firmware update is deliberately outside this application updater; BLE firmware/protocol remain independently versioned.
-
-Release automation is under `.github/workflows/release.yml`; shared manifest tooling is under `release/`.
-
-## Packaging
-
-Windows packaging is self-contained under `applications/wheelathlete_windows/`:
-
-- build sources: `applications/wheelathlete_windows/packaging/windows/`
-- generated work directory: `applications/wheelathlete_windows/build/`
-- generated packages: `applications/wheelathlete_windows/release/`
-
-Generated directories are ignored by Git.
-
-## Versioning
-
-Current application release:
-
-- product/application release: `1.8.0`
-- WheelAthlete Mobile Application: `1.8.0+10`
-- WheelAthlete Windows Research Application package: `1.8.0`
-- M5StickC Plus2 firmware: `1.8.0`
-- XIAO nRF52840 Sense firmware: `1.8.0`
-- BLE protocol: `1.8.0`
-
-The root `VERSION` tracks the user-facing application/product release. Firmware and BLE protocol are intentionally not bumped when an application-only release does not change the wire contract.
-
-## Retired implementations
-
-Retired code remains available through Git history where applicable:
-
-- Flutter Windows desktop implementation
-- Flutter Web scaffold
-- legacy Tkinter/Matplotlib desktop GUI
+Use STATUS.md for phase state, HANDOFF.md for continuation, and decisions.md for constraints. Public contract/fixtures live under `docs/model_analysis/`. Raw/derived participant data, historical snapshots and local commands belong in ignored `.project/local/`. Keep only sanitized measured summaries under `.project/reports/`.

@@ -1,6 +1,6 @@
 # WheelAthlete — Current Decisions
 
-Updated: 2026-09-05
+Updated: 2026-09-08
 
 Only active decisions are kept here. Superseded phase decisions belong in Git history, not in the current project state.
 
@@ -55,15 +55,15 @@ Do not attempt to operate the same two BLE peripherals from the mobile and Windo
 
 Windows installer definitions live in `applications/wheelathlete_windows/packaging/windows/`. Generated `build/` and `release/` artifacts remain ignored by Git.
 
-## D12 — Branch safety
+## D12 - Feature-branch safety
 
-PC-version development remains on `codex/pc-version`. Do not merge, rebase onto, reset, force-update, or push changes into `main` unless the user explicitly requests it.
+Current work belongs on `feature/dual-imu-coaching-analysis`. No main/release merge, force push, tag, repository rename or release publication is authorized. Leave the separate research repository untouched. Existing release workflow work not owned by this feature stays local.
 
 ## D13 — Release coordination
 
 Current release line is `v1.8.0`:
 
-- Mobile: `1.8.0+9`
+- Mobile: `1.8.0+10`
 - Firmware: `1.8.0`
 - BLE protocol: `1.8.0`
 - Windows package: `1.8.0`
@@ -73,3 +73,11 @@ Version consistency is checked by automated tests.
 ## D14 — Physical claims require physical evidence
 
 Automated tests and simulation may establish software behavior, but must not be used to claim real RF throughput, real two-wheel start skew, or hardware-level loss performance. Those require the physical two-XIAO acceptance matrix.
+
+## D15 - Two hubs and explicit model status
+
+Keep inherited radius 0.30 m, hub spacing 0.52 m and zero camber; they are assumptions, not fresh measurements. The existing classical recipe and mobile ONNX asset remain frozen. A third sensor or model promotion requires a separate evidence-backed decision. Current P3 status is blocked_by_reference_data.
+
+## D16 - Public source, private research evidence
+
+Do not publish raw/derived athlete sessions, absolute private machine paths, signing material, archived logs or generated executables/ZIPs in a feature branch. `.project/local/` is ignored. Only sanitized summaries, synthetic fixtures, maintained source/tests and reproducible tooling belong in Git.

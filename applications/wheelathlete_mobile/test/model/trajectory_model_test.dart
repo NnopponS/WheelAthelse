@@ -59,7 +59,10 @@ void main() {
     expect(row[3], closeTo(math.pi, 1e-9));
     expect(row[6], closeTo(19.6133, 1e-6));
     expect(row[9], closeTo(math.pi / 2, 1e-9));
-    expect(result.warnings, isEmpty);
+    expect(
+      result.warnings.any((w) => w.contains('not independently validated')),
+      isTrue,
+    );
   });
 
   test('non-100 Hz source is resampled and surfaced as warning', () {
@@ -69,7 +72,10 @@ void main() {
     );
 
     expect(result.modelStepCount, 50);
-    expect(result.warnings.single, contains('resampled to 100 Hz'));
+    expect(
+      result.warnings.any((w) => w.contains('resampled to 100 Hz')),
+      isTrue,
+    );
   });
 
   test('requires both wheels', () {

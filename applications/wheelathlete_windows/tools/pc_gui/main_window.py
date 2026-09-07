@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import csv
-import json
-import os
 import winsound
 from pathlib import Path
 from threading import Thread
@@ -22,7 +19,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QAction,
-    QBrush,
     QCloseEvent,
     QColor,
     QDesktopServices,
@@ -68,7 +64,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .controller import BaseController, sanitize_name
+from .controller import BaseController
 from .model_inference import (
     ModelSpec,
     custom_model_spec,
@@ -78,6 +74,7 @@ from .model_inference import (
     model_spec_runtime_status,
     run_session_model,
 )
+from .analysis_timeline import AnalysisTimeline
 from .state import AppViewState
 from .update_controller import UpdateController, UpdateViewState
 from .widgets import (
@@ -2486,7 +2483,7 @@ class ModelPage(QWidget):
     """Experimental offline BiWheel3D trajectory analysis for finalized recordings."""
 
     analysis_ready = Signal(object)
-    analysis_failed = Signal(str)
+    analysis_failed = Signal(object)
 
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
@@ -2494,21 +2491,23 @@ class ModelPage(QWidget):
         self.repo_root = Path(__file__).resolve().parents[4]
         self._models: list[ModelSpec] = []
         self._running = False
+        self._generation = 0
+        self._analysis_result = None
         self._trajectory_bounds: tuple[float, float, float, float] | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 20)
-        root.setSpacing(14)
+        root.setContentsMargins(16, 10, 16, 10)
+        root.setSpacing(7)
         root.addLayout(
             _page_header(
                 "MODEL",
-                "Choose a finalized recording and a local BiWheel3D model. Browse your Model folder or add another compatible ONNX/recipe file.",
+                "Offline experimental estimates. Review the full path, then inspect a time or window.",
             )
         )
 
         controls = Card()
         controls_layout = QGridLayout(controls)
-        controls_layout.setContentsMargins(16, 14, 16, 14)
+        controls_layout.setContentsMargins(12, 8, 12, 8)
         controls_layout.setHorizontalSpacing(12)
         controls_layout.setVerticalSpacing(8)
 
@@ -2517,14 +2516,14 @@ class ModelPage(QWidget):
         self.model_combo = QComboBox()
         self.model_combo.setObjectName("modelCheckpointCombo")
         self.model_combo.setAccessibleName("modelCheckpointCombo")
-        self.model_combo.setMinimumWidth(280)
+        self.model_combo.setMinimumWidth(200)
 
         session_label = QLabel("Recording")
         session_label.setObjectName("cardTitle")
         self.session_combo = QComboBox()
         self.session_combo.setObjectName("modelSessionCombo")
         self.session_combo.setAccessibleName("modelSessionCombo")
-        self.session_combo.setMinimumWidth(320)
+        self.session_combo.setMinimumWidth(240)
 
         self.browse_model_button = _button("Browse model…", "browseModelCheckpointButton")
         self.browse_model_button.setAccessibleName("browseModelCheckpointButton")
@@ -2543,20 +2542,19 @@ class ModelPage(QWidget):
         self.runtime_label.hide()
 
         controls_layout.addWidget(model_label, 0, 0)
-        controls_layout.addWidget(self.model_combo, 1, 0)
-        controls_layout.addWidget(self.browse_model_button, 1, 1)
-        controls_layout.addWidget(session_label, 0, 2)
-        controls_layout.addWidget(self.session_combo, 1, 2)
-        controls_layout.addWidget(self.refresh_models_button, 1, 3)
-        controls_layout.addWidget(self.generate_button, 1, 4)
-        controls_layout.setColumnStretch(0, 2)
-        controls_layout.setColumnStretch(2, 2)
+        controls_layout.addWidget(self.model_combo, 0, 1)
+        controls_layout.addWidget(self.browse_model_button, 0, 2)
+        controls_layout.addWidget(self.refresh_models_button, 0, 3)
+        controls_layout.addWidget(session_label, 1, 0)
+        controls_layout.addWidget(self.session_combo, 1, 1, 1, 2)
+        controls_layout.addWidget(self.generate_button, 1, 3)
+        controls_layout.setColumnStretch(1, 2)
         root.addWidget(controls)
 
         metrics = Card()
         metrics_layout = QGridLayout(metrics)
-        metrics_layout.setContentsMargins(16, 12, 16, 12)
-        metrics_layout.setHorizontalSpacing(24)
+        metrics_layout.setContentsMargins(12, 6, 12, 6)
+        metrics_layout.setHorizontalSpacing(14)
         metrics_layout.setVerticalSpacing(4)
         self.metric_model = QLabel("—")
         self.metric_session = QLabel("—")
@@ -2576,18 +2574,21 @@ class ModelPage(QWidget):
             title_label = QLabel(title)
             title_label.setObjectName("mutedText")
             value.setObjectName("cardTitle")
+            value.setWordWrap(True)
+            if column < 2:
+                value.setMaximumWidth(250)
             metrics_layout.addWidget(title_label, 0, column)
             metrics_layout.addWidget(value, 1, column)
         root.addWidget(metrics)
 
         trajectory_card = Card()
         trajectory_layout = QVBoxLayout(trajectory_card)
-        trajectory_layout.setContentsMargins(12, 12, 12, 12)
-        trajectory_layout.setSpacing(8)
+        trajectory_layout.setContentsMargins(6, 6, 6, 6)
+        trajectory_layout.setSpacing(4)
 
         self.chart = QChart()
         self.chart.setTitle("Select a recording and generate a trajectory")
-        self.chart.legend().setVisible(True)
+        self.chart.legend().setVisible(False)
         self.trajectory_series = QLineSeries()
         self.trajectory_series.setName("Estimated path")
         self.trajectory_series.setPen(QPen(QColor("#0f766e"), 2.4))
@@ -2599,7 +2600,13 @@ class ModelPage(QWidget):
         self.end_series.setName("End")
         self.end_series.setMarkerSize(10.0)
         self.end_series.setColor(QColor("#ea580c"))
-        for series in (self.trajectory_series, self.start_series, self.end_series):
+        self.cursor_series = QScatterSeries()
+        self.cursor_series.setName("Cursor")
+        self.cursor_series.setMarkerSize(13.)
+        self.window_series = QLineSeries()
+        self.window_series.setName("Window")
+        self.window_series.setPen(QPen(QColor("#ea580c"), 3., Qt.PenStyle.DashLine))
+        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
             self.chart.addSeries(series)
 
         self.axis_x = QValueAxis()
@@ -2612,7 +2619,7 @@ class ModelPage(QWidget):
         self.axis_y.setLabelFormat("%.2f")
         self.chart.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
         self.chart.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
-        for series in (self.trajectory_series, self.start_series, self.end_series):
+        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
             series.attachAxis(self.axis_x)
             series.attachAxis(self.axis_y)
 
@@ -2620,9 +2627,21 @@ class ModelPage(QWidget):
         self.chart_view.setObjectName("trajectoryChart")
         self.chart_view.setAccessibleName("trajectoryChart")
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.chart_view.setMinimumHeight(360)
+        self.chart_view.setMinimumHeight(280)
         style_chart_surface(self.chart, self.chart_view)
-        trajectory_layout.addWidget(self.chart_view, 1)
+        self.timeline = AnalysisTimeline()
+        self.timeline_scroll = QScrollArea()
+        self.timeline_scroll.setWidgetResizable(True)
+        self.timeline_scroll.setWidget(self.timeline)
+        self.timeline_scroll.setMinimumWidth(360)
+        self.analysis_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.analysis_splitter.addWidget(self.chart_view)
+        self.analysis_splitter.addWidget(self.timeline_scroll)
+        self.analysis_splitter.setSizes([700, 470])
+        self.analysis_splitter.setChildrenCollapsible(False)
+        trajectory_layout.addWidget(self.analysis_splitter, 1)
+        self.timeline.cursor_changed.connect(self._highlight_analysis_point)
+        self.timeline.window_changed.connect(self._highlight_analysis_window)
 
         self.status_label = QLabel("Models run locally on finalized data. Results are previews and do not modify recorded evidence.")
         self.status_label.setObjectName("mutedText")
@@ -2637,6 +2656,8 @@ class ModelPage(QWidget):
         self.analysis_ready.connect(self._on_analysis_ready)
         self.analysis_failed.connect(self._on_analysis_failed)
         controller.sessions_changed.connect(self.update_sessions)
+        self.session_combo.currentIndexChanged.connect(self._invalidate_analysis)
+        self.model_combo.currentIndexChanged.connect(self._invalidate_analysis)
 
         self.refresh_models()
         self.update_sessions(controller.sessions)
@@ -2686,6 +2707,8 @@ class ModelPage(QWidget):
         if current_id:
             self.select_session(current_id)
         self.session_combo.blockSignals(False)
+        if current_id != str(self.session_combo.currentData() or ""):
+            self._invalidate_analysis()
         spec = self.model_combo.currentData()
         ready = False
         if isinstance(spec, ModelSpec):
@@ -2766,6 +2789,8 @@ class ModelPage(QWidget):
             return
 
         recording_label = self.session_combo.currentText().strip() or session_id
+        self._invalidate_analysis()
+        generation = self._generation
         self._set_running(True)
         self.status_label.setText(
             f"Running {spec.label} on {recording_label}… This is offline analysis; recording is unaffected."
@@ -2777,9 +2802,17 @@ class ModelPage(QWidget):
                 result = run_session_model(self.repo_root, spec, session_data)
                 result["recording_label"] = recording_label
             except Exception as exc:  # worker boundary: surface a readable UI error
-                self.analysis_failed.emit(str(exc))
+                try:
+                    self.analysis_failed.emit({"message": str(exc), "generation": generation})
+                except RuntimeError:
+                    pass
+
                 return
-            self.analysis_ready.emit(result)
+            result["_request_generation"] = generation
+            try:
+                self.analysis_ready.emit(result)
+            except RuntimeError:
+                pass  # Window closed; never access deleted UI from this worker.
 
         Thread(target=work, name="wheelathlete-model-inference", daemon=True).start()
 
@@ -2800,8 +2833,12 @@ class ModelPage(QWidget):
             self.generate_button.setEnabled(ready and self.session_combo.count() > 0)
             self.generate_button.setText("Generate 2D trajectory")
 
-    def _on_analysis_failed(self, message: str) -> None:
+    def _on_analysis_failed(self, message) -> None:
         self._set_running(False)
+        if isinstance(message, dict):
+            if message.get("generation") != self._generation:
+                return
+            message = message.get("message", "Analysis failed")
         self.status_label.setText(f"MODEL error · {message}")
 
     def _apply_equal_aspect_ranges(self) -> None:
@@ -2843,6 +2880,11 @@ class ModelPage(QWidget):
 
     def _on_analysis_ready(self, result: dict[str, Any]) -> None:
         self._set_running(False)
+        if (result.get("_request_generation") is not None
+                and result["_request_generation"] != self._generation):
+            self.status_label.setText("Discarded stale analysis after recording/model selection changed.")
+            return
+        self._analysis_result = result
         points = list(result.get("xy") or [])
         if not points:
             self.status_label.setText("MODEL returned no trajectory points.")
@@ -2860,8 +2902,8 @@ class ModelPage(QWidget):
         self.start_series.append(qpoints[0])
         self.end_series.append(qpoints[-1])
 
-        xs = [point.x() for point in qpoints]
-        ys = [point.y() for point in qpoints]
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
         self._trajectory_bounds = (min(xs), max(xs), min(ys), max(ys))
 
         model_label = str(result.get("model_label") or "Model")
@@ -2876,7 +2918,7 @@ class ModelPage(QWidget):
             recording_label = " · ".join(
                 part for part in (topic, f"Trial {trial}", athlete) if part
             )
-        self.chart.setTitle(f"{topic} · Trial {trial} · {model_label}")
+        self.chart.setTitle(f"{topic} · Trial {trial} · planar path")
         self.metric_model.setText(model_label)
         self.metric_session.setText(recording_label or "—")
         self.metric_points.setText(f"{int(result.get('point_count') or 0):,}")
@@ -2900,8 +2942,46 @@ class ModelPage(QWidget):
             detail += "  Warning: " + " ".join(str(item) for item in warnings)
         else:
             detail += "  Dual-wheel input prepared at the model's native 100 Hz contract."
-        self.status_label.setText(detail)
+        self.status_label.setToolTip(detail)
+        if result.get("analysis") is not None:
+            self.status_label.setText(
+                f"Experimental offline estimate | {len(points):,} samples | "
+                "solid: full path; dashed: selected window; dot: time cursor. See quality details before interpreting."
+            )
+        else:
+            self.status_label.setText(detail)
+        self.timeline.set_analysis(result.get("analysis"))
 
+
+    def _invalidate_analysis(self, *_):
+        self._generation += 1
+        self._analysis_result = None
+        self._trajectory_bounds = None
+        self.timeline.set_analysis(None)
+        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
+            series.clear()
+        for label in (self.metric_model, self.metric_session, self.metric_points, self.metric_path, self.metric_endpoint, self.metric_yaw):
+            label.setText("—")
+        self.chart.setTitle("Generate analysis for the selected recording")
+
+    def _highlight_analysis_point(self, index):
+        analysis = self.timeline.analysis
+        if analysis is None:
+            return
+        row = analysis["samples"][index]
+        self.cursor_series.clear()
+        self.cursor_series.append(row["x_m"], row["y_m"])
+
+    def _highlight_analysis_window(self, first, last):
+        analysis = self.timeline.analysis
+        if analysis is None:
+            return
+        rows = analysis["samples"][first:last+1]
+        stride = max(1, len(rows)//3000)
+        display = rows[::stride]
+        if display and display[-1] is not rows[-1]:
+            display.append(rows[-1])
+        self.window_series.replace([QPointF(row["x_m"], row["y_m"]) for row in display])
 
 class DiagnosticsPage(QWidget):
     def __init__(self, controller: BaseController) -> None:

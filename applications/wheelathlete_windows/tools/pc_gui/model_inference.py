@@ -206,122 +206,14 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
     return False, f"Unsupported model kind: {spec.kind}"
 
 
-def _side_matrix(
-    samples: list[dict[str, Any]],
-    *,
-    source_hz: float,
-    np: Any,
-) -> tuple[Any, Any]:
-    if len(samples) < 2:
-        raise ModelInferenceError("Both Left and Right recordings need at least two samples.")
-
-    ordered = sorted(samples, key=lambda row: (float(row.get("t", 0.0)), int(row.get("seq", 0))))
-    times = np.asarray([float(row.get("t", 0.0)) for row in ordered], dtype=np.float64)
-    seq = np.asarray([int(row.get("seq", index)) for index, row in enumerate(ordered)], dtype=np.int64)
-    values = np.asarray(
-        [
-            [
-                float(row.get("ax", 0.0)),
-                float(row.get("ay", 0.0)),
-                float(row.get("az", 0.0)),
-                float(row.get("gx", 0.0)),
-                float(row.get("gy", 0.0)),
-                float(row.get("gz", 0.0)),
-            ]
-            for row in ordered
-        ],
-        dtype=np.float64,
-    )
-
-    if not np.all(np.isfinite(times)) or not np.all(np.isfinite(values)):
-        raise ModelInferenceError("The selected recording contains non-finite IMU values.")
-
-    seq_delta = seq - seq[0]
-    if source_hz > 0 and np.all(seq_delta >= 0) and np.all(np.diff(seq) > 0):
-        times = times[0] + seq_delta.astype(np.float64) / float(source_hz)
-
-    order = np.argsort(times, kind="stable")
-    times = times[order]
-    values = values[order]
-    unique_times, unique_indices = np.unique(times, return_index=True)
-    values = values[unique_indices]
-    if unique_times.size < 2:
-        raise ModelInferenceError("The selected recording does not contain a usable time span.")
-    return unique_times, values
-
-
 def prepare_dual_windows(
-    session_data: dict[str, Any],
-    *,
-    target_hz: int = TARGET_SAMPLE_HZ,
+    session_data: dict[str, Any], *, target_hz: int = TARGET_SAMPLE_HZ,
 ) -> tuple[Any, dict[str, Any]]:
-    """Convert Results-page g/dps samples into BiWheel3D (T, 5, 12) SI windows."""
+    from .analysis_timing import AnalysisInputError, prepare_windows
     try:
-        import numpy as np
-    except ImportError as exc:  # pragma: no cover - runtime guard
-        raise ModelInferenceError("NumPy is required for BiWheel3D trajectory analysis.") from exc
-
-    samples = session_data.get("samples")
-    if not isinstance(samples, dict):
-        raise ModelInferenceError("The selected result has no IMU sample data.")
-    left = samples.get("L")
-    right = samples.get("R")
-    if not isinstance(left, list) or not isinstance(right, list) or not left or not right:
-        raise ModelInferenceError("The selected result must contain both Left and Right IMU data.")
-
-    source_hz = float(session_data.get("sample_rate_hz") or target_hz)
-    if source_hz <= 0:
-        source_hz = float(target_hz)
-
-    t_l, v_l = _side_matrix(left, source_hz=source_hz, np=np)
-    t_r, v_r = _side_matrix(right, source_hz=source_hz, np=np)
-    start = max(float(t_l[0]), float(t_r[0]))
-    end = min(float(t_l[-1]), float(t_r[-1]))
-    if end <= start:
-        raise ModelInferenceError("Left and Right IMU streams do not overlap in time.")
-
-    sample_count = int(np.floor((end - start) * target_hz)) + 1
-    usable_count = (sample_count // SAMPLES_PER_MODEL_STEP) * SAMPLES_PER_MODEL_STEP
-    if usable_count < SAMPLES_PER_MODEL_STEP * MIN_MODEL_STEPS:
-        min_seconds = MIN_MODEL_STEPS * SAMPLES_PER_MODEL_STEP / target_hz
-        raise ModelInferenceError(
-            f"Recording is too short for this trajectory method. Use at least {min_seconds:.1f} s of dual-wheel data."
-        )
-
-    grid = start + np.arange(usable_count, dtype=np.float64) / float(target_hz)
-    left_interp = np.column_stack([np.interp(grid, t_l, v_l[:, channel]) for channel in range(6)])
-    right_interp = np.column_stack([np.interp(grid, t_r, v_r[:, channel]) for channel in range(6)])
-
-    left_interp[:, :3] *= ACCEL_G_TO_MS2
-    right_interp[:, :3] *= ACCEL_G_TO_MS2
-    left_interp[:, 3:] = np.deg2rad(left_interp[:, 3:])
-    right_interp[:, 3:] = np.deg2rad(right_interp[:, 3:])
-
-    dual = np.concatenate([left_interp, right_interp], axis=1).astype(np.float32)
-    windows = dual.reshape(-1, SAMPLES_PER_MODEL_STEP, 12)
-
-    missing = int(session_data.get("total_missing_samples") or 0)
-    warnings: list[str] = []
-    if abs(source_hz - target_hz) > 1e-6:
-        warnings.append(f"Resampled {source_hz:g} Hz recording to {target_hz} Hz for BiWheel3D.")
-    if missing > 0:
-        warnings.append(
-            f"Recording reports {missing} missing sample(s); interpolation was used for this experimental preview."
-        )
-
-    metadata = {
-        "source_hz": source_hz,
-        "target_hz": target_hz,
-        "raw_left_samples": len(left),
-        "raw_right_samples": len(right),
-        "aligned_samples": int(usable_count),
-        "model_steps": int(windows.shape[0]),
-        "duration_s": float(usable_count / target_hz),
-        "resampled": abs(source_hz - target_hz) > 1e-6,
-        "missing_samples": missing,
-        "warnings": warnings,
-    }
-    return windows, metadata
+        return prepare_windows(session_data, target_hz=target_hz)
+    except (AnalysisInputError, ValueError, TypeError) as exc:
+        raise ModelInferenceError(str(exc)) from exc
 
 
 def extract_biwheel3d_features(windows: Any) -> Any:
@@ -498,16 +390,27 @@ def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any
     angles = np.asarray(pred.get("angles"), dtype=np.float64)
     if xyz.ndim != 2 or xyz.shape[0] < 2 or xyz.shape[1] < 2 or not np.all(np.isfinite(xyz[:, :2])):
         raise ModelInferenceError("BiWheel3D returned an invalid 2D trajectory.")
-    net_yaw_deg: float | None = None
-    if angles.ndim == 2 and angles.shape[0] >= 2 and angles.shape[1] >= 2:
-        yaw = np.unwrap(angles[:, 1])
-        net_yaw_deg = float(np.degrees(yaw[-1] - yaw[0]))
+    expected_steps = int(windows.shape[0])
+    velocity = np.asarray(pred.get("v"), dtype=np.float64)
+    rate = np.asarray(pred.get("yaw_rate"), dtype=np.float64)
+    if (xyz.shape != (expected_steps, 3) or angles.shape != (expected_steps, 3)
+            or velocity.shape != (expected_steps,) or rate.shape != (expected_steps,)
+            or not all(np.isfinite(a).all() for a in (xyz, angles, velocity, rate))):
+        raise ModelInferenceError("Recipe kinematic outputs have inconsistent shape or non-finite values")
+    # Preserve estimator unwrapped orientation; never infer heading from XY.
+    yaw = angles[:, 1]
+    net_yaw_deg = float(np.degrees(yaw[-1] - yaw[0]))
     return {
         "xy": xyz[:, :2],
+        "signed_speed_mps": velocity.tolist(),
+        "yaw_rad": yaw.tolist(),
+        "yaw_rate_radps": rate.tolist(),
+        "xy_frame": "first_travel_display" if align else "initial_chair_heading",
+        "yaw_frame": "initial_chair_heading",
         "net_yaw_deg": net_yaw_deg,
         "yaw_source": str(pred.get("yaw_source") or yaw_source),
-        "yaw_delay_frames": int(pred.get("yaw_delay_frames") or yaw_delay_frames),
-        "yaw_delay_pad": str(pred.get("yaw_delay_pad") or yaw_delay_pad),
+        "yaw_delay_frames": int(pred.get("yaw_delay_frames", yaw_delay_frames)),
+        "yaw_delay_pad": str(pred.get("yaw_delay_pad", yaw_delay_pad)),
         "yaw_delay_bursts": int(pred.get("yaw_delay_bursts") or 0),
         "gyro_scale": gyro_scale,
         "chassis_yaw_scale": chassis_yaw_scale,
@@ -557,6 +460,8 @@ def _run_onnx_model(spec: ModelSpec, windows: Any, np: Any) -> dict[str, Any]:
     aligned_xyz, _ = align_first_travel_xy(xyz, None)
     return {
         "xy": np.asarray(aligned_xyz[:, :2], dtype=np.float64),
+        "xy_frame": "first_travel_display",
+        "yaw_frame": "unavailable",
         "net_yaw_deg": None,
         "yaw_source": "XY output only",
         "yaw_delay_frames": 0,
@@ -587,6 +492,9 @@ def run_session_model(
     except ImportError as exc:  # pragma: no cover - guarded above
         raise ModelInferenceError("NumPy is required for trajectory analysis.") from exc
 
+    import hashlib
+    from .analysis_contract import file_identity
+    checkpoint_before = file_identity(spec.checkpoint)
     windows, preprocess = prepare_dual_windows(session_data)
     if spec.kind == "onnx":
         model_result = _run_onnx_model(spec, windows, np)
@@ -595,7 +503,34 @@ def run_session_model(
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
 
+    if file_identity(spec.checkpoint) != checkpoint_before:
+        raise ModelInferenceError("Model file changed during analysis; discard result and retry")
     xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
+    from .analysis_contract import build_analysis
+    analysis = build_analysis(
+        times=preprocess["time_s"], xy=xy.tolist(), flags=preprocess["quality_flags"],
+        signed_speed=model_result.pop("signed_speed_mps", None),
+        yaw=model_result.pop("yaw_rad", None), yaw_rate=model_result.pop("yaw_rate_radps", None),
+        metadata={
+            "model_key": spec.key, "model_label": spec.label, "model_kind": spec.kind,
+            "model_sha256": checkpoint_before, "session_id": str(session_data.get("session_id", "")),
+            "model_input_sha256": hashlib.sha256(np.asarray(windows, dtype="<f4").tobytes()).hexdigest(),
+            "model_input_layout": "little-endian float32 (T,5,12), g->m/s2, dps->rad/s",
+            "implementation_sha256": {p.name: file_identity(p) for p in
+                [Path(__file__), Path(__file__).with_name("analysis_timing.py"), Path(__file__).with_name("analysis_contract.py")]},
+            "runtime_sha256": {p.name: file_identity(p) for p in sorted(_runtime_root().glob("*.py"))},
+            "source_recording": session_data.get("source_recording"),
+            "time_basis": preprocess["time_basis"], "overlap_start_s": preprocess["overlap_start_s"],
+            "recording_quality": session_data.get("quality", "UNKNOWN"),
+            "clock_evidence": preprocess["clock_evidence"], "scale_provenance": preprocess["scale_provenance"],
+            "xy_frame": model_result.get("xy_frame"), "yaw_frame": model_result.get("yaw_frame"),
+            "geometry": {"wheel_radius_m": model_result["wheel_radius_m"], "track_width_m": model_result["track_width_m"],
+                         "camber_rad": 0., "source": "inherited_assumptions"},
+            "calibration": {k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")},
+            "applied_yaw_delay_frames": model_result["yaw_delay_frames"],
+            "warnings": preprocess["warnings"], "input_gap_policy": preprocess["input_gap_policy"],
+        },
+    )
     path_length_m = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum())
     endpoint_m = float(np.linalg.norm(xy[-1] - xy[0]))
     return {
@@ -614,5 +549,6 @@ def run_session_model(
         "extent_x_m": float(np.ptp(xy[:, 0])),
         "extent_y_m": float(np.ptp(xy[:, 1])),
         "preprocess": preprocess,
+        "analysis": analysis,
         **model_result,
     }

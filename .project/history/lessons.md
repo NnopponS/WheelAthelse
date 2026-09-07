@@ -36,6 +36,14 @@ Only lessons that remain relevant to the current mobile + Python Windows archite
 ## Packaging and repository hygiene
 
 - Keep installer/build source under `applications/wheelathlete_windows/packaging/windows/`; keep generated `build/` and `release/` output untracked.
-- Keep `.project` small and canonical. Old plans/prompts belong in Git history, not in active project state.
+- Keep one current STATUS and HANDOFF. Original uncommitted history must be archived locally before consolidating; do not assume Git can recover it.
 - Keep mobile, firmware, BLE contract, README, and Windows package versions synchronized with automated checks.
-- Work on `codex/pc-version` must not mutate `main` unless explicitly requested.
+- Feature work must not update main or a release branch without explicit authorization.
+
+## Offline analysis
+
+- A saved affine map is evidence of the chosen timing transform, not proof of physical synchronization.
+- Original bin-center offsets, unavailable values and frame conventions must survive UI/export boundaries.
+- XY tangent is not chair orientation during pivots or reverse travel.
+- Analytical contract parity is different from cross-estimator accuracy parity.
+- Await the complete export Future in widget tests; an early completion-filename observation can race the final flush and UI update.

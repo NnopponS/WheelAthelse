@@ -11,6 +11,12 @@ WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายแ�
 > **Windows package:** `1.8.0`
 > **ภาษา:** [English](README.md) | ไทย
 
+## การพัฒนาฟีเจอร์วิเคราะห์การเคลื่อนไหว
+
+Branch: `feature/dual-imu-coaching-analysis` เป็นงานพัฒนาแบบทดลอง ไม่ใช่ release ใหม่ และยังคงเลขเวอร์ชันเสถียรเดิม แอป Windows รองรับการเลือกเวลาและช่วงเวลาเพื่อดูเส้นทาง ความเร็ว และ yaw ส่วนมือถือยังใช้ M4 แบบ XY-only จึงไม่แสดง yaw หรือความเร็วเดินหน้าแบบมีเครื่องหมายที่โมเดลไม่ได้ให้มา
+
+สถานะปัจจุบันอยู่ใน `.project/STATUS.md` และงานต่อเนื่องอยู่ใน `.project/HANDOFF.md` ข้อมูลวิจัย log และเอกสารเก่าถูกเก็บใน `.project/local/` ซึ่งไม่นำขึ้น Git ตรวจโครงสร้างก่อน commit ด้วย `python scripts/verify_project.py` การผ่าน source tests ไม่ใช่การรับรองความแม่นยำจากข้อมูลจริง
+
 ## สถาปัตยกรรมของผลิตภัณฑ์
 
 Repository แบ่งเป็น 2 กลุ่มหลักอย่างชัดเจน:
@@ -182,15 +188,19 @@ run_wheelathlete_windows.bat --demo
 
 เอกสาร Windows แบบละเอียด: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
 
-### MODEL แบบเสริม
+### MODEL แบบ Offline
 
-PyTorch และ dependency ของ model แยกจาก runtime หลักของระบบเก็บข้อมูล เพื่อไม่ให้การใช้งานปกติต้องติดตั้ง ML runtime ขนาดใหญ่
+หน้า `MODEL` ของแอป Windows ใช้ **BiWheel3D XY + Yaw current_best** ที่ฝังอยู่ในตัวแอปแล้ว ไม่ต้องใช้ PyTorch, ไฟล์ checkpoint `.pt/.pth`, model server หรือโฟลเดอร์ `BiWheel3D` ภายนอกในตอนใช้งานจริง
+
+สำหรับการรันจาก source ให้ติดตั้ง NumPy ผ่านไฟล์ dependency นี้:
 
 ```bat
 python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
 ```
 
-MODEL เป็น workflow แบบ offline และเป็น optional feature ต่อให้ไม่ได้ติดตั้ง PyTorch หรือไม่มี compatible model ก็ยังใช้ Recording, Results, Export และ Diagnostics ได้ตามปกติ
+ตัว Windows package จะรวม NumPy, calibration ของ current_best, runtime ที่จำเป็น และ MIT license ไว้ให้แล้ว การวิเคราะห์ทำแบบ offline และแยกจาก acquisition daemon โดยไฟล์ `.waj` ยังคงเป็นข้อมูลวิจัยต้นฉบับที่เชื่อถือได้
+
+MODEL ใช้ข้อมูล Left/Right ที่บันทึกไว้ที่ 100 Hz แปลงหน่วยเป็น SI, รวม 5 samples ต่อหนึ่ง trajectory step ที่ 20 Hz แล้วคำนวณ XY และ net yaw ด้วยสูตร current_best ของ BiWheel3D รวมถึง yaw delay 27 frames ตาม recipe ปัจจุบัน
 
 ## Hardware & Firmware
 

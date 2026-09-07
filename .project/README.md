@@ -1,36 +1,29 @@
-# WheelAthlete Project State
+# WheelAthlete engineering workspace
 
-This directory is intentionally small. Git history is the source of truth for old implementation details; `.project` stores only the current architecture, decisions, status, and a compact milestone history.
+Start with **STATUS.md**, then **HANDOFF.md**. These are the only current status and continuation records.
 
-## Current product surfaces
+## Directory contract
 
-WheelAthlete has exactly two user-facing applications:
+```text
+.project/
+  README.md          Navigation and housekeeping policy
+  STATUS.md          Current phase status, capabilities and verified checks
+  HANDOFF.md         Next actions, branch/publication scope and working rules
+  architecture.md    Runtime/data ownership and model boundaries
+  decisions.md       Durable engineering and release decisions
+  plans/             The active two-hub roadmap
+  phases/            One conclusion per phase, not competing final reports
+  history/           Milestones and durable lessons
+  reports/           Small sanitized verification reports
+  local/             Ignored logs, private evidence, archives and generated files
+```
 
-1. **Flutter Mobile App** â€” iOS and Android (`applications/wheelathlete_mobile/`)
-2. **Python Windows App** â€” PySide6 GUI + Python acquisition daemon (`applications/wheelathlete_windows/tools/pc_gui/`, `applications/wheelathlete_windows/tools/pc_acquisition/`)
+The active branch is `feature/dual-imu-coaching-analysis`, not a release line. The root repository is `NnopponS/WheelAthelse`; the product name remains **WheelAthlete**. No repository rename, main merge, release tag or updater publication is part of this work.
 
-There is no Flutter Windows application, Flutter Web application, or legacy Tkinter desktop application in the current product.
+## Rules that keep this folder readable
 
-## Current branch
+Keep raw evidence, ad-hoc scripts, console logs, screenshots with participant information, machine paths and generated packages under `local/`. Never add them to Git. Use date/topic subdirectories there. Store reusable verification code under `scripts/`, not in this directory. Update the same STATUS/HANDOFF files; do not create FINAL, FINAL_v2 or model-specific alternate trackers.
 
-- Active development branch: `codex/pc-version`
-- Remote: `origin` â†’ `NnopponS/WheelAthelse`
-- Do not merge or push this branch into `main` unless explicitly requested.
+The complete pre-organization state was preserved byte-for-byte locally: unpacked under `local/legacy/` and in `local/branch-handoff-2026-09-08/project-state-before.zip`. The move manifest and original hashes are in that run folder. Historical scripts are archived for reference and must not be blindly rerun after relocation.
 
-## Current release line
-
-- Product/application release: `v1.8.0`
-- Mobile app: `1.8.0+10`
-- Firmware: `1.8.0`
-- BLE protocol: `1.8.0`
-- Python Windows installer: `1.8.0`
-
-## Files
-
-- `architecture.md` â€” current runtime architecture and data ownership
-- `context.md` â€” active design decisions and constraints
-- `progress.md` â€” current implementation/verification status
-- `history.md` â€” concise milestone history derived from Git
-- `lessons.md` â€” durable engineering lessons only
-
-Old phase plans, prompts, duplicate trackers, and retired desktop implementation notes were removed on 2026-09-05. They remain recoverable from Git history.
+Public contract and synthetic fixtures: `docs/model_analysis/`. Detailed phase conclusions: `phases/`. Historical private journal paths and names are intentionally not published.

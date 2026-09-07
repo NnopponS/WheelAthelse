@@ -439,158 +439,16 @@ class AcquisitionController(BaseController):
         return exported_paths
 
     def load_session_data(self, session_id: str) -> dict[str, Any]:
+        from .analysis_loader import read_recording
         root = Path(self.state.journal_root or (Path.home() / "Documents" / "WheelAthlete" / "PC Sessions"))
-        journal_path, manifest_path, csv_path = resolve_session_files(root, session_id)
-        meta: dict[str, Any] = {}
-        if manifest_path.exists():
-            try:
-                meta = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        manifest_meta = dict(meta)
-
-        samples_l: list[dict[str, float]] = []
-        samples_r: list[dict[str, float]] = []
-        gap_events: list[dict[str, Any]] = []
-
-        # Results must be decoded with the scales captured with that recording.
-        # Falling back to the currently connected board can silently reinterpret old
-        # data when its configured range differs (for example XIAO +/-4 g vs +/-16 g).
-        accel_scale_l = _recorded_board_scale(
-            meta, "L", "accel_scale",
-            live_value=self.state.boards["L"].accel_scale,
-            fallback=16.0 / 32768.0,
-        )
-        gyro_scale_l = _recorded_board_scale(
-            meta, "L", "gyro_scale",
-            live_value=self.state.boards["L"].gyro_scale,
-            fallback=2000.0 / 32768.0,
-        )
-        accel_scale_r = _recorded_board_scale(
-            meta, "R", "accel_scale",
-            live_value=self.state.boards["R"].accel_scale,
-            fallback=16.0 / 32768.0,
-        )
-        gyro_scale_r = _recorded_board_scale(
-            meta, "R", "gyro_scale",
-            live_value=self.state.boards["R"].gyro_scale,
-            fallback=2000.0 / 32768.0,
-        )
-
-        if journal_path.exists():
-            try:
-                from tools.pc_acquisition.journal import JournalReader, RecordKind
-                records = JournalReader(journal_path).read_all()
-                first_t_ns = None
-                for record in records:
-                    if record.kind is RecordKind.SESSION_META and record.json_value:
-                        # The append-only journal preserves original capture metadata.
-                        # Mutable user-facing names live in the summary sidecar, so only
-                        # fill keys that are absent instead of overwriting renamed values.
-                        for key, value in record.json_value.items():
-                            meta.setdefault(key, value)
-                        if "accel_scale" in record.json_value:
-                            accel_scale_l = accel_scale_r = float(record.json_value["accel_scale"])
-                        if "gyro_scale" in record.json_value:
-                            gyro_scale_l = gyro_scale_r = float(record.json_value["gyro_scale"])
-                    elif record.kind is RecordKind.SAMPLE and record.sample is not None:
-                        rec = record.sample
-                        if first_t_ns is None:
-                            first_t_ns = rec.arrival_ns
-                        t_sec = max(0.0, (rec.arrival_ns - first_t_ns) / 1_000_000_000.0)
-                        side_str = rec.side.value
-                        accel_scale = accel_scale_l if side_str == "L" else accel_scale_r
-                        gyro_scale = gyro_scale_l if side_str == "L" else gyro_scale_r
-                        entry = {
-                            "t": t_sec,
-                            "seq": rec.sample.seq,
-                            "ax": rec.sample.ax * accel_scale,
-                            "ay": rec.sample.ay * accel_scale,
-                            "az": rec.sample.az * accel_scale,
-                            "gx": rec.sample.gx * gyro_scale,
-                            "gy": rec.sample.gy * gyro_scale,
-                            "gz": rec.sample.gz * gyro_scale,
-                        }
-                        if side_str == "L":
-                            samples_l.append(entry)
-                        else:
-                            samples_r.append(entry)
-                        if rec.missing_before > 0 or rec.sequence_class in ("gap", "out_of_order"):
-                            gap_events.append({
-                                "side": side_str,
-                                "time_s": t_sec,
-                                "seq": rec.sample.seq,
-                                "missing": rec.missing_before,
-                                "reason": rec.sequence_class,
-                            })
-            except Exception as exc:
-                self.daemon_log.emit(f"Failed to read journal {journal_path}: {exc}")
-
-        # The binary journal keeps immutable acquisition-time metadata. The finalized
-        # summary sidecar is intentionally the editable user-facing metadata layer.
-        # Re-apply it after reading SESSION_META so rename operations are reflected in
-        # Results, Preview and MODEL without mutating raw research evidence.
-        meta.update(manifest_meta)
-
-        if not samples_l and not samples_r and csv_path.exists():
-            try:
-                with csv_path.open("r", encoding="utf-8") as handle:
-                    reader = csv.DictReader(handle)
-                    first_ns = None
-                    for row in reader:
-                        arr_ns = int(row.get("timestamp_pc_monotonic_ns", 0) or 0)
-                        if first_ns is None:
-                            first_ns = arr_ns
-                        t_sec = max(0.0, (arr_ns - first_ns) / 1_000_000_000.0)
-                        side_str = row.get("wheel", "L")
-                        accel_scale = accel_scale_l if side_str == "L" else accel_scale_r
-                        gyro_scale = gyro_scale_l if side_str == "L" else gyro_scale_r
-                        seq = int(row.get("seq", 0) or 0)
-                        missing = int(row.get("missing_before", 0) or 0)
-                        seq_class = row.get("sequence_class", "contiguous")
-                        entry = {
-                            "t": t_sec,
-                            "seq": seq,
-                            "ax": float(row.get("ax_raw", 0) or 0) * accel_scale,
-                            "ay": float(row.get("ay_raw", 0) or 0) * accel_scale,
-                            "az": float(row.get("az_raw", 0) or 0) * accel_scale,
-                            "gx": float(row.get("gx_raw", 0) or 0) * gyro_scale,
-                            "gy": float(row.get("gy_raw", 0) or 0) * gyro_scale,
-                            "gz": float(row.get("gz_raw", 0) or 0) * gyro_scale,
-                        }
-                        if side_str == "L":
-                            samples_l.append(entry)
-                        else:
-                            samples_r.append(entry)
-                        if missing > 0 or seq_class in ("gap", "out_of_order"):
-                            gap_events.append({
-                                "side": side_str,
-                                "time_s": t_sec,
-                                "seq": seq,
-                                "missing": missing,
-                                "reason": seq_class,
-                            })
-            except Exception as exc:
-                self.daemon_log.emit(f"Failed to read CSV {csv_path}: {exc}")
-
-        duration_s = meta.get("duration_s")
-        if duration_s is None:
-            max_tl = samples_l[-1]["t"] if samples_l else 0.0
-            max_tr = samples_r[-1]["t"] if samples_r else 0.0
-            duration_s = max(max_tl, max_tr)
-
-        return {
-            "session_id": session_id,
-            "topic": meta.get("topic", ""),
-            "trial_number": meta.get("trial_number", ""),
-            "athlete": meta.get("athlete", ""),
-            "quality": meta.get("quality", "GOOD"),
-            "sample_rate_hz": meta.get("sample_rate_hz", 100),
-            "duration_s": duration_s,
-            "samples": {"L": samples_l, "R": samples_r},
-            "gaps": gap_events,
-            "total_missing_samples": sum(g.get("missing", 1) for g in gap_events),
-        }
+        journal, manifest, csv_path = resolve_session_files(root, session_id)
+        try:
+            return read_recording(journal, manifest, csv_path, session_id)
+        except Exception as exc:
+            self.daemon_log.emit(f"Recording read failed: {exc}")
+            return {"session_id": session_id, "samples": {"L": [], "R": []},
+                    "gaps": [], "total_missing_samples": 0, "duration_s": 0.,
+                    "quality": "UNKNOWN", "analysis_errors": [str(exc)]}
 
     def delete_session(self, session_id: str) -> None:
         self._command(

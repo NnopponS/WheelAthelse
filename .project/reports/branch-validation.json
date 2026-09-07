@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-08",
+  "branch": "feature/dual-imu-coaching-analysis",
+  "source_parent": "1664abe29ce34ff8348919ea884dc23a08cc8c55",
+  "verification_status": "passed_on_source",
+  "scope": "Source software and project organization, not a release or physical accuracy pass",
+  "summary": {
+    "windows_tests": 148,
+    "mobile_tests": 705,
+    "research_tests": 198,
+    "tooling_tests": 6,
+    "update_manifest_tests": 1,
+    "flutter_analyzer": "No issues found"
+  },
+  "checks": [
+    {
+      "check": "project_hygiene",
+      "exit_code": 0,
+      "seconds": 0.51,
+      "sha256": "1981c9e2686f4e6ad9dc4762fc6cc63b0094e17ccbc1f4031de949acf5c08b94",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/project_hygiene.txt"
+    },
+    {
+      "check": "tooling_tests",
+      "exit_code": 0,
+      "seconds": 0.187,
+      "sha256": "9d7d4303b245d602bc486ba390ea759d57426dc4d2328610bed21e1fa91a3f88",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/tooling_tests.txt"
+    },
+    {
+      "check": "update_manifest_tests",
+      "exit_code": 0,
+      "seconds": 0.211,
+      "sha256": "8c2985295887a90ccfbd96439b44ac3a05550a778da0acdc8ca9e692189a557f",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/update_manifest_tests.txt"
+    },
+    {
+      "check": "windows_tests",
+      "exit_code": 0,
+      "seconds": 22.368,
+      "sha256": "c42a7b11e36673b9dc68863855c04657f72b50a5bab4d00ba52ff02821744910",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/windows_tests.txt"
+    },
+    {
+      "check": "flutter_analyze",
+      "exit_code": 0,
+      "seconds": 16.856,
+      "sha256": "916860779418e6e805b9064aa7d3771ac4dee7c765bd2ac0885d2f8b1f77091d",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/flutter_analyze.txt"
+    },
+    {
+      "check": "flutter_tests",
+      "exit_code": 0,
+      "seconds": 40.703,
+      "sha256": "fabd6d3abc8b7c5cec69ff38bdf65bb4d692eebaf0ffb285521c24a70eaf03b8",
+      "log_location": ".project/local/verification/20260907T201422_183901Z_all/flutter_tests.txt"
+    },
+    {
+      "check": "research_tests",
+      "exit_code": 0,
+      "seconds": 5.686,
+      "sha256": "aad29e4d2b8a780dbe92b4e833931d1228aa40c0f1385d8802b441db261b1c43",
+      "log_location": ".project/local/verification/20260907T201457_668862Z_research/research_tests.txt"
+    }
+  ],
+  "preservation": {
+    "snapshot_files": 9737,
+    "archived_original_files_verified": 404,
+    "unowned_existing_files_unchanged": 9327,
+    "research_git_unchanged": {
+      "head": true,
+      "branch": true,
+      "staged": true,
+      "status": true,
+      "remote": true,
+      "index_sha256": true
+    },
+    "external_journals_unchanged": 56,
+    "raw_model_firmware_acquisition_changes": false,
+    "preexisting_release_workflow_change_preserved": true,
+    "original_history_removed": false
+  },
+  "publication_policy": {
+    "destination_branch": "feature/dual-imu-coaching-analysis",
+    "main_or_release_update": false,
+    "research_repository_published": false,
+    "private_evidence_published": false,
+    "unrelated_release_workflow_included": false,
+    "receipt": ".project/local/branch-handoff-2026-09-08/publication.json"
+  },
+  "open_gates": [
+    "independent motion-reference data and P3 model selection",
+    "accepted classical model port to mobile",
+    "installed-device and athlete/coach acceptance"
+  ]
+}

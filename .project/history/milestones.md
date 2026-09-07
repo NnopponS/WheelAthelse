@@ -54,3 +54,10 @@ The source tree was reorganized around explicit product domains without changing
 - `hardware_firmware/xiao_nrf52840_sense/` — XIAO nRF52840 Sense firmware.
 
 The Windows launcher was renamed to `run_wheelathlete_windows.bat`, documentation and packaging paths were migrated, and root English/Thai READMEs were rewritten to reflect the formal architecture. No change was made to the rule that the active PC work remains on `codex/pc-version` and not on `main`.
+## 2026-09-07/08 - Experimental offline coaching analysis
+
+P0/P1 repaired and documented lag/crop/evaluation behavior without promoting an estimator. P2 added analytical diagnostics with unchanged production defaults. P4/P5 implemented shared kinematics/time/QC and Windows review/export. P6 added matching review semantics for the unchanged mobile M4. P3 and physical P7 acceptance remain open.
+
+## 2026-09-08 - Feature branch and project-state consolidation
+
+The user authorized a descriptive new GitHub feature branch and direct project-folder cleanup. Current state moved to STATUS/HANDOFF; originals, private evidence, duplicated finals and temporary scripts were retained in a local-only archive. New portable verification and hygiene checks prevent recurring tracker clutter. This does not rename the GitHub repository or advance a stable release.
