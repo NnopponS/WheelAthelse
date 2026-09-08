@@ -102,11 +102,24 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
         assert spec is not None
         return spec
     if suffix in {".pt", ".pth"}:
-        raise ModelInferenceError(
-            "PyTorch .pt/.pth checkpoints are not loaded by the lean Windows app. "
-            "Export the checkpoint to the BiWheel3D ONNX format, then browse the .onnx file."
+        stem = resolved.stem.lower()
+        label = (
+            "Experimental PyTorch Residual v1"
+            if "residual" in stem or stem == "best"
+            else f"Experimental PyTorch - {resolved.stem}"
         )
-    raise ModelInferenceError("Choose a BiWheel3D .onnx model or supported .json recipe.")
+        return ModelSpec(
+            key=f"pytorch_residual:{resolved}",
+            label=label,
+            checkpoint=resolved,
+            description=(
+                "Research-only C3D-supervised residual BiGRU. Corrects signed speed and yaw rate "
+                "on top of the zero-delay dual-hub physics baseline. Requires local PyTorch; "
+                "it does not replace the frozen production recipe."
+            ),
+            kind="pytorch_residual",
+        )
+    raise ModelInferenceError("Choose a BiWheel3D .onnx, .pt/.pth research checkpoint, or supported .json recipe.")
 
 
 def _candidate_model_dirs() -> list[Path]:
@@ -154,11 +167,12 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
             seen_keys.add(spec.key)
             seen_paths.add(spec.checkpoint)
 
-    onnx_specs: list[ModelSpec] = []
+    learned_specs: list[ModelSpec] = []
     for root in _candidate_model_dirs():
         if not root.is_dir():
             continue
-        for path in sorted(root.glob("*.onnx"), key=lambda item: item.name.lower()):
+        paths = [*root.glob("*.onnx"), *root.glob("*.pt"), *root.glob("*.pth")]
+        for path in sorted(paths, key=lambda item: item.name.lower()):
             try:
                 resolved = path.resolve()
             except OSError:
@@ -169,11 +183,11 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
                 spec = custom_model_spec(resolved)
             except ModelInferenceError:
                 continue
-            onnx_specs.append(spec)
+            learned_specs.append(spec)
             seen_paths.add(resolved)
 
     # Keep the calibrated current-best recipe first, then browseable learned models.
-    return discovered + onnx_specs
+    return discovered + learned_specs
 
 
 def model_runtime_status(repo_root: Path) -> tuple[bool, str]:
@@ -203,6 +217,12 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
         if not (_runtime_root() / "yaw_ab.py").is_file():
             return False, "BiWheel3D XY + Yaw runtime is missing."
         return True, "BiWheel3D XY + Yaw recipe ready."
+    if spec.kind == "pytorch_residual":
+        if importlib.util.find_spec("torch") is None:
+            return False, "PyTorch is required for this experimental residual checkpoint."
+        if not (_runtime_root() / "yaw_ab.py").is_file():
+            return False, "BiWheel3D physics runtime is missing."
+        return True, "Experimental PyTorch residual runtime ready (CPU/GPU selected by local PyTorch)."
     return False, f"Unsupported model kind: {spec.kind}"
 
 
@@ -421,6 +441,173 @@ def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any
     }
 
 
+
+def _run_pytorch_residual_model(
+    spec: ModelSpec, windows: Any, session_data: dict[str, Any], np: Any
+) -> dict[str, Any]:
+    """Run the research residual-v1 checkpoint without changing production defaults.
+
+    The checkpoint is allowed only as an explicit experimental selection. Its 88-feature
+    input reproduces the research trainer: flattened dual windows, mean/std channels,
+    frozen-current rates, and zero-delay center-mean research rates.
+    """
+    try:
+        import torch
+        from torch import nn
+        from .biwheel3d_runtime.imu_frame import canonicalize_dual_windows
+        from .biwheel3d_runtime.schema import Trial, TrialMeta
+        from .biwheel3d_runtime.yaw_ab import odom_gyro_only
+    except ImportError as exc:
+        raise ModelInferenceError("PyTorch residual runtime dependencies are unavailable.") from exc
+
+    try:
+        checkpoint = torch.load(str(spec.checkpoint), map_location="cpu", weights_only=True)
+    except Exception as exc:
+        raise ModelInferenceError(f"Could not load PyTorch residual checkpoint: {exc}") from exc
+    if not isinstance(checkpoint, dict) or checkpoint.get("feature_version") != "torch_residual_v1":
+        raise ModelInferenceError("Unsupported PyTorch checkpoint: expected feature_version='torch_residual_v1'.")
+    model_cfg = checkpoint.get("model") or {}
+    normalizer = checkpoint.get("normalizer") or {}
+    recipe = checkpoint.get("baseline_recipe") or {}
+    try:
+        input_size = int(model_cfg["input_size"])
+        hidden_size = int(model_cfg["hidden_size"])
+        num_layers = int(model_cfg["num_layers"])
+        dropout = float(model_cfg["dropout"])
+        bidirectional = bool(model_cfg["bidirectional"])
+        mean = np.asarray(normalizer["mean"], dtype=np.float32)
+        scale = np.asarray(normalizer["scale"], dtype=np.float32)
+        residual_scale = np.asarray(normalizer["residual_scale"], dtype=np.float32)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ModelInferenceError("PyTorch residual checkpoint metadata is incomplete.") from exc
+    if input_size != 88 or mean.shape != (88,) or scale.shape != (88,) or residual_scale.shape != (2,):
+        raise ModelInferenceError("PyTorch residual checkpoint has an incompatible feature/normalizer shape.")
+    if not all(np.isfinite(a).all() for a in (mean, scale, residual_scale)) or np.any(scale <= 0):
+        raise ModelInferenceError("PyTorch residual checkpoint normalization is invalid.")
+
+    wheel_radius_m = float(recipe.get("wheel_radius_m") or CURRENT_BEST_WHEEL_RADIUS_M)
+    track_width_m = float(recipe.get("track_width_m") or CURRENT_BEST_TRACK_WIDTH_M)
+    gyro_scale = float(recipe.get("gyro_scale", 1.0))
+    yaw_scale = float(recipe.get("yaw_scale", 1.0))
+    chassis_yaw_scale = float(recipe.get("chassis_yaw_scale", 1.0))
+    yaw_delay_frames = int(recipe.get("yaw_delay_frames", 27))
+    yaw_delay_pad = str(recipe.get("yaw_delay_pad", "burst"))
+    yaw_source = str(recipe.get("yaw_source", "auto"))
+    trial = _build_runtime_trial(
+        windows=windows, session_data=session_data, Trial=Trial, TrialMeta=TrialMeta, np=np,
+        wheel_radius_m=wheel_radius_m, track_width_m=track_width_m,
+    )
+    canonical = canonicalize_dual_windows(np.asarray(windows, dtype=np.float32)).astype(np.float32)
+    if canonical.ndim != 3 or canonical.shape[1:] != (5, 12):
+        raise ModelInferenceError(f"PyTorch residual expected (T,5,12) windows, got {canonical.shape}.")
+
+    def rates(*, research: bool) -> Any:
+        pred = odom_gyro_only(
+            trial, gyro_scale=gyro_scale, yaw_scale=yaw_scale,
+            chassis_yaw_scale=chassis_yaw_scale,
+            yaw_delay_frames=0 if research else yaw_delay_frames,
+            yaw_delay_pad="none" if research else yaw_delay_pad,
+            yaw_source=yaw_source, align=False,
+        )
+        yaw_rate = np.asarray(pred["yaw_rate"], dtype=np.float32)
+        if research:
+            channels = pred.get("channels") or {}
+            omega_l = np.asarray(channels.get("omega_l"), dtype=np.float32)
+            omega_r = np.asarray(channels.get("omega_r"), dtype=np.float32)
+            if omega_l.shape != yaw_rate.shape or omega_r.shape != yaw_rate.shape:
+                raise ModelInferenceError("Research physics channels have incompatible shape.")
+            speed = wheel_radius_m * gyro_scale * 0.5 * (omega_l + omega_r)
+        else:
+            speed = np.asarray(pred["v"], dtype=np.float32)
+        return np.column_stack([speed, yaw_rate]).astype(np.float32)
+
+    current_rates = rates(research=False)
+    research_rates = rates(research=True)
+    flat = canonical.reshape(len(canonical), 60)
+    channel_mean = canonical.mean(axis=1)
+    channel_std = canonical.std(axis=1)
+    features = np.concatenate([flat, channel_mean, channel_std, current_rates, research_rates], axis=1).astype(np.float32)
+    if features.shape != (len(canonical), 88) or not np.isfinite(features).all():
+        raise ModelInferenceError(f"PyTorch residual features are invalid: {features.shape}.")
+    normalized = ((features - mean) / scale).astype(np.float32)
+
+    class ResidualBiGRU(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.gru = nn.GRU(
+                input_size=input_size, hidden_size=hidden_size, num_layers=num_layers,
+                batch_first=True, bidirectional=bidirectional,
+                dropout=dropout if num_layers > 1 else 0.0,
+            )
+            width = hidden_size * (2 if bidirectional else 1)
+            self.head = nn.Sequential(
+                nn.LayerNorm(width), nn.Linear(width, hidden_size), nn.SiLU(),
+                nn.Dropout(dropout), nn.Linear(hidden_size, 2),
+            )
+            self.register_buffer(
+                "residual_scale", torch.as_tensor(residual_scale.reshape(1, 1, 2), dtype=torch.float32)
+            )
+
+        def forward(self, normalized_features, base_rates):
+            hidden, _ = self.gru(normalized_features)
+            return base_rates + self.head(hidden) * self.residual_scale
+
+    model = ResidualBiGRU()
+    try:
+        model.load_state_dict(checkpoint["state_dict"], strict=True)
+    except Exception as exc:
+        raise ModelInferenceError(f"PyTorch residual checkpoint weights are incompatible: {exc}") from exc
+    model.eval()
+    with torch.no_grad():
+        x = torch.from_numpy(normalized).unsqueeze(0)
+        base = torch.from_numpy(research_rates).unsqueeze(0)
+        predicted_tensor = model(x, base)[0].cpu()
+        # Match the research checkpoint's float32 midpoint integration exactly.
+        speed_tensor = predicted_tensor[:, 0]
+        rate_tensor = predicted_tensor[:, 1]
+        yaw_tensor = torch.zeros_like(rate_tensor)
+        xy_tensor = torch.zeros((len(predicted_tensor), 2), dtype=predicted_tensor.dtype)
+        if len(predicted_tensor) > 1:
+            dpsi = 0.5 * (rate_tensor[1:] + rate_tensor[:-1]) * 0.05
+            yaw_tensor[1:] = torch.cumsum(dpsi, dim=0)
+            vmid = 0.5 * (speed_tensor[1:] + speed_tensor[:-1])
+            heading_mid = yaw_tensor[:-1] + 0.5 * dpsi
+            xy_tensor[1:, 0] = torch.cumsum(vmid * torch.cos(heading_mid) * 0.05, dim=0)
+            xy_tensor[1:, 1] = torch.cumsum(vmid * torch.sin(heading_mid) * 0.05, dim=0)
+        predicted = predicted_tensor.numpy()
+        yaw = yaw_tensor.numpy()
+        xy = xy_tensor.numpy()
+    if predicted.shape != (len(canonical), 2) or not all(np.isfinite(a).all() for a in (predicted, yaw, xy)):
+        raise ModelInferenceError("PyTorch residual model returned invalid rates or trajectory.")
+
+    speed = predicted[:, 0]
+    rate = predicted[:, 1]
+    selection = checkpoint.get("selection") or {}
+    return {
+        "xy": xy,
+        "signed_speed_mps": speed.tolist(),
+        "yaw_rad": yaw.tolist(),
+        "yaw_rate_radps": rate.tolist(),
+        "xy_frame": "initial_chair_heading",
+        "yaw_frame": "initial_chair_heading",
+        "net_yaw_deg": float(np.degrees(yaw[-1] - yaw[0])) if len(yaw) else 0.0,
+        "yaw_source": "pytorch_residual_on_zero_delay_physics",
+        "yaw_delay_frames": 0,
+        "yaw_delay_pad": "none",
+        "yaw_delay_bursts": 0,
+        "gyro_scale": gyro_scale,
+        "chassis_yaw_scale": chassis_yaw_scale,
+        "wheel_radius_m": wheel_radius_m,
+        "track_width_m": track_width_m,
+        "recipe": f"PyTorch residual v1 (best epoch {selection.get('best_epoch', 'unknown')})",
+        "runtime_source": "pytorch_residual_v1_experimental",
+        "feature_dim": 88,
+        "warnings": [
+            "Experimental PyTorch residual v1; checkpoint selected on historical validation and not promoted as production current_best.",
+            "Zero-delay center-mean physics is used only inside this experimental model path.",
+        ],
+    }
+
 def _run_onnx_model(spec: ModelSpec, windows: Any, np: Any) -> dict[str, Any]:
     try:
         import onnxruntime as ort
@@ -500,12 +687,15 @@ def run_session_model(
         model_result = _run_onnx_model(spec, windows, np)
     elif spec.kind == "recipe":
         model_result = _run_recipe_model(spec, windows, session_data, np)
+    elif spec.kind == "pytorch_residual":
+        model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
 
     if file_identity(spec.checkpoint) != checkpoint_before:
         raise ModelInferenceError("Model file changed during analysis; discard result and retry")
     xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
+    model_warnings = list(model_result.pop("warnings", []) or [])
     from .analysis_contract import build_analysis
     analysis = build_analysis(
         times=preprocess["time_s"], xy=xy.tolist(), flags=preprocess["quality_flags"],
@@ -528,7 +718,7 @@ def run_session_model(
                          "camber_rad": 0., "source": "inherited_assumptions"},
             "calibration": {k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")},
             "applied_yaw_delay_frames": model_result["yaw_delay_frames"],
-            "warnings": preprocess["warnings"], "input_gap_policy": preprocess["input_gap_policy"],
+            "warnings": [*preprocess["warnings"], *model_warnings], "input_gap_policy": preprocess["input_gap_policy"],
         },
     )
     path_length_m = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum())
@@ -550,5 +740,200 @@ def run_session_model(
         "extent_y_m": float(np.ptp(xy[:, 1])),
         "preprocess": preprocess,
         "analysis": analysis,
+        **model_result,
+    }
+
+
+
+def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path) -> dict[str, Any]:
+    """Run a trusted local BiWheel3D processed NPZ directly for research review.
+
+    This is intentionally separate from finalized `.waj` loading. It accepts only
+    files inside this checkout's `BiWheel3D/data` tree and never writes the trial.
+    C3D overlay metrics are full-cache diagnostics, not the official support-masked
+    P1/PyTorch validation score.
+    """
+    data_root = (Path(repo_root) / "BiWheel3D" / "data").resolve()
+    resolved = Path(trial_path).expanduser().resolve()
+    try:
+        resolved.relative_to(data_root)
+    except ValueError as exc:
+        raise ModelInferenceError(f"Research trial must be inside {data_root}") from exc
+    if not resolved.is_file() or resolved.suffix.lower() != ".npz":
+        raise ModelInferenceError(f"Choose a processed BiWheel3D .npz trial inside {data_root}")
+
+    ready, detail = model_spec_runtime_status(spec)
+    if not ready:
+        raise ModelInferenceError(detail)
+    try:
+        import hashlib
+        import numpy as np
+        from .analysis_contract import build_analysis, file_identity
+        from .biwheel3d_runtime.schema import Trial
+    except ImportError as exc:
+        raise ModelInferenceError("BiWheel3D research-trial runtime is unavailable.") from exc
+
+    try:
+        trial = Trial.load(resolved)
+    except Exception as exc:
+        raise ModelInferenceError(f"Could not load trusted processed trial: {exc}") from exc
+    windows = np.asarray(trial.imu_dual_windows, dtype=np.float32)
+    if windows.ndim != 3 or windows.shape[1:] != (5, 12) or len(windows) < MIN_MODEL_STEPS:
+        raise ModelInferenceError(f"Processed trial has incompatible IMU windows {windows.shape}")
+    times = np.asarray(trial.t_gt, dtype=np.float64)
+    if times.shape != (len(windows),) or not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
+        raise ModelInferenceError("Processed trial has invalid model-step timestamps")
+
+    meta = trial.meta
+    session_data = {
+        "session_id": str(meta.trial_id),
+        "topic": str(meta.condition),
+        "maneuver": str(meta.maneuver),
+        "athlete": str(meta.athlete),
+        "trial_number": str(meta.trial_id).rsplit("_", 1)[-1],
+        "source_recording": str(resolved),
+        "quality": "RESEARCH_PROCESSED_CACHE",
+    }
+    checkpoint_before = file_identity(spec.checkpoint)
+    source_before = file_identity(resolved)
+    if spec.kind == "onnx":
+        model_result = _run_onnx_model(spec, windows, np)
+    elif spec.kind == "recipe":
+        model_result = _run_recipe_model(spec, windows, session_data, np)
+    elif spec.kind == "pytorch_residual":
+        model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
+    else:
+        raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
+    if file_identity(spec.checkpoint) != checkpoint_before:
+        raise ModelInferenceError("Model file changed during research analysis")
+    if file_identity(resolved) != source_before:
+        raise ModelInferenceError("Processed trial changed during research analysis")
+
+    xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
+    if xy.shape != (len(windows), 2) or not np.isfinite(xy).all():
+        raise ModelInferenceError("Research model output does not match processed trial length")
+    model_warnings = list(model_result.pop("warnings", []) or [])
+    warnings = [
+        "Research processed NPZ loaded directly; this is not a finalized .waj recording.",
+        "Any C3D metric shown here is a full-cache visual diagnostic; use support-masked evaluation for model claims.",
+        *model_warnings,
+    ]
+    quality_flags = [[] for _ in range(len(times))]
+    preprocess = {
+        "target_hz": int(meta.imu_hz),
+        "model_steps": int(len(windows)),
+        "aligned_samples": int(len(windows) * int(meta.sync_ratio)),
+        "resampled": False,
+        "missing_samples": 0,
+        "physical_sync_verified": False,
+        "time_s": times.tolist(),
+        "quality_flags": quality_flags,
+        "time_basis": "processed_trial_t_gt",
+        "overlap_start_s": float(times[0]),
+        "clock_evidence": {
+            "source": "processed_npz",
+            "lag_s": float(meta.lag_s),
+            "sync_corr": float(meta.sync_corr),
+            "note": "Use the trial processing manifest for physical synchronization provenance.",
+        },
+        "scale_provenance": {"source": "processed_npz_si_windows"},
+        "warnings": warnings,
+        "input_gap_policy": {"source": "processed_cache"},
+    }
+    signed_speed = model_result.pop("signed_speed_mps", None)
+    yaw_values = model_result.pop("yaw_rad", None)
+    yaw_rate = model_result.pop("yaw_rate_radps", None)
+    analysis = build_analysis(
+        times=times.tolist(), xy=xy.tolist(), flags=quality_flags,
+        signed_speed=signed_speed, yaw=yaw_values, yaw_rate=yaw_rate,
+        metadata={
+            "model_key": spec.key,
+            "model_label": spec.label,
+            "model_kind": spec.kind,
+            "model_sha256": checkpoint_before,
+            "session_id": str(meta.trial_id),
+            "model_input_sha256": hashlib.sha256(np.asarray(windows, dtype="<f4").tobytes()).hexdigest(),
+            "model_input_layout": "processed SI float32 (T,5,12)",
+            "source_recording": str(resolved),
+            "source_recording_sha256": source_before,
+            "time_basis": preprocess["time_basis"],
+            "overlap_start_s": preprocess["overlap_start_s"],
+            "recording_quality": "RESEARCH_PROCESSED_CACHE",
+            "clock_evidence": preprocess["clock_evidence"],
+            "scale_provenance": preprocess["scale_provenance"],
+            "xy_frame": model_result.get("xy_frame"),
+            "yaw_frame": model_result.get("yaw_frame"),
+            "geometry": {
+                "wheel_radius_m": model_result["wheel_radius_m"],
+                "track_width_m": model_result["track_width_m"],
+                "camber_rad": float(meta.alpha),
+                "source": "processed_trial_metadata",
+            },
+            "calibration": {k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")},
+            "applied_yaw_delay_frames": model_result["yaw_delay_frames"],
+            "warnings": warnings,
+            "input_gap_policy": preprocess["input_gap_policy"],
+        },
+    )
+
+    ground_truth_xy = None
+    ground_truth_yaw = None
+    gt_diagnostic = None
+    if bool(meta.has_gt):
+        raw_xy = np.asarray(trial.xyz[:, :2], dtype=np.float64)
+        left = np.asarray(trial.xyz_left, dtype=np.float64)
+        right = np.asarray(trial.xyz_right, dtype=np.float64)
+        if raw_xy.shape == xy.shape and left.shape[0] == len(xy) and right.shape[0] == len(xy):
+            axle_right = right[:, :2] - left[:, :2]
+            axle_len = np.linalg.norm(axle_right, axis=1)
+            gt_yaw_wrapped = np.arctan2(axle_right[:, 0], -axle_right[:, 1])
+            for index in range(1, len(gt_yaw_wrapped)):
+                if axle_len[index] < 1e-4:
+                    gt_yaw_wrapped[index] = gt_yaw_wrapped[index - 1]
+            gt_yaw_abs = np.unwrap(gt_yaw_wrapped.astype(np.float64))
+            yaw0 = float(gt_yaw_abs[0])
+            c, sn = np.cos(-yaw0), np.sin(-yaw0)
+            rel = raw_xy - raw_xy[0]
+            gt_xy = np.column_stack([c * rel[:, 0] - sn * rel[:, 1], sn * rel[:, 0] + c * rel[:, 1]])
+            gt_yaw = gt_yaw_abs - yaw0
+            if np.isfinite(gt_xy).all() and np.isfinite(gt_yaw).all():
+                ground_truth_xy = [(float(x), float(y)) for x, y in gt_xy]
+                ground_truth_yaw = gt_yaw.astype(float).tolist()
+                xy_error = np.linalg.norm(xy - gt_xy, axis=1)
+                gt_diagnostic = {
+                    "scope": "full_processed_cache_not_support_masked",
+                    "ate_rmse_m": float(np.sqrt(np.mean(xy_error**2))),
+                    "endpoint_error_m": float(xy_error[-1]),
+                }
+                if yaw_values is not None:
+                    predicted_yaw = np.asarray(yaw_values, dtype=np.float64)
+                    if predicted_yaw.shape == gt_yaw.shape and np.isfinite(predicted_yaw).all():
+                        gt_diagnostic["heading_unwrapped_rmse_deg"] = float(
+                            np.degrees(np.sqrt(np.mean((predicted_yaw - gt_yaw) ** 2)))
+                        )
+
+    path_length_m = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum())
+    endpoint_m = float(np.linalg.norm(xy[-1] - xy[0]))
+    return {
+        "session_id": str(meta.trial_id),
+        "topic": str(meta.condition),
+        "trial_number": str(meta.trial_id).rsplit("_", 1)[-1],
+        "athlete": str(meta.athlete),
+        "model_key": spec.key,
+        "model_kind": spec.kind,
+        "model_label": spec.label,
+        "checkpoint": str(spec.checkpoint),
+        "xy": [(float(x), float(y)) for x, y in xy],
+        "point_count": int(len(xy)),
+        "path_length_m": path_length_m,
+        "endpoint_m": endpoint_m,
+        "extent_x_m": float(np.ptp(xy[:, 0])),
+        "extent_y_m": float(np.ptp(xy[:, 1])),
+        "preprocess": preprocess,
+        "analysis": analysis,
+        "ground_truth_xy": ground_truth_xy,
+        "ground_truth_yaw_rad": ground_truth_yaw,
+        "gt_diagnostic": gt_diagnostic,
+        "research_trial_path": str(resolved),
         **model_result,
     }

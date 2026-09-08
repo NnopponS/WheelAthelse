@@ -1,4 +1,4 @@
-﻿# WheelAthlete Windows Research Application
+# WheelAthlete Windows Research Application
 
 The **WheelAthlete Windows Research Application** is the reliability-first Windows acquisition and research client. It uses a PySide6 operator interface and a separate Python acquisition daemon so BLE capture and authoritative raw-data recording remain isolated from UI rendering and optional analysis workloads.
 
@@ -11,6 +11,12 @@ Current package version: `1.8.0`
 - `packaging/windows/` â€” PyInstaller and Inno Setup packaging sources.
 - `run_wheelathlete_windows.bat` â€” source launcher.
 - `build/` and `release/` â€” generated artifacts; excluded from Git.
+
+## Experimental PyTorch research review
+
+The source MODEL page keeps the frozen BiWheel3D XY+yaw recipe first/default. If local PyTorch is available, a `torch_residual_v1` `.pt/.pth` checkpoint in `Documents/WheelAthlete/Model` can be selected explicitly as an experimental model. This does not change production `current_best` or the package requirements.
+
+Use `Research trial…` to inspect a trusted processed `.npz` under this checkout's `BiWheel3D/data` tree. If the trial contains real C3D hub ground truth, the chart overlays it as a gray dashed path and labels the displayed errors as full-cache diagnostics. These are visual research diagnostics; model-selection claims still require the support-masked evaluator and frozen split protocol. IMU-only trials never receive fabricated GT.
 
 ## Run from source
 

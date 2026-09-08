@@ -81,6 +81,8 @@ def test_results_selection_can_be_opened_in_model_page():
     assert window.model.chart_view.accessibleName() == "trajectoryChart"
     assert window.model.browse_model_button.isVisible()
     assert window.model.browse_model_button.isEnabled()
+    assert window.model.browse_research_button.isVisible()
+    assert window.model.browse_research_button.isEnabled()
 
     _close(controller, window)
 
@@ -138,4 +140,24 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     assert not model.browse_model_button.isHidden()
     assert "ONNX" in model.browse_model_button.toolTip()
 
+    _close(controller, window)
+
+
+def test_model_page_renders_c3d_overlay_for_research_trial():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["ground_truth_xy"] = [(0.0, 0.0), (0.45, 0.08), (0.95, 0.35), (1.35, 0.75)]
+    result["gt_diagnostic"] = {
+        "scope": "full_processed_cache_not_support_masked",
+        "ate_rmse_m": 0.082,
+        "endpoint_error_m": 0.071,
+        "heading_unwrapped_rmse_deg": 4.2,
+    }
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+    assert model.ground_truth_series.count() == 4
+    assert model.chart.legend().isVisible()
+    assert "C3D full-cache diagnostic ATE 0.082 m" in model.status_label.text()
+    assert "full-cache diagnostic ATE 0.082 m" in model.status_label.toolTip()
     _close(controller, window)

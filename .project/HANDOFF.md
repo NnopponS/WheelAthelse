@@ -28,7 +28,9 @@ The runner never installs packages, flashes devices or publishes artifacts. It f
 
 ## Next substantive work
 
-Obtain synchronized raw IMU plus valid moving wheel-marker optical references, retaining sample ranges/mounting and clock evidence. Freeze intact participant/day/session/remount groups and an untouched final group. Reopen P3 only when those inputs satisfy the predeclared gates. Port the selected classical estimator to mobile only after acceptance, using declared Python/Dart prediction fixtures. Run installed-device and coach acceptance separately from source tests/builds.
+Start new research work from `BiWheel3D/data/datasets/manifest.csv`, not by globbing every processed directory together. The Windows source MODEL page can select `Experimental PyTorch Residual v1` from the local model library and use `Research trial…` to open a trusted processed NPZ under `BiWheel3D/data`. True C3D trials get a gray GT overlay and explicitly full-cache diagnostic metrics. Keep the frozen classical recipe first/default.
+
+Obtain or re-export synchronized moving wheel-marker references for the unresolved captures, especially the 2026-09-05 Qualisys session. The archived dynamic Sep-5 C3Ds contain zero point trajectories, so their generated `L_WC_EST/R_WC_EST` files are pseudo references for visualization/manual QTM reconstruction only and must never become training labels. Freeze intact participant/day/session/remount groups and an untouched final group before reopening P3. Port an accepted estimator to mobile only after that gate.
 
 The current mobile model cannot acquire chair yaw merely through a display or schema change. Do not infer yaw from path tangent, retune on historical final data, silently rescale old recordings, or weaken QA to improve coverage. Do not mistake a successful build or saved affine map for physical accuracy.
 
@@ -38,7 +40,7 @@ Use one STATUS and one HANDOFF, and one conclusion per phase. Keep temporary wor
 
 ## Published implementation
 
-The published feature tip before the current repair is `0b09b7c8e7c7995d0000232656008ecbb8d9b47d`. Its hosted source verification failed on a Windows path-alias assertion plus files excluded from the published tree, while the same source passed locally. The current staged repair makes those tests self-contained and platform-safe without changing model defaults. Local verification passes 148 Windows tests, 705 Flutter tests, 16 tooling tests, the update-manifest test and Flutter analysis. Do not claim hosted CI success until the post-push checks complete. Main/release references and the separate research index remain unchanged.
+The current local feature branch contains additional PyTorch-research UI work after the previously published maintenance tip. Before publishing this continuation, keep the pre-existing `.github/workflows/release.yml` edit out of the commit, run the root hygiene/staged checks, and verify protected refs remain unchanged. The latest local Windows run passes 152 tests; the separate BiWheel3D tree passes 205 tests. Do not publish the research checkpoint, raw/derived participant data, pseudo C3Ds or nested-repository state through the root application repository.
 
 ## Hourly verification and future engineering runs
 

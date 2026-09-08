@@ -72,6 +72,7 @@ from .model_inference import (
     model_library_root,
     model_runtime_status,
     model_spec_runtime_status,
+    run_processed_trial_model,
     run_session_model,
 )
 from .analysis_timeline import AnalysisTimeline
@@ -2493,6 +2494,7 @@ class ModelPage(QWidget):
         self._running = False
         self._generation = 0
         self._analysis_result = None
+        self._research_trial_path: Path | None = None
         self._trajectory_bounds: tuple[float, float, float, float] | None = None
 
         root = QVBoxLayout(self)
@@ -2527,8 +2529,11 @@ class ModelPage(QWidget):
 
         self.browse_model_button = _button("Browse model…", "browseModelCheckpointButton")
         self.browse_model_button.setAccessibleName("browseModelCheckpointButton")
-        self.browse_model_button.setToolTip("Browse a BiWheel3D ONNX model or XY + Yaw recipe JSON")
+        self.browse_model_button.setToolTip("Browse a BiWheel3D ONNX model, experimental PyTorch residual checkpoint, or XY + Yaw recipe JSON")
         self.refresh_models_button = _button("Refresh models", "refreshModelListButton")
+        self.browse_research_button = _button("Research trial…", "browseResearchTrialButton")
+        self.browse_research_button.setAccessibleName("browseResearchTrialButton")
+        self.browse_research_button.setToolTip("Open a trusted processed .npz inside BiWheel3D/data for read-only model/GT review")
         self.generate_button = _button("Generate 2D trajectory", "generateTrajectoryButton", primary=True)
         self.generate_button.setAccessibleName("generateTrajectoryButton")
 
@@ -2546,7 +2551,8 @@ class ModelPage(QWidget):
         controls_layout.addWidget(self.browse_model_button, 0, 2)
         controls_layout.addWidget(self.refresh_models_button, 0, 3)
         controls_layout.addWidget(session_label, 1, 0)
-        controls_layout.addWidget(self.session_combo, 1, 1, 1, 2)
+        controls_layout.addWidget(self.session_combo, 1, 1)
+        controls_layout.addWidget(self.browse_research_button, 1, 2)
         controls_layout.addWidget(self.generate_button, 1, 3)
         controls_layout.setColumnStretch(1, 2)
         root.addWidget(controls)
@@ -2592,6 +2598,9 @@ class ModelPage(QWidget):
         self.trajectory_series = QLineSeries()
         self.trajectory_series.setName("Estimated path")
         self.trajectory_series.setPen(QPen(QColor("#0f766e"), 2.4))
+        self.ground_truth_series = QLineSeries()
+        self.ground_truth_series.setName("C3D GT (full-cache diagnostic)")
+        self.ground_truth_series.setPen(QPen(QColor("#64748b"), 1.8, Qt.PenStyle.DashLine))
         self.start_series = QScatterSeries()
         self.start_series.setName("Start")
         self.start_series.setMarkerSize(10.0)
@@ -2606,7 +2615,7 @@ class ModelPage(QWidget):
         self.window_series = QLineSeries()
         self.window_series.setName("Window")
         self.window_series.setPen(QPen(QColor("#ea580c"), 3., Qt.PenStyle.DashLine))
-        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
+        for series in (self.trajectory_series, self.ground_truth_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
             self.chart.addSeries(series)
 
         self.axis_x = QValueAxis()
@@ -2619,7 +2628,7 @@ class ModelPage(QWidget):
         self.axis_y.setLabelFormat("%.2f")
         self.chart.addAxis(self.axis_x, Qt.AlignmentFlag.AlignBottom)
         self.chart.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
-        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
+        for series in (self.trajectory_series, self.ground_truth_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
             series.attachAxis(self.axis_x)
             series.attachAxis(self.axis_y)
 
@@ -2652,6 +2661,7 @@ class ModelPage(QWidget):
         self.model_combo.currentIndexChanged.connect(self._update_model_detail)
         self.browse_model_button.clicked.connect(self.browse_model)
         self.refresh_models_button.clicked.connect(self.refresh_models)
+        self.browse_research_button.clicked.connect(self.browse_research_trial)
         self.generate_button.clicked.connect(self.generate_trajectory)
         self.analysis_ready.connect(self._on_analysis_ready)
         self.analysis_failed.connect(self._on_analysis_failed)
@@ -2737,7 +2747,7 @@ class ModelPage(QWidget):
             )
         else:
             self.model_detail.setText(
-                f"No compatible model selected. Browse a .onnx or recipe .json file. Model folder: {model_library_root()}"
+                f"No compatible model selected. Browse a .onnx, experimental .pt/.pth, or recipe .json file. Model folder: {model_library_root()}"
             )
             self.runtime_label.setText(f"Model folder · {model_library_root()}")
             self.model_combo.setToolTip(f"Model folder: {model_library_root()}")
@@ -2753,7 +2763,7 @@ class ModelPage(QWidget):
             self,
             "Select BiWheel3D model",
             initial_dir,
-            "BiWheel3D models (*.onnx *.json);;ONNX models (*.onnx);;Recipe JSON (*.json);;All files (*.*)",
+            "BiWheel3D models (*.onnx *.pt *.pth *.json);;PyTorch residual (*.pt *.pth);;ONNX models (*.onnx);;Recipe JSON (*.json);;All files (*.*)",
         )
         if not chosen:
             return
@@ -2779,13 +2789,59 @@ class ModelPage(QWidget):
         )
         self._update_model_detail()
 
+    def browse_research_trial(self) -> None:
+        data_root = (self.repo_root / "BiWheel3D" / "data").resolve()
+        initial_dir = str(self._research_trial_path.parent if self._research_trial_path else data_root)
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            "Select processed BiWheel3D research trial",
+            initial_dir,
+            "Processed BiWheel3D trials (*.npz);;All files (*.*)",
+        )
+        if not chosen:
+            return
+        path = Path(chosen).expanduser().resolve()
+        try:
+            path.relative_to(data_root)
+            from .biwheel3d_runtime.schema import Trial
+            trial = Trial.load(path)
+            windows = trial.imu_dual_windows
+            if windows.ndim != 3 or windows.shape[1:] != (5, 12):
+                raise ValueError(f"unexpected windows {windows.shape}")
+        except Exception as exc:
+            self.status_label.setText(f"Research trial error · {exc}")
+            return
+        self._research_trial_path = path
+        payload = {"kind": "processed_npz", "path": str(path)}
+        label = (
+            f"Research NPZ · {trial.meta.trial_id} · {trial.meta.condition} · "
+            + ("C3D GT" if trial.meta.has_gt else "IMU only")
+        )
+        for index in range(self.session_combo.count()):
+            existing = self.session_combo.itemData(index)
+            if isinstance(existing, dict) and existing.get("path") == str(path):
+                self.session_combo.setCurrentIndex(index)
+                break
+        else:
+            self.session_combo.addItem(label, payload)
+            self.session_combo.setCurrentIndex(self.session_combo.count() - 1)
+        self.status_label.setText(
+            "Selected read-only research NPZ. C3D overlay, when available, is a full-cache diagnostic rather than the support-masked validation score."
+        )
+
     def generate_trajectory(self) -> None:
         if self._running:
             return
         spec = self.model_combo.currentData()
-        session_id = str(self.session_combo.currentData() or "")
+        selection = self.session_combo.currentData()
+        research_path = None
+        if isinstance(selection, dict) and selection.get("kind") == "processed_npz":
+            research_path = Path(str(selection.get("path") or "")).resolve()
+            session_id = f"research:{research_path}"
+        else:
+            session_id = str(selection or "")
         if not isinstance(spec, ModelSpec) or not session_id:
-            self.status_label.setText("Choose both a recording and a compatible model first.")
+            self.status_label.setText("Choose both a recording/research trial and a compatible model first.")
             return
 
         recording_label = self.session_combo.currentText().strip() or session_id
@@ -2798,8 +2854,11 @@ class ModelPage(QWidget):
 
         def work() -> None:
             try:
-                session_data = self.controller.load_session_data(session_id)
-                result = run_session_model(self.repo_root, spec, session_data)
+                if research_path is not None:
+                    result = run_processed_trial_model(self.repo_root, spec, research_path)
+                else:
+                    session_data = self.controller.load_session_data(session_id)
+                    result = run_session_model(self.repo_root, spec, session_data)
                 result["recording_label"] = recording_label
             except Exception as exc:  # worker boundary: surface a readable UI error
                 try:
@@ -2822,6 +2881,7 @@ class ModelPage(QWidget):
         self.session_combo.setEnabled(not running)
         self.browse_model_button.setEnabled(not running)
         self.refresh_models_button.setEnabled(not running)
+        self.browse_research_button.setEnabled(not running)
         if running:
             self.generate_button.setEnabled(False)
             self.generate_button.setText("Generating…")
@@ -2897,6 +2957,17 @@ class ModelPage(QWidget):
             display_points.append(points[-1])
         qpoints = [QPointF(float(x), float(y)) for x, y in display_points]
         self.trajectory_series.replace(qpoints)
+        gt_points = list(result.get("ground_truth_xy") or [])
+        if gt_points:
+            gt_stride = max(1, len(gt_points) // 5000)
+            gt_display = gt_points[::gt_stride]
+            if gt_display[-1] != gt_points[-1]:
+                gt_display.append(gt_points[-1])
+            self.ground_truth_series.replace([QPointF(float(x), float(y)) for x, y in gt_display])
+            self.chart.legend().setVisible(True)
+        else:
+            self.ground_truth_series.clear()
+            self.chart.legend().setVisible(False)
         self.start_series.clear()
         self.end_series.clear()
         self.start_series.append(qpoints[0])
@@ -2904,6 +2975,9 @@ class ModelPage(QWidget):
 
         xs = [float(point[0]) for point in points]
         ys = [float(point[1]) for point in points]
+        if gt_points:
+            xs.extend(float(point[0]) for point in gt_points)
+            ys.extend(float(point[1]) for point in gt_points)
         self._trajectory_bounds = (min(xs), max(xs), min(ys), max(ys))
 
         model_label = str(result.get("model_label") or "Model")
@@ -2938,15 +3012,24 @@ class ModelPage(QWidget):
         yaw_source = str(result.get("yaw_source") or "unknown")
         yaw_delay = int(result.get("yaw_delay_frames") or 0)
         detail += f"  Yaw: {yaw_source}, delay {yaw_delay} frame(s)."
+        gt_diagnostic = result.get("gt_diagnostic") or {}
+        if gt_diagnostic:
+            detail += f"  C3D full-cache diagnostic ATE {float(gt_diagnostic['ate_rmse_m']):.3f} m"
+            if gt_diagnostic.get("heading_unwrapped_rmse_deg") is not None:
+                detail += f", heading {float(gt_diagnostic['heading_unwrapped_rmse_deg']):.2f} deg"
+            detail += "."
         if warnings:
             detail += "  Warning: " + " ".join(str(item) for item in warnings)
         else:
             detail += "  Dual-wheel input prepared at the model's native 100 Hz contract."
         self.status_label.setToolTip(detail)
         if result.get("analysis") is not None:
+            suffix = ""
+            if gt_diagnostic:
+                suffix = f" | C3D full-cache ATE {float(gt_diagnostic['ate_rmse_m']):.3f} m"
             self.status_label.setText(
-                f"Experimental offline estimate | {len(points):,} samples | "
-                "solid: full path; dashed: selected window; dot: time cursor. See quality details before interpreting."
+                f"Experimental offline estimate | {len(points):,} samples{suffix} | "
+                "solid: estimate; gray dashed: C3D GT when available; orange dashed: selected window. See quality details before interpreting."
             )
         else:
             self.status_label.setText(detail)
@@ -2958,8 +3041,9 @@ class ModelPage(QWidget):
         self._analysis_result = None
         self._trajectory_bounds = None
         self.timeline.set_analysis(None)
-        for series in (self.trajectory_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
+        for series in (self.trajectory_series, self.ground_truth_series, self.start_series, self.end_series, self.cursor_series, self.window_series):
             series.clear()
+        self.chart.legend().setVisible(False)
         for label in (self.metric_model, self.metric_session, self.metric_points, self.metric_path, self.metric_endpoint, self.metric_yaw):
             label.setText("—")
         self.chart.setTitle("Generate analysis for the selected recording")
