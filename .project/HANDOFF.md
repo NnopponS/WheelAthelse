@@ -40,7 +40,7 @@ Use one STATUS and one HANDOFF, and one conclusion per phase. Keep temporary wor
 
 ## Published implementation
 
-The current local feature branch contains additional PyTorch-research UI work after the previously published maintenance tip. Before publishing this continuation, keep the pre-existing `.github/workflows/release.yml` edit out of the commit, run the root hygiene/staged checks, and verify protected refs remain unchanged. The latest local Windows run passes 152 tests; the separate BiWheel3D tree passes 205 tests. Do not publish the research checkpoint, raw/derived participant data, pseudo C3Ds or nested-repository state through the root application repository.
+The PyTorch research-review implementation commit `62b5aaf83f331da2f8c067b526c5abf0324ebf9e` is published on `feature/dual-imu-coaching-analysis`. Remote verification matched that commit; `main` and `release/main-v1.8.0` were unchanged. The pre-existing `.github/workflows/release.yml` edit remains local and excluded. Local verification passes 152 Windows tests and 205 separate BiWheel3D tests. The research checkpoint, raw/derived participant data, pseudo C3Ds and nested-repository state remain local-only.
 
 ## Hourly verification and future engineering runs
 

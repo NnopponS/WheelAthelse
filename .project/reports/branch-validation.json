@@ -6,9 +6,9 @@
   "verification_status": "passed_on_source",
   "scope": "Source software and project organization, not a release or physical accuracy pass",
   "summary": {
-    "windows_tests": 148,
+    "windows_tests": 152,
     "mobile_tests": 705,
-    "research_tests": 198,
+    "research_tests": 205,
     "tooling_tests": 6,
     "update_manifest_tests": 1,
     "flutter_analyzer": "No issues found"
@@ -97,11 +97,45 @@
   "publication": {
     "repository": "NnopponS/WheelAthelse",
     "branch": "feature/dual-imu-coaching-analysis",
-    "source_commit": "266b6929c91760985c4a9b29cec6928495b13d8e",
+    "source_commit": "62b5aaf83f331da2f8c067b526c5abf0324ebf9e",
     "remote_source_commit_verified": true,
     "main_and_release_refs_unchanged": true,
     "source_workflow_started": true,
-    "hosted_ci_at_source_push": "in_progress",
+    "hosted_ci_at_source_push": "not_claimed_complete",
     "note": "Current branch tip may include documentation-only handoff commits. The local receipt records the final remote SHA. Hosted CI is not represented as passed."
+  },
+  "latest_research_review": {
+    "implementation_commit": "62b5aaf83f331da2f8c067b526c5abf0324ebf9e",
+    "windows_tests": {
+      "count": 152,
+      "exit_code": 0,
+      "seconds": 38.44,
+      "runner_seconds": 41.364,
+      "sha256": "b1650707272f50893b44c5fd8ddae0ff5bd06e7c24a13f2a827316ef0e4120da",
+      "log_location": ".project/local/verification/20260908T070138_902948Z_windows/windows_tests.txt"
+    },
+    "research_tests": {
+      "count": 205,
+      "exit_code": 0,
+      "seconds": 7.54,
+      "sha256": "ddf4539feb4bf5ea6b95e0aa5a5756fc000b78d4cad316600e0cc931ac5f3834",
+      "log_location": ".project/local/torch-app-dataset-2026-09-08/biwheel3d_full.txt"
+    },
+    "focused_model_page_tests": {
+      "count": 16,
+      "exit_code": 0,
+      "seconds": 5.81
+    },
+    "dataset_catalog": {
+      "paired_gt": 30,
+      "paired_gt_accepted": 21,
+      "paired_gt_excluded": 9,
+      "paired_reference_unavailable": 19,
+      "imu_only": 56,
+      "c3d_only": 10
+    },
+    "qualisys_sep5": "19 dynamic C3Ds have POINT.USED=0; pseudo markers are local visualization aids and not ground truth",
+    "pytorch_checkpoint_published": false,
+    "model_promoted": false
   }
 }

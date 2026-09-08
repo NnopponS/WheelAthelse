@@ -27,7 +27,7 @@ The latest PyTorch/data integration pass passed **152 Windows GUI/acquisition te
 
 This branch additionally rejects mixed mobile timestamp domains and hidden sequence gaps, aligns Python metadata validation with Dart, and moves long mobile export serialization/hashing off the UI isolate. The 8,000-point export regression retains the complete CSV and correct selected-window metadata.
 
-The latest published feature tip is `0b09b7c8e7c7995d0000232656008ecbb8d9b47d`. Hosted CI on that tip exposed two portability defects rather than model failures: Windows temporary directories could be represented through an 8.3 alias, and verification depended on fixture/license files that were present locally but excluded from the published tree. The current repair uses same-file comparison on Windows, a tracked synthetic cross-platform feature fixture with provenance, and the exact BiWheel3D MIT attribution already present in the separate research repository and vendored Windows runtime. The full local source suite passes with these repairs. Hosted CI must be rechecked after publication before it is called green.
+The PyTorch research-review implementation is published on this feature branch at `62b5aaf83f331da2f8c067b526c5abf0324ebf9e`. The push was verified against the remote feature ref while `main` and `release/main-v1.8.0` remained unchanged. Hosted CI is separate from the completed local checks and must not be called green without a completed run.
 
 Eleven shared analytical cases are public fixtures, not athlete ground truth. The previous read-only smoke prepared 56 journals; one journal received full inference/export. This is not 56 accuracy trials.
 
