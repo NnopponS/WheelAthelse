@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -32,6 +33,7 @@ class ModelSpec:
     description: str
     kind: str = "recipe"
     bundled: bool = False
+    course_config: Path | None = None
 
 
 def model_library_root() -> Path:
@@ -50,15 +52,22 @@ def _bundled_current_best_recipe() -> Path:
     return _runtime_root() / CURRENT_BEST_RECIPE_NAME
 
 
-def _recipe_spec(path: Path, *, bundled: bool = False, strict: bool = True) -> ModelSpec | None:
+def _recipe_spec(
+    path: Path, *, bundled: bool = False, strict: bool = True
+) -> ModelSpec | None:
     resolved = path.expanduser().resolve()
     try:
         payload = json.loads(resolved.read_text(encoding="utf-8"))
     except Exception as exc:
         if strict:
-            raise ModelInferenceError(f"Could not read BiWheel3D recipe: {resolved}") from exc
+            raise ModelInferenceError(
+                f"Could not read BiWheel3D recipe: {resolved}"
+            ) from exc
         return None
-    if not isinstance(payload, dict) or payload.get("model_type") != "biwheel3d_xy_yaw_recipe":
+    if (
+        not isinstance(payload, dict)
+        or payload.get("model_type") != "biwheel3d_xy_yaw_recipe"
+    ):
         if strict:
             raise ModelInferenceError(
                 "Recipe JSON is not a supported BiWheel3D XY + Yaw model recipe. "
@@ -67,7 +76,11 @@ def _recipe_spec(path: Path, *, bundled: bool = False, strict: bool = True) -> M
         return None
     key = str(payload.get("model_id") or f"recipe:{resolved}")
     label = str(payload.get("label") or resolved.stem)
-    description = str(payload.get("description") or payload.get("recipe") or "BiWheel3D XY + Yaw recipe")
+    description = str(
+        payload.get("description")
+        or payload.get("recipe")
+        or "BiWheel3D XY + Yaw recipe"
+    )
     return ModelSpec(
         key=key,
         label=label,
@@ -86,7 +99,11 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
     suffix = resolved.suffix.lower()
     if suffix == ".onnx":
         stem = resolved.stem.lower()
-        label = "BiWheel3D M4 - ONNX" if "biwheel3d" in stem and "m4" in stem else f"ONNX - {resolved.stem}"
+        label = (
+            "BiWheel3D M4 - ONNX"
+            if "biwheel3d" in stem and "m4" in stem
+            else f"ONNX - {resolved.stem}"
+        )
         return ModelSpec(
             key=f"onnx:{resolved}",
             label=label,
@@ -119,7 +136,9 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
             ),
             kind="pytorch_residual",
         )
-    raise ModelInferenceError("Choose a BiWheel3D .onnx, .pt/.pth research checkpoint, or supported .json recipe.")
+    raise ModelInferenceError(
+        "Choose a BiWheel3D .onnx, .pt/.pth research checkpoint, or supported .json recipe."
+    )
 
 
 def _candidate_model_dirs() -> list[Path]:
@@ -140,9 +159,120 @@ def _candidate_model_dirs() -> list[Path]:
     return unique
 
 
+def _research_registry_specs(repo_root: Path) -> list[ModelSpec]:
+    """Discover optional local-only BiWheel3D research artifacts from its registry.
+
+    Installed/clean application checkouts do not require the friend research repo.
+    """
+    research_root = (Path(repo_root) / "BiWheel3D").resolve()
+    registry = research_root / "registry" / "models.json"
+    if not registry.is_file():
+        return []
+    try:
+        payload = json.loads(registry.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    specs: list[ModelSpec] = []
+    for entry in payload.get("models", []):
+        if (
+            not isinstance(entry, dict)
+            or entry.get("status") == "frozen_application_baseline"
+        ):
+            continue
+        manifest_rel = entry.get("manifest")
+        if not isinstance(manifest_rel, str):
+            continue
+        try:
+            manifest_path = (research_root / manifest_rel).resolve()
+            manifest_path.relative_to(research_root)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            artifact_rel = manifest["artifacts"]["pytorch"]["path"]
+            artifact = (research_root / artifact_rel).resolve()
+            artifact.relative_to(research_root)
+            base_spec = custom_model_spec(artifact)
+            registry_kind = str(entry.get("kind") or "")
+            if registry_kind == "pytorch_residual_slalom_course":
+                course_rel = manifest["artifacts"]["course_config"]["path"]
+                course_config = (research_root / course_rel).resolve()
+                course_config.relative_to(research_root)
+                if not course_config.is_file():
+                    continue
+                spec = ModelSpec(
+                    key=str(
+                        entry.get("model_id") or f"pytorch_slalom_course:{artifact}"
+                    ),
+                    label=str(
+                        entry.get("label")
+                        or "Experimental PyTorch + Slalom Course Constraint"
+                    ),
+                    checkpoint=artifact,
+                    description=(
+                        "Research-only PyTorch residual v1 with an explicit fixed-course Slalom "
+                        "heading/position constraint. Non-Slalom sessions are an exact no-op; "
+                        "the adapter never reads C3D at inference."
+                    ),
+                    kind="pytorch_residual_slalom_course",
+                    bundled=False,
+                    course_config=course_config,
+                )
+            else:
+                spec = ModelSpec(
+                    key=base_spec.key,
+                    label=str(entry.get("label") or base_spec.label),
+                    checkpoint=base_spec.checkpoint,
+                    description=base_spec.description
+                    + " Discovered from the local BiWheel3D research registry.",
+                    kind=base_spec.kind,
+                    bundled=False,
+                )
+        except (
+            KeyError,
+            OSError,
+            ValueError,
+            json.JSONDecodeError,
+            ModelInferenceError,
+        ):
+            continue
+        specs.append(spec)
+    return specs
+
+
+def active_research_dataset_root(repo_root: Path) -> Path:
+    """Return the canonical active supervised dataset path when locally available."""
+    research_root = (Path(repo_root) / "BiWheel3D").resolve()
+    registry = research_root / "registry" / "datasets.json"
+    if registry.is_file():
+        try:
+            payload = json.loads(registry.read_text(encoding="utf-8"))
+            entry = next(
+                item
+                for item in payload.get("datasets", [])
+                if item.get("status") == "active_supervised"
+            )
+            candidate = (research_root / str(entry["path"])).resolve()
+            candidate.relative_to((research_root / "data").resolve())
+            if candidate.is_dir():
+                return candidate
+        except (OSError, ValueError, KeyError, StopIteration, json.JSONDecodeError):
+            pass
+    return research_root / "data"
+
+
+def _same_checkpoint_content(left: Path, right: Path) -> bool:
+    """Deduplicate local/library copies of the same experimental artifact."""
+    try:
+        if left.stat().st_size != right.stat().st_size:
+            return False
+        return (
+            hashlib.sha256(left.read_bytes()).digest()
+            == hashlib.sha256(right.read_bytes()).digest()
+        )
+    except OSError:
+        return False
+
+
 def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
-    """Discover built-in recipes and user models from Documents/WheelAthlete/Model."""
-    del repo_root
+    """Discover built-in, user-library, and optional local research models."""
     discovered: list[ModelSpec] = []
     seen_keys: set[str] = set()
     seen_paths: set[Path] = set()
@@ -186,6 +316,19 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
             learned_specs.append(spec)
             seen_paths.add(resolved)
 
+    for spec in _research_registry_specs(repo_root):
+        if spec.checkpoint in seen_paths or spec.key in seen_keys:
+            continue
+        if spec.kind == "pytorch_residual" and any(
+            existing.kind == "pytorch_residual"
+            and _same_checkpoint_content(existing.checkpoint, spec.checkpoint)
+            for existing in learned_specs
+        ):
+            continue
+        learned_specs.append(spec)
+        seen_paths.add(spec.checkpoint)
+        seen_keys.add(spec.key)
+
     # Keep the calibrated current-best recipe first, then browseable learned models.
     return discovered + learned_specs
 
@@ -217,19 +360,39 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
         if not (_runtime_root() / "yaw_ab.py").is_file():
             return False, "BiWheel3D XY + Yaw runtime is missing."
         return True, "BiWheel3D XY + Yaw recipe ready."
-    if spec.kind == "pytorch_residual":
+    if spec.kind in {"pytorch_residual", "pytorch_residual_slalom_course"}:
         if importlib.util.find_spec("torch") is None:
-            return False, "PyTorch is required for this experimental residual checkpoint."
+            return (
+                False,
+                "PyTorch is required for this experimental residual checkpoint.",
+            )
         if not (_runtime_root() / "yaw_ab.py").is_file():
             return False, "BiWheel3D physics runtime is missing."
-        return True, "Experimental PyTorch residual runtime ready (CPU/GPU selected by local PyTorch)."
+        if spec.kind == "pytorch_residual_slalom_course":
+            if spec.course_config is None or not spec.course_config.is_file():
+                return False, "Slalom course adapter config is missing."
+            try:
+                course_meta = json.loads(spec.course_config.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False, "Slalom course adapter config is invalid."
+            if int(course_meta.get("schema_version", 1)) == 2 and importlib.util.find_spec("scipy") is None:
+                return False, "SciPy is required for experimental Slalom course adapter v2."
+            version = int(course_meta.get("schema_version", 1))
+            return True, f"Experimental PyTorch + Slalom course adapter v{version} ready."
+        return (
+            True,
+            "Experimental PyTorch residual runtime ready (CPU/GPU selected by local PyTorch).",
+        )
     return False, f"Unsupported model kind: {spec.kind}"
 
 
 def prepare_dual_windows(
-    session_data: dict[str, Any], *, target_hz: int = TARGET_SAMPLE_HZ,
+    session_data: dict[str, Any],
+    *,
+    target_hz: int = TARGET_SAMPLE_HZ,
 ) -> tuple[Any, dict[str, Any]]:
     from .analysis_timing import AnalysisInputError, prepare_windows
+
     try:
         return prepare_windows(session_data, target_hz=target_hz)
     except (AnalysisInputError, ValueError, TypeError) as exc:
@@ -240,15 +403,24 @@ def extract_biwheel3d_features(windows: Any) -> Any:
     """Return the exact BiWheel3D protocol-v10b `(T, 90)` feature tensor."""
     try:
         import numpy as np
-        from .biwheel3d_runtime.imu_frame import canonicalize_dual_windows, demod_rim_accel
+        from .biwheel3d_runtime.imu_frame import (
+            canonicalize_dual_windows,
+            demod_rim_accel,
+        )
     except ImportError as exc:  # pragma: no cover - runtime guard
-        raise ModelInferenceError("BiWheel3D feature extraction dependencies are unavailable.") from exc
+        raise ModelInferenceError(
+            "BiWheel3D feature extraction dependencies are unavailable."
+        ) from exc
 
     w = canonicalize_dual_windows(np.asarray(windows, dtype=np.float32))
     if w.ndim != 3 or w.shape[1] != SAMPLES_PER_MODEL_STEP or w.shape[2] != 12:
-        raise ModelInferenceError(f"Expected BiWheel3D windows shaped (T,5,12), got {w.shape}.")
+        raise ModelInferenceError(
+            f"Expected BiWheel3D windows shaped (T,5,12), got {w.shape}."
+        )
     if w.shape[0] < MIN_MODEL_STEPS:
-        raise ModelInferenceError(f"BiWheel3D requires at least {MIN_MODEL_STEPS} model steps.")
+        raise ModelInferenceError(
+            f"BiWheel3D requires at least {MIN_MODEL_STEPS} model steps."
+        )
 
     flat = w.reshape(w.shape[0], 60)
     mu = w.mean(axis=1)
@@ -274,7 +446,9 @@ def extract_biwheel3d_features(windows: Any) -> Any:
     fwd = 0.5 * (lf + rf)
     lat = 0.5 * (ll + rl)
     az_lp = 0.5 * (mu[:, 2] + mu[:, 8])
-    az_lp = np.convolve(az_lp.astype(np.float64), np.ones(11) / 11.0, mode="same").astype(np.float32)
+    az_lp = np.convolve(
+        az_lp.astype(np.float64), np.ones(11) / 11.0, mode="same"
+    ).astype(np.float32)
     phi_r = np.arcsin(np.clip(rf / g, -1.0, 1.0)).astype(np.float32)
     phi_l = np.arcsin(np.clip(lf / g, -1.0, 1.0)).astype(np.float32)
     phi_mean = np.arcsin(np.clip(fwd / g, -1.0, 1.0)).astype(np.float32)
@@ -286,7 +460,9 @@ def extract_biwheel3d_features(windows: Any) -> Any:
     ).astype(np.float32)
     features = np.concatenate([flat, mu, kin, grav], axis=-1).astype(np.float32)
     if features.shape[1] != BIWHEEL3D_FEATURE_DIM or not np.all(np.isfinite(features)):
-        raise ModelInferenceError(f"BiWheel3D feature extraction produced invalid shape {features.shape}.")
+        raise ModelInferenceError(
+            f"BiWheel3D feature extraction produced invalid shape {features.shape}."
+        )
     return features
 
 
@@ -295,7 +471,10 @@ def _load_recipe(path: Path) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise ModelInferenceError(f"Could not read BiWheel3D recipe: {path}") from exc
-    if not isinstance(payload, dict) or payload.get("model_type") != "biwheel3d_xy_yaw_recipe":
+    if (
+        not isinstance(payload, dict)
+        or payload.get("model_type") != "biwheel3d_xy_yaw_recipe"
+    ):
         raise ModelInferenceError(f"Unsupported BiWheel3D recipe: {path}")
     return payload
 
@@ -322,7 +501,9 @@ def _build_runtime_trial(
 
     session_id = str(session_data.get("session_id") or "wheelathlete_session")
     topic = str(session_data.get("topic") or "")
-    maneuver = str(session_data.get("maneuver") or session_data.get("protocol") or "unknown")
+    maneuver = str(
+        session_data.get("maneuver") or session_data.get("protocol") or "unknown"
+    )
     athlete = str(session_data.get("athlete") or "")
     duration_s = float(n_raw / TARGET_SAMPLE_HZ)
     meta = TrialMeta(
@@ -364,7 +545,9 @@ def _build_runtime_trial(
     )
 
 
-def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any], np: Any) -> dict[str, Any]:
+def _run_recipe_model(
+    spec: ModelSpec, windows: Any, session_data: dict[str, Any], np: Any
+) -> dict[str, Any]:
     try:
         from .biwheel3d_runtime.schema import Trial, TrialMeta
         from .biwheel3d_runtime.yaw_ab import (
@@ -373,13 +556,17 @@ def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any
             odom_gyro_only,
         )
     except ImportError as exc:
-        raise ModelInferenceError("BiWheel3D XY + Yaw runtime could not be imported.") from exc
+        raise ModelInferenceError(
+            "BiWheel3D XY + Yaw runtime could not be imported."
+        ) from exc
 
     recipe = _load_recipe(spec.checkpoint)
     wheel_radius_m = float(recipe.get("wheel_radius_m") or CURRENT_BEST_WHEEL_RADIUS_M)
     track_width_m = float(recipe.get("track_width_m") or CURRENT_BEST_TRACK_WIDTH_M)
     gyro_scale = float(recipe.get("gyro_scale") or 1.10)
-    chassis_yaw_scale = float(recipe.get("chassis_yaw_scale") or DEFAULT_CHASSIS_YAW_SCALE)
+    chassis_yaw_scale = float(
+        recipe.get("chassis_yaw_scale") or DEFAULT_CHASSIS_YAW_SCALE
+    )
     yaw_delay_frames = int(recipe.get("yaw_delay_frames", DEFAULT_YAW_DELAY_FRAMES))
     yaw_delay_pad = str(recipe.get("yaw_delay_pad") or "burst")
     yaw_source = str(recipe.get("yaw_source") or "auto")
@@ -404,19 +591,32 @@ def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any
             align=align,
         )
     except Exception as exc:
-        raise ModelInferenceError(f"BiWheel3D XY + Yaw trajectory failed: {exc}") from exc
+        raise ModelInferenceError(
+            f"BiWheel3D XY + Yaw trajectory failed: {exc}"
+        ) from exc
 
     xyz = np.asarray(pred.get("xyz"), dtype=np.float64)
     angles = np.asarray(pred.get("angles"), dtype=np.float64)
-    if xyz.ndim != 2 or xyz.shape[0] < 2 or xyz.shape[1] < 2 or not np.all(np.isfinite(xyz[:, :2])):
+    if (
+        xyz.ndim != 2
+        or xyz.shape[0] < 2
+        or xyz.shape[1] < 2
+        or not np.all(np.isfinite(xyz[:, :2]))
+    ):
         raise ModelInferenceError("BiWheel3D returned an invalid 2D trajectory.")
     expected_steps = int(windows.shape[0])
     velocity = np.asarray(pred.get("v"), dtype=np.float64)
     rate = np.asarray(pred.get("yaw_rate"), dtype=np.float64)
-    if (xyz.shape != (expected_steps, 3) or angles.shape != (expected_steps, 3)
-            or velocity.shape != (expected_steps,) or rate.shape != (expected_steps,)
-            or not all(np.isfinite(a).all() for a in (xyz, angles, velocity, rate))):
-        raise ModelInferenceError("Recipe kinematic outputs have inconsistent shape or non-finite values")
+    if (
+        xyz.shape != (expected_steps, 3)
+        or angles.shape != (expected_steps, 3)
+        or velocity.shape != (expected_steps,)
+        or rate.shape != (expected_steps,)
+        or not all(np.isfinite(a).all() for a in (xyz, angles, velocity, rate))
+    ):
+        raise ModelInferenceError(
+            "Recipe kinematic outputs have inconsistent shape or non-finite values"
+        )
     # Preserve estimator unwrapped orientation; never infer heading from XY.
     yaw = angles[:, 1]
     net_yaw_deg = float(np.degrees(yaw[-1] - yaw[0]))
@@ -441,9 +641,8 @@ def _run_recipe_model(spec: ModelSpec, windows: Any, session_data: dict[str, Any
     }
 
 
-
 def _run_pytorch_residual_model(
-    spec: ModelSpec, windows: Any, session_data: dict[str, Any], np: Any
+    spec: ModelSpec, windows: Any, session_data: dict[str, Any], np: Any, *, include_internal: bool = False
 ) -> dict[str, Any]:
     """Run the research residual-v1 checkpoint without changing production defaults.
 
@@ -458,14 +657,25 @@ def _run_pytorch_residual_model(
         from .biwheel3d_runtime.schema import Trial, TrialMeta
         from .biwheel3d_runtime.yaw_ab import odom_gyro_only
     except ImportError as exc:
-        raise ModelInferenceError("PyTorch residual runtime dependencies are unavailable.") from exc
+        raise ModelInferenceError(
+            "PyTorch residual runtime dependencies are unavailable."
+        ) from exc
 
     try:
-        checkpoint = torch.load(str(spec.checkpoint), map_location="cpu", weights_only=True)
+        checkpoint = torch.load(
+            str(spec.checkpoint), map_location="cpu", weights_only=True
+        )
     except Exception as exc:
-        raise ModelInferenceError(f"Could not load PyTorch residual checkpoint: {exc}") from exc
-    if not isinstance(checkpoint, dict) or checkpoint.get("feature_version") != "torch_residual_v1":
-        raise ModelInferenceError("Unsupported PyTorch checkpoint: expected feature_version='torch_residual_v1'.")
+        raise ModelInferenceError(
+            f"Could not load PyTorch residual checkpoint: {exc}"
+        ) from exc
+    if (
+        not isinstance(checkpoint, dict)
+        or checkpoint.get("feature_version") != "torch_residual_v1"
+    ):
+        raise ModelInferenceError(
+            "Unsupported PyTorch checkpoint: expected feature_version='torch_residual_v1'."
+        )
     model_cfg = checkpoint.get("model") or {}
     normalizer = checkpoint.get("normalizer") or {}
     recipe = checkpoint.get("baseline_recipe") or {}
@@ -479,11 +689,24 @@ def _run_pytorch_residual_model(
         scale = np.asarray(normalizer["scale"], dtype=np.float32)
         residual_scale = np.asarray(normalizer["residual_scale"], dtype=np.float32)
     except (KeyError, TypeError, ValueError) as exc:
-        raise ModelInferenceError("PyTorch residual checkpoint metadata is incomplete.") from exc
-    if input_size != 88 or mean.shape != (88,) or scale.shape != (88,) or residual_scale.shape != (2,):
-        raise ModelInferenceError("PyTorch residual checkpoint has an incompatible feature/normalizer shape.")
-    if not all(np.isfinite(a).all() for a in (mean, scale, residual_scale)) or np.any(scale <= 0):
-        raise ModelInferenceError("PyTorch residual checkpoint normalization is invalid.")
+        raise ModelInferenceError(
+            "PyTorch residual checkpoint metadata is incomplete."
+        ) from exc
+    if (
+        input_size != 88
+        or mean.shape != (88,)
+        or scale.shape != (88,)
+        or residual_scale.shape != (2,)
+    ):
+        raise ModelInferenceError(
+            "PyTorch residual checkpoint has an incompatible feature/normalizer shape."
+        )
+    if not all(np.isfinite(a).all() for a in (mean, scale, residual_scale)) or np.any(
+        scale <= 0
+    ):
+        raise ModelInferenceError(
+            "PyTorch residual checkpoint normalization is invalid."
+        )
 
     wheel_radius_m = float(recipe.get("wheel_radius_m") or CURRENT_BEST_WHEEL_RADIUS_M)
     track_width_m = float(recipe.get("track_width_m") or CURRENT_BEST_TRACK_WIDTH_M)
@@ -494,20 +717,32 @@ def _run_pytorch_residual_model(
     yaw_delay_pad = str(recipe.get("yaw_delay_pad", "burst"))
     yaw_source = str(recipe.get("yaw_source", "auto"))
     trial = _build_runtime_trial(
-        windows=windows, session_data=session_data, Trial=Trial, TrialMeta=TrialMeta, np=np,
-        wheel_radius_m=wheel_radius_m, track_width_m=track_width_m,
+        windows=windows,
+        session_data=session_data,
+        Trial=Trial,
+        TrialMeta=TrialMeta,
+        np=np,
+        wheel_radius_m=wheel_radius_m,
+        track_width_m=track_width_m,
     )
-    canonical = canonicalize_dual_windows(np.asarray(windows, dtype=np.float32)).astype(np.float32)
+    canonical = canonicalize_dual_windows(np.asarray(windows, dtype=np.float32)).astype(
+        np.float32
+    )
     if canonical.ndim != 3 or canonical.shape[1:] != (5, 12):
-        raise ModelInferenceError(f"PyTorch residual expected (T,5,12) windows, got {canonical.shape}.")
+        raise ModelInferenceError(
+            f"PyTorch residual expected (T,5,12) windows, got {canonical.shape}."
+        )
 
     def rates(*, research: bool) -> Any:
         pred = odom_gyro_only(
-            trial, gyro_scale=gyro_scale, yaw_scale=yaw_scale,
+            trial,
+            gyro_scale=gyro_scale,
+            yaw_scale=yaw_scale,
             chassis_yaw_scale=chassis_yaw_scale,
             yaw_delay_frames=0 if research else yaw_delay_frames,
             yaw_delay_pad="none" if research else yaw_delay_pad,
-            yaw_source=yaw_source, align=False,
+            yaw_source=yaw_source,
+            align=False,
         )
         yaw_rate = np.asarray(pred["yaw_rate"], dtype=np.float32)
         if research:
@@ -515,7 +750,9 @@ def _run_pytorch_residual_model(
             omega_l = np.asarray(channels.get("omega_l"), dtype=np.float32)
             omega_r = np.asarray(channels.get("omega_r"), dtype=np.float32)
             if omega_l.shape != yaw_rate.shape or omega_r.shape != yaw_rate.shape:
-                raise ModelInferenceError("Research physics channels have incompatible shape.")
+                raise ModelInferenceError(
+                    "Research physics channels have incompatible shape."
+                )
             speed = wheel_radius_m * gyro_scale * 0.5 * (omega_l + omega_r)
         else:
             speed = np.asarray(pred["v"], dtype=np.float32)
@@ -526,26 +763,37 @@ def _run_pytorch_residual_model(
     flat = canonical.reshape(len(canonical), 60)
     channel_mean = canonical.mean(axis=1)
     channel_std = canonical.std(axis=1)
-    features = np.concatenate([flat, channel_mean, channel_std, current_rates, research_rates], axis=1).astype(np.float32)
+    features = np.concatenate(
+        [flat, channel_mean, channel_std, current_rates, research_rates], axis=1
+    ).astype(np.float32)
     if features.shape != (len(canonical), 88) or not np.isfinite(features).all():
-        raise ModelInferenceError(f"PyTorch residual features are invalid: {features.shape}.")
+        raise ModelInferenceError(
+            f"PyTorch residual features are invalid: {features.shape}."
+        )
     normalized = ((features - mean) / scale).astype(np.float32)
 
     class ResidualBiGRU(nn.Module):
         def __init__(self) -> None:
             super().__init__()
             self.gru = nn.GRU(
-                input_size=input_size, hidden_size=hidden_size, num_layers=num_layers,
-                batch_first=True, bidirectional=bidirectional,
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                batch_first=True,
+                bidirectional=bidirectional,
                 dropout=dropout if num_layers > 1 else 0.0,
             )
             width = hidden_size * (2 if bidirectional else 1)
             self.head = nn.Sequential(
-                nn.LayerNorm(width), nn.Linear(width, hidden_size), nn.SiLU(),
-                nn.Dropout(dropout), nn.Linear(hidden_size, 2),
+                nn.LayerNorm(width),
+                nn.Linear(width, hidden_size),
+                nn.SiLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_size, 2),
             )
             self.register_buffer(
-                "residual_scale", torch.as_tensor(residual_scale.reshape(1, 1, 2), dtype=torch.float32)
+                "residual_scale",
+                torch.as_tensor(residual_scale.reshape(1, 1, 2), dtype=torch.float32),
             )
 
         def forward(self, normalized_features, base_rates):
@@ -556,7 +804,9 @@ def _run_pytorch_residual_model(
     try:
         model.load_state_dict(checkpoint["state_dict"], strict=True)
     except Exception as exc:
-        raise ModelInferenceError(f"PyTorch residual checkpoint weights are incompatible: {exc}") from exc
+        raise ModelInferenceError(
+            f"PyTorch residual checkpoint weights are incompatible: {exc}"
+        ) from exc
     model.eval()
     with torch.no_grad():
         x = torch.from_numpy(normalized).unsqueeze(0)
@@ -566,7 +816,9 @@ def _run_pytorch_residual_model(
         speed_tensor = predicted_tensor[:, 0]
         rate_tensor = predicted_tensor[:, 1]
         yaw_tensor = torch.zeros_like(rate_tensor)
-        xy_tensor = torch.zeros((len(predicted_tensor), 2), dtype=predicted_tensor.dtype)
+        xy_tensor = torch.zeros(
+            (len(predicted_tensor), 2), dtype=predicted_tensor.dtype
+        )
         if len(predicted_tensor) > 1:
             dpsi = 0.5 * (rate_tensor[1:] + rate_tensor[:-1]) * 0.05
             yaw_tensor[1:] = torch.cumsum(dpsi, dim=0)
@@ -577,13 +829,17 @@ def _run_pytorch_residual_model(
         predicted = predicted_tensor.numpy()
         yaw = yaw_tensor.numpy()
         xy = xy_tensor.numpy()
-    if predicted.shape != (len(canonical), 2) or not all(np.isfinite(a).all() for a in (predicted, yaw, xy)):
-        raise ModelInferenceError("PyTorch residual model returned invalid rates or trajectory.")
+    if predicted.shape != (len(canonical), 2) or not all(
+        np.isfinite(a).all() for a in (predicted, yaw, xy)
+    ):
+        raise ModelInferenceError(
+            "PyTorch residual model returned invalid rates or trajectory."
+        )
 
     speed = predicted[:, 0]
     rate = predicted[:, 1]
     selection = checkpoint.get("selection") or {}
-    return {
+    result = {
         "xy": xy,
         "signed_speed_mps": speed.tolist(),
         "yaw_rad": yaw.tolist(),
@@ -607,6 +863,130 @@ def _run_pytorch_residual_model(
             "Zero-delay center-mean physics is used only inside this experimental model path.",
         ],
     }
+    if include_internal:
+        result["_research_rates"] = research_rates.copy()
+        result["_current_rates"] = current_rates.copy()
+    return result
+
+
+def _session_matches_slalom_course(
+    session_data: dict[str, Any], config: dict[str, Any]
+) -> bool:
+    allowed = {
+        str(value).strip().casefold()
+        for value in config.get("applies_to_conditions", [])
+    }
+    observed = {
+        str(session_data.get(key) or "").strip().casefold()
+        for key in ("condition", "topic", "maneuver")
+        if str(session_data.get(key) or "").strip()
+    }
+    return bool(allowed & observed)
+
+
+def _run_pytorch_slalom_course_model(
+    spec: ModelSpec,
+    windows: Any,
+    session_data: dict[str, Any],
+    np: Any,
+) -> dict[str, Any]:
+    """Apply an explicit fixed-course Slalom adapter after frozen residual v1."""
+    if spec.course_config is None or not spec.course_config.is_file():
+        raise ModelInferenceError("Slalom course adapter config is missing.")
+    try:
+        config_bytes = spec.course_config.read_bytes()
+        config = json.loads(config_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ModelInferenceError(f"Could not read Slalom course config: {exc}") from exc
+    if not isinstance(config, dict) or not bool(config.get("never_use_c3d_at_inference")):
+        raise ModelInferenceError("Slalom course config must explicitly forbid C3D at inference.")
+    version = int(config.get("schema_version", 1))
+    config_sha256 = hashlib.sha256(config_bytes).hexdigest()
+    base = _run_pytorch_residual_model(
+        spec, windows, session_data, np, include_internal=version >= 3
+    )
+    if not _session_matches_slalom_course(session_data, config):
+        base.pop("_research_rates", None)
+        base.pop("_current_rates", None)
+        base["runtime_source"] = "pytorch_residual_v1_slalom_course_noop"
+        base["course_constraint"] = {
+            "adapter_version": version,
+            "applied": False,
+            "reason": "session is not explicitly labeled as an allowed Slalom condition",
+            "course_config_sha256": config_sha256,
+            "uses_c3d_at_inference": False,
+        }
+        base.setdefault("warnings", []).append(
+            "Slalom course adapter selected but not applied because this session is not explicitly labeled SL/slalom."
+        )
+        return base
+    rates = np.column_stack([
+        np.asarray(base["signed_speed_mps"], dtype=np.float32),
+        np.asarray(base["yaw_rate_radps"], dtype=np.float32),
+    ]).astype(np.float32)
+    try:
+        if version >= 3:
+            from .slalom_course_v3 import apply_slalom_calibrated_v3, integrate_rates_float32
+            research_rates = np.asarray(base.pop("_research_rates"), dtype=np.float32)
+            current_rates = np.asarray(base.pop("_current_rates"), dtype=np.float32)
+            adapted = apply_slalom_calibrated_v3(rates, research_rates, current_rates, config)
+            final_rates = adapted.rates
+            metadata = {key: (list(value) if isinstance(value, tuple) else value)
+                        for key, value in adapted.__dict__.items() if key != "rates"}
+        elif version == 2:
+            from .slalom_course_v2 import apply_slalom_course_v2
+            from .slalom_course import integrate_rates_float32
+            adapted = apply_slalom_course_v2(rates, config)
+            final_rates = adapted.rates
+            metadata = dict(adapted.metadata)
+        else:
+            from .slalom_course import apply_slalom_course_constraints, integrate_rates_float32
+            adapted = apply_slalom_course_constraints(rates, config)
+            final_rates = adapted.rates
+            metadata = {
+                "adapter_version": 1,
+                "applied": bool(adapted.heading_closure or adapted.position_closure),
+                "heading_closure": adapted.heading_closure,
+                "position_closure": adapted.position_closure,
+                "turn_count": adapted.turn_count,
+                "removed_net_heading_deg": adapted.removed_net_heading_deg,
+                "speed_correction_rms_mps": adapted.speed_correction_rms_mps,
+                "speed_correction_max_abs_mps": adapted.speed_correction_max_abs_mps,
+                "endpoint_before_m": adapted.endpoint_before_m,
+                "endpoint_after_m": adapted.endpoint_after_m,
+                "uses_c3d_at_inference": False,
+            }
+        xy, yaw = integrate_rates_float32(final_rates)
+    except (ImportError, RuntimeError, KeyError, TypeError, ValueError, np.linalg.LinAlgError) as exc:
+        raise ModelInferenceError(f"Slalom course constraint v{version} failed: {exc}") from exc
+    metadata["adapter_version"] = version
+    metadata["course_config_sha256"] = config_sha256
+    metadata["uses_c3d_at_inference"] = False
+    base.update({
+        "xy": xy,
+        "signed_speed_mps": final_rates[:, 0].astype(float).tolist(),
+        "yaw_rad": yaw.astype(float).tolist(),
+        "yaw_rate_radps": final_rates[:, 1].astype(float).tolist(),
+        "net_yaw_deg": float(np.degrees(yaw[-1] - yaw[0])) if len(yaw) else 0.0,
+        "recipe": f"PyTorch residual v1 + Slalom course constraint v{version}",
+        "runtime_source": f"pytorch_residual_v1_slalom_course_v{version}_experimental",
+        "course_constraint": metadata,
+    })
+    if version >= 3:
+        if metadata.get("calibration_applied"):
+            warning = "Train-calibrated Slalom v3 applied: frozen linear yaw/speed residual calibration plus sign-aware fixed-course closure."
+        else:
+            warning = "Slalom v3 learned calibration was skipped by its out-of-distribution guard; sign-aware fixed-course closure used the raw residual-v1 rates."
+    elif version == 2:
+        warning = "Experimental Slalom v2 applied; this historical optimizer is retained for audit and is not the recommended candidate."
+    else:
+        warning = "Protocol-aware Slalom course constraint applied: start/end heading is declared equal by the test protocol."
+    base.setdefault("warnings", []).extend([
+        warning,
+        "Any near-zero endpoint is partly imposed by the declared fixed-course protocol and is not independent unconstrained odometry evidence.",
+    ])
+    return base
+
 
 def _run_onnx_model(spec: ModelSpec, windows: Any, np: Any) -> dict[str, Any]:
     try:
@@ -663,7 +1043,6 @@ def _run_onnx_model(spec: ModelSpec, windows: Any, np: Any) -> dict[str, Any]:
         "feature_dim": BIWHEEL3D_FEATURE_DIM,
     }
 
-
 def run_session_model(
     repo_root: Path,
     spec: ModelSpec,
@@ -681,6 +1060,7 @@ def run_session_model(
 
     import hashlib
     from .analysis_contract import file_identity
+
     checkpoint_before = file_identity(spec.checkpoint)
     windows, preprocess = prepare_dual_windows(session_data)
     if spec.kind == "onnx":
@@ -689,36 +1069,67 @@ def run_session_model(
         model_result = _run_recipe_model(spec, windows, session_data, np)
     elif spec.kind == "pytorch_residual":
         model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
+    elif spec.kind == "pytorch_residual_slalom_course":
+        model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
 
     if file_identity(spec.checkpoint) != checkpoint_before:
-        raise ModelInferenceError("Model file changed during analysis; discard result and retry")
+        raise ModelInferenceError(
+            "Model file changed during analysis; discard result and retry"
+        )
     xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
     model_warnings = list(model_result.pop("warnings", []) or [])
     from .analysis_contract import build_analysis
+
     analysis = build_analysis(
-        times=preprocess["time_s"], xy=xy.tolist(), flags=preprocess["quality_flags"],
+        times=preprocess["time_s"],
+        xy=xy.tolist(),
+        flags=preprocess["quality_flags"],
         signed_speed=model_result.pop("signed_speed_mps", None),
-        yaw=model_result.pop("yaw_rad", None), yaw_rate=model_result.pop("yaw_rate_radps", None),
+        yaw=model_result.pop("yaw_rad", None),
+        yaw_rate=model_result.pop("yaw_rate_radps", None),
         metadata={
-            "model_key": spec.key, "model_label": spec.label, "model_kind": spec.kind,
-            "model_sha256": checkpoint_before, "session_id": str(session_data.get("session_id", "")),
-            "model_input_sha256": hashlib.sha256(np.asarray(windows, dtype="<f4").tobytes()).hexdigest(),
+            "model_key": spec.key,
+            "model_label": spec.label,
+            "model_kind": spec.kind,
+            "model_sha256": checkpoint_before,
+            "session_id": str(session_data.get("session_id", "")),
+            "model_input_sha256": hashlib.sha256(
+                np.asarray(windows, dtype="<f4").tobytes()
+            ).hexdigest(),
             "model_input_layout": "little-endian float32 (T,5,12), g->m/s2, dps->rad/s",
-            "implementation_sha256": {p.name: file_identity(p) for p in
-                [Path(__file__), Path(__file__).with_name("analysis_timing.py"), Path(__file__).with_name("analysis_contract.py")]},
-            "runtime_sha256": {p.name: file_identity(p) for p in sorted(_runtime_root().glob("*.py"))},
+            "implementation_sha256": {
+                p.name: file_identity(p)
+                for p in [
+                    Path(__file__),
+                    Path(__file__).with_name("analysis_timing.py"),
+                    Path(__file__).with_name("analysis_contract.py"),
+                ]
+            },
+            "runtime_sha256": {
+                p.name: file_identity(p) for p in sorted(_runtime_root().glob("*.py"))
+            },
             "source_recording": session_data.get("source_recording"),
-            "time_basis": preprocess["time_basis"], "overlap_start_s": preprocess["overlap_start_s"],
+            "time_basis": preprocess["time_basis"],
+            "overlap_start_s": preprocess["overlap_start_s"],
             "recording_quality": session_data.get("quality", "UNKNOWN"),
-            "clock_evidence": preprocess["clock_evidence"], "scale_provenance": preprocess["scale_provenance"],
-            "xy_frame": model_result.get("xy_frame"), "yaw_frame": model_result.get("yaw_frame"),
-            "geometry": {"wheel_radius_m": model_result["wheel_radius_m"], "track_width_m": model_result["track_width_m"],
-                         "camber_rad": 0., "source": "inherited_assumptions"},
-            "calibration": {k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")},
+            "clock_evidence": preprocess["clock_evidence"],
+            "scale_provenance": preprocess["scale_provenance"],
+            "xy_frame": model_result.get("xy_frame"),
+            "yaw_frame": model_result.get("yaw_frame"),
+            "geometry": {
+                "wheel_radius_m": model_result["wheel_radius_m"],
+                "track_width_m": model_result["track_width_m"],
+                "camber_rad": 0.0,
+                "source": "inherited_assumptions",
+            },
+            "calibration": {
+                k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")
+            },
             "applied_yaw_delay_frames": model_result["yaw_delay_frames"],
-            "warnings": [*preprocess["warnings"], *model_warnings], "input_gap_policy": preprocess["input_gap_policy"],
+            "warnings": [*preprocess["warnings"], *model_warnings],
+            "input_gap_policy": preprocess["input_gap_policy"],
         },
     )
     path_length_m = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum())
@@ -744,8 +1155,9 @@ def run_session_model(
     }
 
 
-
-def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path) -> dict[str, Any]:
+def run_processed_trial_model(
+    repo_root: Path, spec: ModelSpec, trial_path: Path
+) -> dict[str, Any]:
     """Run a trusted local BiWheel3D processed NPZ directly for research review.
 
     This is intentionally separate from finalized `.waj` loading. It accepts only
@@ -760,7 +1172,9 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
     except ValueError as exc:
         raise ModelInferenceError(f"Research trial must be inside {data_root}") from exc
     if not resolved.is_file() or resolved.suffix.lower() != ".npz":
-        raise ModelInferenceError(f"Choose a processed BiWheel3D .npz trial inside {data_root}")
+        raise ModelInferenceError(
+            f"Choose a processed BiWheel3D .npz trial inside {data_root}"
+        )
 
     ready, detail = model_spec_runtime_status(spec)
     if not ready:
@@ -771,17 +1185,31 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
         from .analysis_contract import build_analysis, file_identity
         from .biwheel3d_runtime.schema import Trial
     except ImportError as exc:
-        raise ModelInferenceError("BiWheel3D research-trial runtime is unavailable.") from exc
+        raise ModelInferenceError(
+            "BiWheel3D research-trial runtime is unavailable."
+        ) from exc
 
     try:
         trial = Trial.load(resolved)
     except Exception as exc:
-        raise ModelInferenceError(f"Could not load trusted processed trial: {exc}") from exc
+        raise ModelInferenceError(
+            f"Could not load trusted processed trial: {exc}"
+        ) from exc
     windows = np.asarray(trial.imu_dual_windows, dtype=np.float32)
-    if windows.ndim != 3 or windows.shape[1:] != (5, 12) or len(windows) < MIN_MODEL_STEPS:
-        raise ModelInferenceError(f"Processed trial has incompatible IMU windows {windows.shape}")
+    if (
+        windows.ndim != 3
+        or windows.shape[1:] != (5, 12)
+        or len(windows) < MIN_MODEL_STEPS
+    ):
+        raise ModelInferenceError(
+            f"Processed trial has incompatible IMU windows {windows.shape}"
+        )
     times = np.asarray(trial.t_gt, dtype=np.float64)
-    if times.shape != (len(windows),) or not np.isfinite(times).all() or np.any(np.diff(times) <= 0):
+    if (
+        times.shape != (len(windows),)
+        or not np.isfinite(times).all()
+        or np.any(np.diff(times) <= 0)
+    ):
         raise ModelInferenceError("Processed trial has invalid model-step timestamps")
 
     meta = trial.meta
@@ -802,6 +1230,8 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
         model_result = _run_recipe_model(spec, windows, session_data, np)
     elif spec.kind == "pytorch_residual":
         model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
+    elif spec.kind == "pytorch_residual_slalom_course":
+        model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
     if file_identity(spec.checkpoint) != checkpoint_before:
@@ -811,7 +1241,9 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
 
     xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
     if xy.shape != (len(windows), 2) or not np.isfinite(xy).all():
-        raise ModelInferenceError("Research model output does not match processed trial length")
+        raise ModelInferenceError(
+            "Research model output does not match processed trial length"
+        )
     model_warnings = list(model_result.pop("warnings", []) or [])
     warnings = [
         "Research processed NPZ loaded directly; this is not a finalized .waj recording.",
@@ -844,15 +1276,21 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
     yaw_values = model_result.pop("yaw_rad", None)
     yaw_rate = model_result.pop("yaw_rate_radps", None)
     analysis = build_analysis(
-        times=times.tolist(), xy=xy.tolist(), flags=quality_flags,
-        signed_speed=signed_speed, yaw=yaw_values, yaw_rate=yaw_rate,
+        times=times.tolist(),
+        xy=xy.tolist(),
+        flags=quality_flags,
+        signed_speed=signed_speed,
+        yaw=yaw_values,
+        yaw_rate=yaw_rate,
         metadata={
             "model_key": spec.key,
             "model_label": spec.label,
             "model_kind": spec.kind,
             "model_sha256": checkpoint_before,
             "session_id": str(meta.trial_id),
-            "model_input_sha256": hashlib.sha256(np.asarray(windows, dtype="<f4").tobytes()).hexdigest(),
+            "model_input_sha256": hashlib.sha256(
+                np.asarray(windows, dtype="<f4").tobytes()
+            ).hexdigest(),
             "model_input_layout": "processed SI float32 (T,5,12)",
             "source_recording": str(resolved),
             "source_recording_sha256": source_before,
@@ -869,7 +1307,9 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
                 "camber_rad": float(meta.alpha),
                 "source": "processed_trial_metadata",
             },
-            "calibration": {k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")},
+            "calibration": {
+                k: model_result.get(k) for k in ("gyro_scale", "chassis_yaw_scale")
+            },
             "applied_yaw_delay_frames": model_result["yaw_delay_frames"],
             "warnings": warnings,
             "input_gap_policy": preprocess["input_gap_policy"],
@@ -883,7 +1323,11 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
         raw_xy = np.asarray(trial.xyz[:, :2], dtype=np.float64)
         left = np.asarray(trial.xyz_left, dtype=np.float64)
         right = np.asarray(trial.xyz_right, dtype=np.float64)
-        if raw_xy.shape == xy.shape and left.shape[0] == len(xy) and right.shape[0] == len(xy):
+        if (
+            raw_xy.shape == xy.shape
+            and left.shape[0] == len(xy)
+            and right.shape[0] == len(xy)
+        ):
             axle_right = right[:, :2] - left[:, :2]
             axle_len = np.linalg.norm(axle_right, axis=1)
             gt_yaw_wrapped = np.arctan2(axle_right[:, 0], -axle_right[:, 1])
@@ -894,7 +1338,9 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
             yaw0 = float(gt_yaw_abs[0])
             c, sn = np.cos(-yaw0), np.sin(-yaw0)
             rel = raw_xy - raw_xy[0]
-            gt_xy = np.column_stack([c * rel[:, 0] - sn * rel[:, 1], sn * rel[:, 0] + c * rel[:, 1]])
+            gt_xy = np.column_stack(
+                [c * rel[:, 0] - sn * rel[:, 1], sn * rel[:, 0] + c * rel[:, 1]]
+            )
             gt_yaw = gt_yaw_abs - yaw0
             if np.isfinite(gt_xy).all() and np.isfinite(gt_yaw).all():
                 ground_truth_xy = [(float(x), float(y)) for x, y in gt_xy]
@@ -907,7 +1353,10 @@ def run_processed_trial_model(repo_root: Path, spec: ModelSpec, trial_path: Path
                 }
                 if yaw_values is not None:
                     predicted_yaw = np.asarray(yaw_values, dtype=np.float64)
-                    if predicted_yaw.shape == gt_yaw.shape and np.isfinite(predicted_yaw).all():
+                    if (
+                        predicted_yaw.shape == gt_yaw.shape
+                        and np.isfinite(predicted_yaw).all()
+                    ):
                         gt_diagnostic["heading_unwrapped_rmse_deg"] = float(
                             np.degrees(np.sqrt(np.mean((predicted_yaw - gt_yaw) ** 2)))
                         )

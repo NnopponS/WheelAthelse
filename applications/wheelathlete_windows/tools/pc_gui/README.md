@@ -247,3 +247,10 @@ Results → MODEL navigation, and equal-scale trajectory rendering.
 Physical BLE throughput, RF behavior, real L/R start skew, real-world model
 accuracy, and hardware behavior at distance remain physical/validation
 measurements. Do not infer those results from demo or automated tests.
+
+
+## Optional local research registry
+
+A source checkout may discover additional research-only models from `BiWheel3D/registry/models.json`. This bridge is optional: installed/clean application builds do not require the separate research checkout. The current registry can expose residual v1 and the Slalom course-constrained wrapper. The latter uses the same v1 checkpoint plus `course.json`; it applies only to sessions explicitly labeled SL/slalom and reports course-constraint provenance in the analysis result.
+
+The Slalom wrapper never reads C3D at inference. Start/end closure is a declared protocol assumption, so a near-zero constrained endpoint is not independent odometry evidence.

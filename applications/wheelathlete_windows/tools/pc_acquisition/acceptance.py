@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from .journal import JournalReader, RecordKind
-from .models import WheelSide
 from .service import AcquisitionService
 from .transport import BleakTransport
 
@@ -22,7 +21,7 @@ MIN_RESEARCH_MTU = 185
 DESIRED_START_SKEW_NS = 5_000_000
 MAX_EFFECTIVE_RATE_ERROR_FRACTION = 0.05
 EXPECTED_XIAO_HARDWARE_MODEL = 2
-DEFAULT_EXPECTED_FIRMWARE = "1.8.0"
+DEFAULT_EXPECTED_FIRMWARE = "1.8.1"
 
 
 class AcceptanceRunError(RuntimeError):

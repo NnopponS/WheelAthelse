@@ -4,11 +4,11 @@
 
 WheelAthlete synchronizes left- and right-wheel inertial sensors, records research-grade motion data, and provides dedicated mobile and Windows applications for field collection, monitoring, quality control, export, and optional trajectory analysis.
 
-> **Current release line:** `v1.8.0`
+> **Current release line:** `v1.8.1`
 > **Mobile application:** `1.8.0+10`
-> **Firmware:** `1.8.0`
+> **Firmware:** `1.8.1`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.0`
+> **Windows package:** `1.8.1`
 > **Language:** English | [ไทย](README.th.md)
 
 ## Active development: offline coaching analysis
@@ -249,8 +249,8 @@ Generated output:
 
 ```text
 applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.0-portable.zip
-└── WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.1-portable.zip
+└── WheelAthleteSetup-1.8.1.exe
 ```
 
 The installer and portable package bundle `WheelAthleteDaemon.exe`. Packaging details are documented in [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md).
@@ -340,11 +340,11 @@ Automated tests do not replace physical two-board acceptance testing under reali
 
 | Component | Version |
 |---|---:|
-| Product release | `1.8.0` |
+| Product release | `1.8.1` |
 | WheelAthlete Mobile Application | `1.8.0+10` |
-| WheelAthlete Windows Research Application | `1.8.0` |
-| M5StickC Plus2 firmware | `1.8.0` |
-| XIAO nRF52840 Sense firmware | `1.8.0` |
+| WheelAthlete Windows Research Application | `1.8.1` |
+| M5StickC Plus2 firmware | `1.8.1` |
+| XIAO nRF52840 Sense firmware | `1.8.1` |
 | BLE protocol | `1.8.0` |
 
 The root [`VERSION`](VERSION) file is the coordinated product version used by Windows packaging and release validation.

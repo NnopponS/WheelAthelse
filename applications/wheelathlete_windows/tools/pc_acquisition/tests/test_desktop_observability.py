@@ -1,12 +1,12 @@
+import pytest
 import asyncio
 import json
 import struct
-import time
 import uuid
 from pathlib import Path
 
 from tools.pc_acquisition.journal import JournalRecorder
-from tools.pc_acquisition.models import DeviceCandidate
+from tools.pc_acquisition.models import DeviceCandidate, WheelSide
 from tools.pc_acquisition.service import AcquisitionService
 from tools.pc_acquisition.transport import FakeBleTransport
 from tools.pc_acquisition.uuids import BATTERY_LEVEL_UUID, CONFIG_UUID, INFO_UUID
@@ -142,3 +142,16 @@ def test_pc_sessions_export_and_diagnostic_report(tmp_path: Path):
         await service.close()
 
     asyncio.run(scenario())
+
+
+def test_status_rate_remains_defined_on_equal_monotonic_tick(tmp_path: Path, monkeypatch):
+    service = AcquisitionService(FakeBleTransport(), journal_root=tmp_path)
+    service._status_rate_baseline[WheelSide.LEFT] = (123456, 0, 0)
+    metrics = service.engine.metrics(WheelSide.LEFT)
+    metrics.notifications_received = 1
+    metrics.samples_received = 2
+    monkeypatch.setattr("tools.pc_acquisition.service.time.monotonic_ns", lambda: 123456)
+    status = service.status()
+    board = status["boards"]["L"]
+    assert board["notifications_hz"] == pytest.approx(1_000_000_000.0)
+    assert board["samples_hz"] == pytest.approx(2_000_000_000.0)

@@ -40,7 +40,7 @@ def _sample_result(*, net_yaw_deg: float | None = 12.5) -> dict:
         "session_id": "demo_sprint_01",
         "topic": "Sprint",
         "trial_number": 1,
-        "recording_label": "Sprint · Trial 1 · Test Athlete · GOOD",
+        "recording_label": "Sprint Â· Trial 1 Â· Test Athlete Â· GOOD",
         "model_label": "BiWheel3D test model",
         "xy": [(0.0, 0.0), (0.5, 0.1), (1.0, 0.4), (1.4, 0.8)],
         "point_count": 4,
@@ -104,7 +104,7 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert model.metric_path.text() == "1.72 m"
     assert model.metric_endpoint.text() == "1.61 m"
     assert model.metric_yaw.text() == "12.5 deg"
-    assert model.metric_session.text() == "Sprint · Trial 1 · Test Athlete · GOOD"
+    assert model.metric_session.text() == "Sprint Â· Trial 1 Â· Test Athlete Â· GOOD"
     assert "Sprint" in model.chart.title()
     assert "native 100 Hz" in model.status_label.text()
     assert "Yaw: chassis, delay 27 frame(s)." in model.status_label.text()
@@ -121,7 +121,7 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert x_units_per_px == pytest.approx(y_units_per_px, rel=0.01)
 
     model._on_analysis_ready(_sample_result(net_yaw_deg=None))
-    assert model.metric_yaw.text() == "—"
+    assert model.metric_yaw.text() == "\u2014"
 
     _close(controller, window)
 
@@ -131,8 +131,9 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     model = window.model
     _APP.processEvents()
 
-    assert model.model_combo.count() == 1
-    assert "XY + Yaw" in model.model_combo.currentText()
+    assert model.model_combo.count() >= 1
+    assert "XY + Yaw" in model.model_combo.itemText(0)
+    assert model.model_combo.currentIndex() == 0
     assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
     assert "recipe ready" in model.runtime_label.text()
     assert model.model_detail.isHidden()
@@ -160,4 +161,23 @@ def test_model_page_renders_c3d_overlay_for_research_trial():
     assert model.chart.legend().isVisible()
     assert "C3D full-cache diagnostic ATE 0.082 m" in model.status_label.text()
     assert "full-cache diagnostic ATE 0.082 m" in model.status_label.toolTip()
+    _close(controller, window)
+
+
+def test_model_page_surfaces_slalom_course_constraint_state():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["course_constraint"] = {
+        "applied": True,
+        "heading_closure": True,
+        "position_closure": True,
+        "turn_count": 10,
+        "removed_net_heading_deg": -28.2,
+    }
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+    assert "Slalom course constraint v1: 10 turn event(s)" in model.status_label.text()
+    assert "10 turn event(s)" in model.status_label.toolTip()
+    assert "position closure=yes" in model.status_label.toolTip()
     _close(controller, window)

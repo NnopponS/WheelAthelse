@@ -8,6 +8,7 @@ from typing import Optional
 class WheelSide(str, Enum):
     LEFT = "L"
     RIGHT = "R"
+    CENTER = "C"
 
 
 class NotificationKind(str, Enum):

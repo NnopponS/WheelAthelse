@@ -163,7 +163,7 @@ def prepare_side(
     supplied = np.asarray([finite_number(row.get("t"), "sample time") for row in rows])
     models, start = timing.get("clock_models", {}), timing.get("start", {})
     if models or start:
-        if set(models) != {"L", "R"} or not start:
+        if not {"L", "R"}.issubset(models) or not start:
             raise AnalysisInputError("Incomplete saved dual-wheel clock mapping")
         times = map_device_clock(rows, models[side], start, side)
         basis = "saved_device_affine"

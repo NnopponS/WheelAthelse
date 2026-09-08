@@ -101,3 +101,39 @@ def test_app_state_preserves_both_wheels_and_ipc_counters():
     assert state.connected_sides() == ("L",)
     assert state.incomplete_sessions == ("broken.open",)
     assert state.ipc["preview_events_dropped"] == 2
+
+
+def test_app_state_accepts_optional_center_sensor():
+    state = AppViewState()
+    state.apply_status(
+        {
+            "live": True,
+            "live_sides": ["L", "C"],
+            "boards": {
+                "L": {"connected": True, "info": {"name": "WheelAthlete-L"}},
+                "R": {"connected": False},
+                "C": {
+                    "connected": True,
+                    "info": {"name": "WheelAthlete-C", "sensor_role": "chair_center"},
+                },
+            },
+        }
+    )
+    assert state.live_sides == ("L", "C")
+    assert state.connected_sides() == ("L", "C")
+    assert state.boards["C"].connected
+    center = PreviewSample.from_payload(
+        {
+            "side": "C",
+            "seq": 1,
+            "timestamp_device_us": 10000,
+            "timestamp_pc_monotonic_ns": 123,
+            "ax_raw": 1,
+            "ay_raw": 2,
+            "az_raw": 3,
+            "gx_raw": 4,
+            "gy_raw": 5,
+            "gz_raw": 6,
+        }
+    )
+    assert center.side == "C"

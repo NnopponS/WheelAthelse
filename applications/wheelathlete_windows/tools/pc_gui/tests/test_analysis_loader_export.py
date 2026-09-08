@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from tools.pc_acquisition.journal import JournalRecorder, RecordKind
+from tools.pc_acquisition.journal import CENTER_JOURNAL_VERSION, JournalRecorder, RecordKind
 from tools.pc_acquisition.models import ImuSample, ReceivedSample, WheelSide
 from tools.pc_gui.analysis_loader import read_recording
 from tools.pc_gui.analysis_timing import prepare_windows
@@ -140,3 +140,82 @@ def test_export_fails_before_creating_files_for_bad_result(tmp_path):
     with pytest.raises(ValueError):
         export_analysis(a, tmp_path)
     assert not list(tmp_path.iterdir())
+
+
+def test_v2_center_recording_preserves_c_and_keeps_lr_model_contract(tmp_path):
+    sid = str(uuid.uuid4())
+    writer = JournalRecorder(
+        tmp_path, session_id=sid, journal_version=CENTER_JOURNAL_VERSION
+    )
+    boards = {
+        side: {
+            "accel_scale": 0.001,
+            "gyro_scale": 0.01,
+            "sample_rate_hz": 100,
+            **(
+                {
+                    "sensor_role": "chair_center",
+                    "axis_convention": {
+                        "z_axis": "down_toward_floor",
+                        "x_y_axes": "board_axes_unmapped",
+                    },
+                }
+                if side == "C"
+                else {}
+            ),
+        }
+        for side in ("L", "R", "C")
+    }
+    writer.append_metadata(
+        {"session_id": sid, "sample_rate_hz": 100, "boards": boards}
+    )
+    t0 = 200_000_000_000
+    targets = {"L": 1_000_000, "R": 2_000_000, "C": 3_000_000}
+    for side in ("L", "R", "C"):
+        writer.append_json(
+            RecordKind.SYNC,
+            {
+                "side": side,
+                "slope_ns_per_us": 1000.0,
+                "intercept_ns": t0 - targets[side] * 1000.0,
+                "observation_count": 5,
+                "residual_rms_ns": 10.0,
+                "best_rtt_ns": 10000,
+                "median_rtt_ns": 20000,
+            },
+        )
+    writer.append_json(
+        RecordKind.EVENT,
+        {"type": "START", "pc_start_ns": t0, "target_device_us": targets},
+    )
+    role = {"L": WheelSide.LEFT, "R": WheelSide.RIGHT, "C": WheelSide.CENTER}
+    for i in range(250):
+        for side in ("L", "R", "C"):
+            sample = ImuSample(
+                i,
+                targets[side] + 20_000 + i * 10_000,
+                100 if side != "C" else 900,
+                0,
+                1000 if side == "C" else 0,
+                0,
+                0,
+                100,
+            )
+            writer.submit_sample(
+                ReceivedSample(
+                    role[side], sample, t0 + i * 10_000_000, i, "contiguous"
+                )
+            )
+    path = writer.finalize({"quality": "GOOD", "duration_s": 2.5})
+    result = read_recording(
+        path, path.with_suffix(".summary.json"), path.with_suffix(".csv"), sid
+    )
+    assert len(result["samples"]["C"]) == 250
+    assert result["samples"]["C"][0]["az"] == pytest.approx(1.0)
+    assert result["analysis_timing"]["basis"] == "saved_device_affine"
+    windows, _ = prepare_windows(result)
+    no_center = copy.deepcopy(result)
+    no_center["samples"]["C"] = []
+    windows_lr, _ = prepare_windows(no_center)
+    assert windows.shape[1:] == (5, 12)
+    assert (windows == windows_lr).all()

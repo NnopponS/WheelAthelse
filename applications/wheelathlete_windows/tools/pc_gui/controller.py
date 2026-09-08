@@ -128,7 +128,7 @@ class BaseController(QObject):
         self.state = AppViewState()
         self.scan_results: list[dict[str, Any]] = []
         self.sessions: list[dict[str, Any]] = []
-        self._preview = {"L": PreviewBuffer(), "R": PreviewBuffer()}
+        self._preview = {side: PreviewBuffer() for side in ("L", "R", "C")}
 
     def preview_buffer(self, side: str) -> PreviewBuffer:
         return self._preview[side]
@@ -446,7 +446,7 @@ class AcquisitionController(BaseController):
             return read_recording(journal, manifest, csv_path, session_id)
         except Exception as exc:
             self.daemon_log.emit(f"Recording read failed: {exc}")
-            return {"session_id": session_id, "samples": {"L": [], "R": []},
+            return {"session_id": session_id, "samples": {"L": [], "R": [], "C": []},
                     "gaps": [], "total_missing_samples": 0, "duration_s": 0.,
                     "quality": "UNKNOWN", "analysis_errors": [str(exc)]}
 
@@ -708,6 +708,9 @@ class AcquisitionController(BaseController):
         self.state.recording = True
         self.state.recording_starting = False
         self.state.countdown = None
+        utc_start = result.get("utc_start_ms")
+        if utc_start is not None:
+            self.state.recording_started_utc_ms = int(utc_start)
         self.state.session_id = str(result.get("session_id")) if result.get("session_id") else None
         self.state_changed.emit(self.state)
         self.message.emit("Recording started with synchronized device clocks")
@@ -717,6 +720,7 @@ class AcquisitionController(BaseController):
         self.state.recording = False
         self.state.recording_starting = False
         self.state.countdown = None
+        self.state.recording_started_utc_ms = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
         self.recording_finished.emit(result)
@@ -726,6 +730,7 @@ class AcquisitionController(BaseController):
     def _record_failed(self, _message: str) -> None:
         self.state.recording_starting = False
         self.state.countdown = None
+        self.state.recording_started_utc_ms = None
         self.state.live_busy = False
         self.state_changed.emit(self.state)
         self.refresh_status()
@@ -765,14 +770,21 @@ class AcquisitionController(BaseController):
             if state == "countdown":
                 self.state.recording_starting = True
                 self.state.countdown = max(1, int(payload.get("seconds", 5)))
+                utc_start = payload.get("utc_start_ms")
+                if utc_start is not None:
+                    self.state.recording_started_utc_ms = int(utc_start)
             elif state in {"started", "recording"}:
                 self.state.recording = True
                 self.state.recording_starting = False
                 self.state.countdown = None
+                utc_start = payload.get("utc_start_ms")
+                if utc_start is not None:
+                    self.state.recording_started_utc_ms = int(utc_start)
             elif state in {"stopped", "finalized"}:
                 self.state.recording = False
                 self.state.recording_starting = False
                 self.state.countdown = None
+                self.state.recording_started_utc_ms = None
             self.state_changed.emit(self.state)
         elif event_type == "live_state":
             self.state.live = bool(payload.get("live"))
@@ -793,14 +805,14 @@ class DemoController(BaseController):
         self.state.daemon_connected = True
         self.state.daemon_name = "DEMO — synthetic preview only"
         self.state.journal_root = str(Path.home() / "Documents" / "WheelAthlete" / "PC Sessions")
-        for side, rssi in (("L", -46), ("R", -49)):
+        for side, rssi in (("L", -46), ("R", -49), ("C", -47)):
             self.state.boards[side] = BoardView(
                 side=side,
                 connected=True,
                 device_id=f"DEMO-{side}",
                 name=f"WheelAthlete-{side}",
-                firmware="1.8.0",
-                battery_percent=92 if side == "L" else 88,
+                firmware="1.8.1",
+                battery_percent={"L": 92, "R": 88, "C": 90}[side],
                 rssi=rssi,
                 mtu=247,
                 configured_rate_hz=100,
@@ -808,9 +820,9 @@ class DemoController(BaseController):
                 gyro_range=3,
                 samples_hz=100.0,
                 notifications_hz=10.0,
-                best_rtt_ms=1.8 if side == "L" else 2.1,
+                best_rtt_ms={"L": 1.8, "R": 2.1, "C": 1.9}[side],
                 median_rtt_ms=2.4,
-                drift_ppm=3.2 if side == "L" else -2.6,
+                drift_ppm={"L": 3.2, "R": -2.6, "C": 1.1}[side],
                 accel_scale=4 / 32768,
                 gyro_scale=2000 / 32768,
             )
@@ -819,6 +831,7 @@ class DemoController(BaseController):
         self._timer.timeout.connect(self._tick)
         self._seq = 0
         self._started_ns = time.monotonic_ns()
+        demo_now_utc_ms = int(time.time() * 1000)
         self.sessions = [
             {
                 "session_id": "demo_sprint_01",
@@ -832,6 +845,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1520, "R": 1520},
                 "tags": ["100m", "accel"],
                 "notes": "Fast sprint demo",
+                "started_utc_ms": demo_now_utc_ms - 3_600_000,
+                "recorded_utc_ms": demo_now_utc_ms - 3_600_000,
             },
             {
                 "session_id": "demo_sprint_02",
@@ -845,6 +860,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1480, "R": 1480},
                 "tags": ["100m", "accel"],
                 "notes": "Second sprint demo",
+                "started_utc_ms": demo_now_utc_ms - 7_200_000,
+                "recorded_utc_ms": demo_now_utc_ms - 7_200_000,
             },
             {
                 "session_id": "demo_endurance_01",
@@ -858,6 +875,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 3000, "R": 3000},
                 "tags": ["aerobic"],
                 "notes": "Steady pace demo",
+                "started_utc_ms": demo_now_utc_ms - 86_400_000,
+                "recorded_utc_ms": demo_now_utc_ms - 86_400_000,
             },
         ]
 
@@ -867,6 +886,7 @@ class DemoController(BaseController):
         self.scan_results = [
             {"device_id": "DEMO-L", "name": "WheelAthlete-L", "rssi": -46},
             {"device_id": "DEMO-R", "name": "WheelAthlete-R", "rssi": -49},
+            {"device_id": "DEMO-C", "name": "WheelAthlete-C", "rssi": -47},
         ]
         self.scan_results_changed.emit(list(self.scan_results))
         self.sessions_changed.emit(list(self.sessions))
@@ -885,7 +905,7 @@ class DemoController(BaseController):
 
 
     def disconnect_side(self, side: str) -> None:
-        self.message.emit("Demo mode keeps both synthetic wheels connected")
+        self.message.emit("Demo mode keeps all synthetic sensors connected")
 
     def configure_board(
         self, side: str, *, sample_rate_hz: int, accel_range: int, gyro_range: int
@@ -987,6 +1007,7 @@ class DemoController(BaseController):
 
         samples_l: list[dict[str, float]] = []
         samples_r: list[dict[str, float]] = []
+        samples_c: list[dict[str, float]] = []
         gaps: list[dict[str, Any]] = []
 
         has_demo_gap = "02" in session_id or "gap" in session_id.lower()
@@ -1026,6 +1047,17 @@ class DemoController(BaseController):
                 "gy": math.cos(phase * 2 + 0.3) * 44.0,
                 "gz": math.sin(phase + 0.3) * 118.0,
             })
+            samples_c.append({
+                "t": t,
+                "seq": i,
+                "ax": math.sin(phase * 0.8 + 0.15) * 0.18,
+                "ay": math.cos(phase * 0.7 + 0.1) * 0.16,
+                # Demo mounting contract: +Z points down toward the floor.
+                "az": 1.0 + math.sin(phase * 0.4) * 0.05,
+                "gx": math.sin(phase * 1.4) * 18.0,
+                "gy": math.cos(phase * 1.3) * 16.0,
+                "gz": math.sin(phase) * 42.0,
+            })
 
         return {
             "session_id": session_id,
@@ -1035,7 +1067,7 @@ class DemoController(BaseController):
             "quality": "DEGRADED" if gaps else quality,
             "sample_rate_hz": rate_hz,
             "duration_s": duration_s,
-            "samples": {"L": samples_l, "R": samples_r},
+            "samples": {"L": samples_l, "R": samples_r, "C": samples_c},
             "gaps": gaps,
             "total_missing_samples": sum(g.get("missing", 1) for g in gaps),
         }
@@ -1086,6 +1118,8 @@ class DemoController(BaseController):
 
     def start_record(self, metadata: dict[str, Any]) -> None:
         self.state.recording = True
+        self.state.recording_started_utc_ms = int(time.time() * 1000)
+        self._started_ns = time.monotonic_ns()
         self.state.session_id = f"DEMO-{uuid.uuid4().hex[:8]}"
         self.state_changed.emit(self.state)
         self.message.emit("DEMO recording started — no research data is being written")
@@ -1101,9 +1135,16 @@ class DemoController(BaseController):
             "sample_rate_hz": 100,
             "duration_s": duration,
             "quality": "GOOD",
-            "sample_counts": {"L": int(duration * 100), "R": int(duration * 100)},
+            "sample_counts": {
+                "L": int(duration * 100),
+                "R": int(duration * 100),
+                "C": int(duration * 100),
+            },
+            "started_utc_ms": self.state.recording_started_utc_ms,
+            "recorded_utc_ms": self.state.recording_started_utc_ms,
         }
         self.sessions.insert(0, new_session)
+        self.state.recording_started_utc_ms = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
         self.recording_finished.emit(
@@ -1118,7 +1159,7 @@ class DemoController(BaseController):
 
     def _tick(self) -> None:
         t = (time.monotonic_ns() - self._started_ns) / 1e9
-        for index, side in enumerate(("L", "R")):
+        for index, side in enumerate(("L", "R", "C")):
             phase = t + index * 0.45
             accel_scale = self.state.boards[side].accel_scale
             gyro_scale = self.state.boards[side].gyro_scale

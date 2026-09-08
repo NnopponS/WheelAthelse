@@ -1,13 +1,11 @@
 import asyncio
 import struct
 import time
-from pathlib import Path
 
 import pytest
 
 from tools.pc_acquisition.engine import DualBoardEngine
-from tools.pc_acquisition.journal import JournalReader, JournalRecorder
-from tools.pc_acquisition.models import ImuSample, ReceivedSample, WheelSide
+from tools.pc_acquisition.models import ReceivedSample, WheelSide
 from tools.pc_acquisition.transport import FakeBleTransport
 
 
@@ -83,7 +81,7 @@ def test_dual_wheel_30_min_equivalent_has_exact_counts_and_bounded_preview(rate_
         await engine.join()
         wall_s = time.perf_counter() - started
 
-        for side in WheelSide:
+        for side in (WheelSide.LEFT, WheelSide.RIGHT):
             metrics = engine.metrics(side)
             assert raw_counts[side] == samples_per_side
             assert metrics.samples_received == samples_per_side
@@ -129,7 +127,7 @@ def test_dual_wheel_400_notification_burst_is_lossless_within_queue_budget():
         await engine.join()
         expected = 400 * BATCH_SIZE
         assert counts == {WheelSide.LEFT: expected, WheelSide.RIGHT: expected}
-        for side in WheelSide:
+        for side in (WheelSide.LEFT, WheelSide.RIGHT):
             metrics = engine.metrics(side)
             assert metrics.queue_high_water == 400
             assert metrics.queue_overflow_faults == 0

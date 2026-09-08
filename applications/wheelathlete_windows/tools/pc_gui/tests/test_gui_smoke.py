@@ -51,6 +51,9 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     _APP.processEvents()
     assert window.acquisition.current["L"].values["ax"].value.text() != "—"
     assert window.acquisition.current["R"].values["gz"].value.text() != "—"
+    assert window.acquisition.current["C"].values["az"].value.text() != "—"
+    assert "C" in window.dashboard.board_cards
+    assert window.acquisition.accel_chart_c.side == "C"
     assert window.acquisition.trial.text() == "1"
     assert window.acquisition.accel_chart_l.view.frameShape() == QFrame.Shape.NoFrame
     assert (
@@ -212,6 +215,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     assert not results.preview_drawer.isHidden()
     assert "Lossless" in results.preview_drawer.integrity_badge.text()
     assert results.preview_drawer.accel_series["L_X"].count() > 0
+    assert results.preview_drawer.accel_series["C_Z"].count() > 0
 
     # Regression: clicking the active preview again must not hide the drawer or
     # replace/delete the cell action widget that emitted the click.

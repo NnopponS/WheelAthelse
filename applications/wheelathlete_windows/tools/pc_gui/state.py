@@ -40,7 +40,7 @@ class PreviewSample:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "PreviewSample":
         side = str(payload.get("side", ""))
-        if side not in {"L", "R"}:
+        if side not in {"L", "R", "C"}:
             raise ValueError(f"invalid preview side: {side!r}")
         return cls(
             side=side,
@@ -203,6 +203,7 @@ class AppViewState:
     recording: bool = False
     recording_starting: bool = False
     countdown: int | None = None
+    recording_started_utc_ms: int | None = None
     live: bool = False
     live_sides: tuple[str, ...] = ()
     live_busy: bool = False
@@ -214,21 +215,25 @@ class AppViewState:
     journal: dict[str, Any] | None = None
     ipc: dict[str, Any] = field(default_factory=dict)
     boards: dict[str, BoardView] = field(
-        default_factory=lambda: {"L": BoardView("L"), "R": BoardView("R")}
+        default_factory=lambda: {
+            "L": BoardView("L"), "R": BoardView("R"), "C": BoardView("C")
+        }
     )
 
     def apply_status(self, payload: dict[str, Any]) -> None:
         boards = payload.get("boards") if isinstance(payload.get("boards"), dict) else {}
         self.boards = {
-            "L": BoardView.from_status("L", boards.get("L")),
-            "R": BoardView.from_status("R", boards.get("R")),
+            side: BoardView.from_status(side, boards.get(side))
+            for side in ("L", "R", "C")
         }
         self.recording = bool(payload.get("recording"))
         self.recording_starting = bool(payload.get("recording_starting"))
+        started_utc = payload.get("recording_started_utc_ms")
+        self.recording_started_utc_ms = int(started_utc) if started_utc is not None else None
         self.live = bool(payload.get("live"))
         live_sides = payload.get("live_sides", [])
         self.live_sides = tuple(
-            str(side) for side in live_sides if side in {"L", "R"}
+            str(side) for side in live_sides if side in {"L", "R", "C"}
         )
         self.session_id = str(payload["session_id"]) if payload.get("session_id") else None
         self.journal_root = str(payload.get("journal_root", ""))
@@ -238,4 +243,6 @@ class AppViewState:
         self.ipc = payload.get("ipc") if isinstance(payload.get("ipc"), dict) else {}
 
     def connected_sides(self) -> tuple[str, ...]:
-        return tuple(side for side in ("L", "R") if self.boards[side].connected)
+        return tuple(
+            side for side in ("L", "R", "C") if self.boards[side].connected
+        )

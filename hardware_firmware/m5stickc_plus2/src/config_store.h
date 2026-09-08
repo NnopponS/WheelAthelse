@@ -28,9 +28,9 @@ constexpr const char* CHAR_CONFIG_UUID = "0000a1b7-0000-1000-8000-00805f9b34fb";
 
 // ── Pure functions (host-testable) ───────────────────────────────────────────
 
-// Check if wheel_id is valid (0x4C='L' or 0x52='R').
+// Sensor role ID: 0x4C='L' wheel, 0x52='R' wheel, 0x43='C' chair center.
 inline bool isValidWheel(uint8_t wheel_id) {
-    return wheel_id == 0x4C || wheel_id == 0x52;
+    return wheel_id == 0x4C || wheel_id == 0x52 || wheel_id == 0x43;
 }
 
 // isValidRate is defined in imu_types.h (50/100/200 Hz)

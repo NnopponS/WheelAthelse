@@ -46,7 +46,7 @@ def test_new_recording_sequence_epoch_accepts_firmware_restart_at_zero():
         transport.emit_imu("right", _batch(0, 1, 2), arrival_ns=2_500_000)
         await engine.join()
 
-        for side in WheelSide:
+        for side in (WheelSide.LEFT, WheelSide.RIGHT):
             metrics = engine.metrics(side)
             assert metrics.samples_received == 6
             assert metrics.sequence_gaps == 0

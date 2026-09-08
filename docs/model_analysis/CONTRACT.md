@@ -77,6 +77,14 @@ CSV uses the field names above (units embedded), empty numeric cells for unavail
 
 The original Windows result keys (`xy`, path/endpoint summaries and other display metadata) remain. `analysis` is additive. Mobile `TrajectoryResult.analysis` is optional so older XY-only results and existing providers continue to load. A legacy result without a full analysis envelope must not receive invented timestamps or orientation merely to populate the new controls.
 
+## Experimental research model bridge
+
+The source Windows app can optionally discover models from the separate local `BiWheel3D/registry/models.json`; installed/clean builds remain independent of that research repository. `torch_residual_v1` is a C3D-supervised residual network over a zero-delay center-mean physics baseline. `torch_residual_v1_slalom_course_v1` keeps exactly the same network weights and adds a JSON-declared fixed-course Slalom adapter.
+
+The Slalom adapter uses only predicted signed speed/yaw rate plus protocol facts. It never reads C3D at inference. It is an exact no-op for non-Slalom sessions. For an explicitly labeled complete Slalom, it distributes the declared net-heading closure over detected turn events and may apply a bounded minimum-norm signed-speed correction to honor the declared same-position start/end rule. A closed endpoint produced by this adapter is therefore a **course-constrained estimate**, not independent evidence that unconstrained inertial odometry closed the loop.
+
+`fixtures/slalom_course_v1.json` is fully synthetic (`recordings_used: false`) and records input rates plus expected constrained rates/metadata. Windows checks this fixture now; it is also the intended golden fixture for a future Dart port. The exported Flutter bundle is not enabled in the mobile app until the residual 88-D feature path, zero-delay center-mean baseline, course adapter and model-acceptance gate are independently verified.
+
 ## Verification boundaries
 
 Shared fixtures in `fixtures/analysis_v1.json` cover forward/reverse motion, both arcs, repeated pivots, start/stop, irregular clocks, short support, flagged gaps and XY-only cases. Python and Dart compare complete output envelopes and window statistics. These fixtures verify numerical/serialization conventions, not athlete accuracy or the equivalence of the two production estimators.

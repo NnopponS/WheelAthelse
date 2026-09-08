@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from .clock_sync import ClockModel, ClockObservation, Uint32Unwrapper
-from .control import scheduled_start, stop, sync_ping
+from .control import scheduled_start, set_utc, stop, sync_ping
 from .engine import DualBoardEngine
 from .models import NotificationEnvelope, WheelSide
 from .sync_protocol import (
@@ -57,6 +57,7 @@ class StartResult:
     mapped_start_ns: dict[WheelSide, int]
     target_device_us: dict[WheelSide, int]
     start_skew_ns: int | None
+    utc_start_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +134,7 @@ class SyncLifecycleController:
         pc_start_ns: int | None = None,
         lead_time_s: float = 3.0,
         ack_timeout_s: float = 1.0,
+        utc_start_ms: int | None = None,
     ) -> StartResult:
         selected = tuple(sides)
         if not selected:
@@ -149,6 +151,19 @@ class SyncLifecycleController:
             waiter: asyncio.Future[StartFiredEvent] = loop.create_future()
             self._state[side].start_waiter = waiter
             waiters[side] = waiter
+
+        # Give every sensor the same absolute UTC value for T0 before START.
+        # This does not replace the monotonic affine clock model used for sample
+        # synchronization; it gives the recording/UI a wall-clock anchor that
+        # cannot drift with a GUI timer.
+        if utc_start_ms is not None:
+            for side in selected:
+                await self.transport.write(
+                    self._require_device(side),
+                    CONTROL_UUID,
+                    set_utc(utc_start_ms),
+                    response=True,
+                )
 
         # Commands may arrive at different host times; device-local scheduled
         # targets are derived from the same PC T0 so write ordering is not the
@@ -192,6 +207,7 @@ class SyncLifecycleController:
             mapped_start_ns=mapped,
             target_device_us=targets,
             start_skew_ns=skew,
+            utc_start_ms=utc_start_ms,
         )
 
     async def stop_all(

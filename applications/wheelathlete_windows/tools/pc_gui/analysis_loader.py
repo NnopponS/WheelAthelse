@@ -40,7 +40,7 @@ def read_recording(
                 capture.update(value)
             elif record.kind is RecordKind.SYNC and not start:
                 side = value.get("side")
-                if side in {"L", "R"}:
+                if side in {"L", "R", "C"}:
                     models[side] = value
             elif record.kind is RecordKind.EVENT and value.get("type") == "START":
                 if start:
@@ -57,7 +57,7 @@ def read_recording(
     physical = capture if capture else manifest
     scales, provenance = {}, {}
     rates = {}
-    for side in ("L", "R"):
+    for side in ("L", "R", "C"):
         board = physical.get("boards", {}).get(side, {})
         rates[side] = board.get("sample_rate_hz", physical.get("sample_rate_hz", 100))
         scales[side], provenance[side] = {}, {}
@@ -89,7 +89,7 @@ def read_recording(
     if meta.get("quality", "UNKNOWN") != "GOOD":
         warnings.append("Original recording quality: " + str(meta.get("quality", "UNKNOWN"))
                         + "; reported reasons: " + str(meta.get("reasons", [])))
-    samples = {"L": [], "R": []}
+    samples = {"L": [], "R": [], "C": []}
     gaps = []
     origin = None
 
@@ -156,13 +156,13 @@ def read_recording(
     if not any(samples.values()):
         errors.append("No readable recorded samples")
     timing = {"basis": "legacy_sequence_arrival_anchor", "side_sample_rates": rates}
-    if start and set(frozen_models) == {"L", "R"}:
+    if start and {"L", "R"}.issubset(frozen_models):
         timing.update(
             basis="saved_device_affine", clock_models=frozen_models, start=start
         )
     else:
         warnings.append(
-            "Complete pre-START dual-wheel clock evidence is absent; legacy timing is explicitly uncertain."
+            "Complete pre-START L/R wheel clock evidence is absent; legacy timing is explicitly uncertain."
         )
     return {
         "session_id": session_id,

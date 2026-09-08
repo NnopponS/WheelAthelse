@@ -216,7 +216,7 @@ App อ่านครั้งเดียวตอน connect เพื่อ�
 
 | Offset | Field | Type | ความหมาย |
 |---|---|---|---|
-| 0  | `wheel_id`     | uint8  | `0x4C` = 'L' (ล้อซ้าย), `0x52` = 'R' (ล้อขวา) |
+| 0  | `wheel_id`     | uint8  | `0x4C` = 'L' (ล้อซ้าย), `0x52` = 'R' (ล้อขวา), `0x43` = 'C' (เซนเซอร์กึ่งกลางเก้าอี้) |
 | 1  | `fw_major`     | uint8  | firmware version major |
 | 2  | `fw_minor`     | uint8  | firmware version minor |
 | 3  | `fw_patch`     | uint8  | firmware version patch |
@@ -239,7 +239,7 @@ App อ่านเพื่อรู้ board config ปัจจุบัน (
 | Offset | Field | Type | ความหมาย |
 |---|---|---|---|
 | 0  | `name`       | char[24] | board name (null-padded ASCII, สูงสุด 24 ตัว) |
-| 24 | `wheel_id`   | uint8  | `0x4C` = 'L', `0x52` = 'R' |
+| 24 | `wheel_id`   | uint8  | `0x4C` = 'L', `0x52` = 'R', `0x43` = 'C' |
 | 25 | `rate_hz`    | uint16 LE | sampling rate ปัจจุบัน (50/100/200) |
 | 27 | `fw_major`   | uint8  | firmware version major |
 | 28 | `fw_minor`   | uint8  | firmware version minor |
@@ -249,6 +249,17 @@ App อ่านเพื่อรู้ board config ปัจจุบัน (
 > Config เปลี่ยนได้ runtime ผ่าน `SET_NAME` / `SET_WHEEL` / `SET_RATE` / `SET_BEEP_ENABLED`
 > ค่าทั้งหมด persist ลง NVS (namespace `wacfg`) — survive reboot
 > Firmware persist ตอน disconnect (ลด NVS wear)
+
+### 5.2 Optional center chair IMU (`C`)
+
+`C` is an optional third IMU mounted on the wheelchair/chair frame. It is a **chair-frame sensor**, not a wheel hub. The wire protocol and 20-byte IMU sample payload are unchanged; only the role byte is extended to `0x43` (`'C'`).
+
+Mounting contract for the current center-sensor build:
+- `+Z` points **down toward the floor**.
+- `X`/`Y` retain the physical board axes until a forward/lateral mounting direction is measured and documented; clients must not silently reinterpret them.
+- Existing L/R trajectory models continue to consume only L/R hub samples. Center samples are recorded, synchronized, previewed, and exported but are not inserted into the legacy 12-channel model input.
+- XIAO center firmware uses yellow on the RGB LED (red + green on, blue off): a 500 ms identity blink while advertising/connected and a 150 ms heartbeat each second while recording. Error/retry indication still has priority over the identity color.
+- M5StickC Plus2 has no equivalent RGB status LED. Its center build keeps the left identity bar yellow and blinks the large yellow `C` glyph at 500 ms cadence, switching to a 150 ms heartbeat each second while recording; status/error text remains independently visible.
 
 ---
 

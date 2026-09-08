@@ -4,11 +4,11 @@
 
 WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายและขวาเพื่อเก็บข้อมูล accelerometer และ gyroscope แบบซิงโครไนซ์ พร้อมแอปสำหรับมือถือและ Windows เพื่อใช้เก็บข้อมูลภาคสนาม ดูสถานะ ตรวจคุณภาพ จัดการ session ส่งออกข้อมูล และวิเคราะห์ trajectory แบบเสริม
 
-> **Release ปัจจุบัน:** `v1.8.0`
+> **Release ปัจจุบัน:** `v1.8.1`
 > **Mobile application:** `1.8.0+10`
-> **Firmware:** `1.8.0`
+> **Firmware:** `1.8.1`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.0`
+> **Windows package:** `1.8.1`
 > **ภาษา:** [English](README.md) | ไทย
 
 ## การพัฒนาฟีเจอร์วิเคราะห์การเคลื่อนไหว
@@ -253,8 +253,8 @@ Output จะอยู่ที่:
 
 ```text
 applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.0-portable.zip
-└── WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.1-portable.zip
+└── WheelAthleteSetup-1.8.1.exe
 ```
 
 ทั้ง portable package และ installer จะ bundle `WheelAthleteDaemon.exe` ไปด้วย
@@ -348,11 +348,11 @@ Automated test ไม่สามารถแทน physical acceptance test ท
 
 | Component | Version |
 |---|---:|
-| Product release | `1.8.0` |
+| Product release | `1.8.1` |
 | WheelAthlete Mobile Application | `1.8.0+10` |
-| WheelAthlete Windows Research Application | `1.8.0` |
-| M5StickC Plus2 firmware | `1.8.0` |
-| XIAO nRF52840 Sense firmware | `1.8.0` |
+| WheelAthlete Windows Research Application | `1.8.1` |
+| M5StickC Plus2 firmware | `1.8.1` |
+| XIAO nRF52840 Sense firmware | `1.8.1` |
 | BLE protocol | `1.8.0` |
 
 ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation

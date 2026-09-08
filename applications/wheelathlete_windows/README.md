@@ -18,6 +18,8 @@ The source MODEL page keeps the frozen BiWheel3D XY+yaw recipe first/default. If
 
 Use `Research trial…` to inspect a trusted processed `.npz` under this checkout's `BiWheel3D/data` tree. If the trial contains real C3D hub ground truth, the chart overlays it as a gray dashed path and labels the displayed errors as full-cache diagnostics. These are visual research diagnostics; model-selection claims still require the support-masked evaluator and frozen split protocol. IMU-only trials never receive fabricated GT.
 
+When the optional local `BiWheel3D/registry/models.json` exists, the source app also discovers **Experimental PyTorch v1 + Slalom Course Constraint**. It keeps the exact residual-v1 weights and applies a fixed-course adapter only to sessions explicitly labeled `SL`/`slalom`; other maneuvers are exact no-ops. The UI reports whether heading/position closure was applied. This is research-only and does not replace the first/default classical model.
+
 ## Run from source
 
 ```bat

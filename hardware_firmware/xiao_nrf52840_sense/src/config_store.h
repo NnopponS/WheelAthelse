@@ -21,9 +21,9 @@ constexpr size_t  CONFIG_SIZE   = 31;
 // CHAR_CONFIG_UUID is defined in ble_types.h
 
 
-// Check if wheel_id is valid (0x4C='L' or 0x52='R').
+// Sensor role ID: 0x4C='L' wheel, 0x52='R' wheel, 0x43='C' chair center.
 inline bool isValidWheel(uint8_t wheel_id) {
-    return wheel_id == 0x4C || wheel_id == 0x52;
+    return wheel_id == 0x4C || wheel_id == 0x52 || wheel_id == 0x43;
 }
 
 // Sanitize a board name into a 16-byte null-padded ASCII buffer.

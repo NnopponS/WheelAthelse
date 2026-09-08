@@ -29,13 +29,22 @@ def fmt(value: Any, suffix: str = "", digits: int = 1) -> str:
 
 
 def style_chart_surface(chart: QChart, view: QChartView) -> None:
-    """Keep QtCharts native to the light instrument surface on dark Windows."""
+    """Render QtCharts as a clean light research surface on any Windows theme."""
     white = QBrush(QColor("#ffffff"))
     chart.setBackgroundBrush(white)
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#ffffff")))
+    chart.setPlotAreaBackgroundVisible(True)
     chart.setBackgroundPen(QPen(Qt.PenStyle.NoPen))
     chart.setBackgroundRoundness(0)
+    chart.setTitleBrush(QBrush(QColor("#0f1f3d")))
     view.setBackgroundBrush(white)
     view.setFrameShape(QFrame.Shape.NoFrame)
+    for axis in chart.axes():
+        axis.setLabelsColor(QColor("#475569"))
+        axis.setTitleBrush(QBrush(QColor("#334155")))
+        axis.setLinePen(QPen(QColor("#cbd5e1"), 1.0))
+        axis.setGridLinePen(QPen(QColor("#e8eef5"), 1.0))
+        axis.setMinorGridLineVisible(False)
 
 
 class Card(QFrame):
@@ -71,7 +80,7 @@ class BoardSummaryCard(Card):
         root.setContentsMargins(18, 16, 18, 16)
         root.setSpacing(12)
         header = QHBoxLayout()
-        self.title = QLabel(f"{side} wheel")
+        self.title = QLabel("C chair" if side == "C" else f"{side} wheel")
         self.title.setObjectName("cardTitle")
         self.status = QLabel("OFFLINE")
         self.status.setObjectName("statusPill")
@@ -105,7 +114,7 @@ class BoardSummaryCard(Card):
         root.addLayout(grid)
 
     def update_board(self, board: BoardView, *, active: bool = False) -> None:
-        self.title.setText(f"{board.side} wheel")
+        self.title.setText("C chair" if board.side == "C" else f"{board.side} wheel")
         accel_names = {0: "±2g", 1: "±4g", 2: "±8g", 3: "±16g"}
         gyro_names = {0: "±250°/s", 1: "±500°/s", 2: "±1000°/s", 3: "±2000°/s"}
         ranges = ""
@@ -234,7 +243,7 @@ class MultiAxisChart(Card):
         }
 
         self.series: dict[tuple[str, str], QLineSeries] = {}
-        sides = (side,) if side in ("L", "R") else ("L", "R")
+        sides = (side,) if side in ("L", "R", "C") else ("L", "R", "C")
         for s in sides:
             for axis in ("X", "Y", "Z"):
                 series = QLineSeries()
@@ -256,7 +265,7 @@ class MultiAxisChart(Card):
 
     def update_from_controller(self, controller: BaseController) -> None:
         all_values: list[float] = []
-        sides = (self.side,) if self.side in ("L", "R") else ("L", "R")
+        sides = (self.side,) if self.side in ("L", "R", "C") else ("L", "R", "C")
         for side in sides:
             samples = controller.preview_buffer(side).values()
             board = controller.state.boards[side]

@@ -7,13 +7,14 @@ import math
 from pathlib import Path
 from threading import Thread
 
-from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QPalette, QPen
+from PySide6.QtCore import QLocale, QPointF, Qt, Signal
+from PySide6.QtGui import QColor, QPen
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -52,33 +53,71 @@ class AnalysisTimeline(QWidget):
         self.analysis = None
         self.last_statistics = None
         self._exporting = False
-        self.setMinimumWidth(340)
+        self.setMinimumWidth(400)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
-        self.scope = QLabel("Time and window review")
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        overview = QFrame()
+        overview.setObjectName("analysisSection")
+        overview_layout = QVBoxLayout(overview)
+        overview_layout.setContentsMargins(14, 12, 14, 12)
+        overview_layout.setSpacing(7)
+
+        eyebrow = QLabel("ANALYSIS TIMELINE")
+        eyebrow.setObjectName("analysisEyebrow")
+        overview_layout.addWidget(eyebrow)
+
+        self.scope = QLabel("Review motion over time")
         self.scope.setWordWrap(True)
         self.scope.setObjectName("cardTitle")
-        layout.addWidget(self.scope)
+        overview_layout.addWidget(self.scope)
+
+        scope_help = QLabel(
+            "Move the cursor to inspect one sample, then narrow the window to compare a motion segment."
+        )
+        scope_help.setWordWrap(True)
+        scope_help.setObjectName("mutedText")
+        overview_layout.addWidget(scope_help)
+
         self.time_label = QLabel("No analysis timeline")
         self.time_label.setAccessibleName("analysisSelectedTime")
-        layout.addWidget(self.time_label)
+        self.time_label.setObjectName("analysisTimeValue")
+        overview_layout.addWidget(self.time_label)
+
         self.cursor = QSlider(Qt.Orientation.Horizontal)
         self.cursor.setAccessibleName("analysisTimeSlider")
         self.cursor.setSingleStep(1)
         self.cursor.setPageStep(20)
-        layout.addWidget(self.cursor)
+        overview_layout.addWidget(self.cursor)
+
         self.selected_label = QLabel(
             "Speed, acceleration and orientation will appear here."
         )
         self.selected_label.setAccessibleName("analysisSelectedMetrics")
+        self.selected_label.setObjectName("analysisMetricReadout")
         self.selected_label.setWordWrap(True)
-        layout.addWidget(self.selected_label)
+        overview_layout.addWidget(self.selected_label)
+
+        metric_row = QHBoxLayout()
+        metric_label = QLabel("Plot metric")
+        metric_label.setObjectName("mutedText")
         self.channel = QComboBox()
         self.channel.setAccessibleName("analysisChannel")
         for _, title, _ in CHANNELS:
             self.channel.addItem(title)
-        layout.addWidget(self.channel)
+        metric_row.addWidget(metric_label)
+        metric_row.addWidget(self.channel, 1)
+        overview_layout.addLayout(metric_row)
+        layout.addWidget(overview)
+
+        chart_panel = QFrame()
+        chart_panel.setObjectName("analysisSection")
+        chart_layout = QVBoxLayout(chart_panel)
+        chart_layout.setContentsMargins(8, 8, 8, 8)
+        chart_layout.setSpacing(4)
+
         self.chart = QChart()
         self.chart.legend().hide()
         self.xaxis, self.yaxis = QValueAxis(), QValueAxis()
@@ -89,52 +128,87 @@ class AnalysisTimeline(QWidget):
         self.chart.addAxis(self.yaxis, Qt.AlignmentFlag.AlignLeft)
         self.chart_view = QChartView(self.chart)
         self.chart_view.setAccessibleName("analysisTimeSeriesChart")
-        self.chart_view.setMinimumHeight(180)
+        self.chart_view.setMinimumHeight(240)
         style_chart_surface(self.chart, self.chart_view)
-        layout.addWidget(self.chart_view, 1)
+        chart_layout.addWidget(self.chart_view, 1)
+        layout.addWidget(chart_panel, 1)
+
         self.cursor_line = QLineSeries()
         self.start_line, self.stop_line = QLineSeries(), QLineSeries()
-        color = self.palette().color(QPalette.ColorRole.Highlight)
-        self.cursor_line.setPen(QPen(color, 1.5))
+        self.cursor_line.setPen(QPen(QColor("#2563eb"), 1.7))
         for line in (self.start_line, self.stop_line):
-            line.setPen(QPen(color, 1.0, Qt.PenStyle.DashLine))
+            line.setPen(QPen(QColor("#ea580c"), 1.4, Qt.PenStyle.DashLine))
         for line in (self.cursor_line, self.start_line, self.stop_line):
             self.chart.addSeries(line)
             line.attachAxis(self.xaxis)
             line.attachAxis(self.yaxis)
         self._traces = []
+
+        window_panel = QFrame()
+        window_panel.setObjectName("analysisSection")
+        window_layout = QVBoxLayout(window_panel)
+        window_layout.setContentsMargins(14, 12, 14, 12)
+        window_layout.setSpacing(8)
+
+        window_title = QLabel("Window selection")
+        window_title.setObjectName("cardTitle")
+        window_layout.addWidget(window_title)
+        window_help = QLabel(
+            "Orange dashed lines mark the selected interval. Values use English numerals and seconds."
+        )
+        window_help.setWordWrap(True)
+        window_help.setObjectName("mutedText")
+        window_layout.addWidget(window_help)
+
         self.start, self.stop = QDoubleSpinBox(), QDoubleSpinBox()
         grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(5)
+        english_locale = QLocale(
+            QLocale.Language.English, QLocale.Country.UnitedStates
+        )
         for i, (name, control) in enumerate(
             (("Window start", self.start), ("Window end", self.stop))
         ):
-            control.setDecimals(6)
+            control.setLocale(english_locale)
+            control.setDecimals(3)
             control.setSuffix(" s")
             control.setSingleStep(0.05)
+            control.setKeyboardTracking(False)
+            control.setObjectName("analysisWindowSpin")
             control.setAccessibleName(
                 "analysisWindowStart" if i == 0 else "analysisWindowEnd"
             )
-            grid.addWidget(QLabel(name), 0, i)
+            label = QLabel(name)
+            label.setObjectName("mutedText")
+            grid.addWidget(label, 0, i)
             grid.addWidget(control, 1, i)
-        layout.addLayout(grid)
+        window_layout.addLayout(grid)
+
         self.summary = QLabel("Window summaries use all samples, not chart decimation.")
         self.summary.setAccessibleName("analysisWindowSummary")
+        self.summary.setObjectName("analysisSummary")
         self.summary.setWordWrap(True)
-        layout.addWidget(self.summary)
+        window_layout.addWidget(self.summary)
+
         self.quality = QLabel("")
         self.quality.setWordWrap(True)
+        self.quality.setObjectName("analysisQuality")
         self.quality.setAccessibleName("analysisQualityStatus")
-        layout.addWidget(self.quality)
+        window_layout.addWidget(self.quality)
+
         self.details_button = QPushButton("Show timing and quality details")
         self.details_button.setCheckable(True)
         self.details_button.setAccessibleName("analysisQualityDetailsButton")
         self.details = QLabel("")
         self.details.setWordWrap(True)
+        self.details.setObjectName("mutedText")
         self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.details.hide()
         self.details_button.toggled.connect(self.details.setVisible)
-        layout.addWidget(self.details_button)
-        layout.addWidget(self.details)
+        window_layout.addWidget(self.details_button)
+        window_layout.addWidget(self.details)
+
         self.export_button = QPushButton("Export timeline + metadata...")
         self.export_button.setAccessibleName("exportAnalysisButton")
         reset = QPushButton("Full window")
@@ -142,12 +216,16 @@ class AnalysisTimeline(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(reset)
         buttons.addWidget(self.export_button)
-        layout.addLayout(buttons)
+        window_layout.addLayout(buttons)
+
         self.export_status = QLabel(
             "CSV contains the entire timeline. The selected window is recorded in JSON."
         )
         self.export_status.setWordWrap(True)
-        layout.addWidget(self.export_status)
+        self.export_status.setObjectName("mutedText")
+        window_layout.addWidget(self.export_status)
+        layout.addWidget(window_panel)
+
         self.cursor.valueChanged.connect(self._cursor_changed)
         self.start.valueChanged.connect(self._window_changed)
         self.stop.valueChanged.connect(self._window_changed)
@@ -246,6 +324,7 @@ class AnalysisTimeline(QWidget):
             if not run:
                 return
             series = QLineSeries()
+            series.setPen(QPen(QColor("#0f766e"), 2.2))
             stride = max(1, len(run) // 2500)
             display = run[::stride]
             if display[-1] != run[-1]:

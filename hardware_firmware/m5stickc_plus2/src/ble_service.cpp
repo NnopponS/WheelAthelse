@@ -622,6 +622,8 @@ void BleService::handleSetWheel(uint8_t wheel_id) {
     if (std::strncmp(configStore().name(), "WheelAthlete-M5-", 16) == 0) {
         if (wheel_id == 0x52) {
             configStore().setName("WheelAthlete-M5-R");
+        } else if (wheel_id == 0x43) {
+            configStore().setName("WheelAthlete-M5-C");
         } else {
             configStore().setName("WheelAthlete-M5-L");
         }
