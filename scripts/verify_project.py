@@ -17,6 +17,11 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_FILES = {'README.md', 'STATUS.md', 'HANDOFF.md', 'architecture.md', 'decisions.md'}
 PROJECT_DIRS = {'plans', 'phases', 'history', 'reports', 'local'}
+REQUIRED_SOURCE_FILES = (
+    'docs/model_analysis/fixtures/features_v1.json',
+    'applications/wheelathlete_mobile/assets/models/BIWHEEL3D_LICENSE.txt',
+    'applications/wheelathlete_mobile/assets/models/wheelathlete_biwheel3d_m4.onnx',
+)
 PRIVATE = ('.project/local/', '.project/evidence/', '.project-state-before-organization/', 'BiWheel3D/')
 BAD_SUFFIXES = {'.waj', '.open', '.npz', '.c3d', '.apk', '.ipa', '.exe', '.zip', '.jks', '.keystore'}
 TEXT_SUFFIXES = {'.md', '.json', '.py', '.dart', '.yml', '.yaml', '.toml', '.txt', '.ps1', '.bat'}
@@ -96,6 +101,9 @@ def check(staged: bool = False) -> dict:
     for name in PROJECT_FILES:
         if '.project/' + name not in names:
             errors.append('Missing canonical .project/' + name)
+    for name in REQUIRED_SOURCE_FILES:
+        if name not in names:
+            errors.append('Missing required source asset or fixture: ' + name)
     fixture = 'docs/model_analysis/fixtures/analysis_v1.json'
     if fixture not in names:
         errors.append('Shared analytical fixture missing from publishable tree')

@@ -127,7 +127,9 @@ void main() {
   test('BiWheel3D feature extractor matches Python reference fixture', () {
     final fixture =
         jsonDecode(
-              File('test/fixtures/biwheel3d_features.json').readAsStringSync(),
+              File(
+                '../../docs/model_analysis/fixtures/features_v1.json',
+              ).readAsStringSync(),
             )
             as Map<String, dynamic>;
     final windows = (fixture['windows'] as List)

@@ -100,6 +100,8 @@ BiWheel3D*
 # The Windows app vendors a small, attributed BiWheel3D runtime snapshot.
 !applications/wheelathlete_windows/tools/pc_gui/biwheel3d_runtime/
 !applications/wheelathlete_windows/tools/pc_gui/biwheel3d_runtime/**
+# Required mobile model attribution; keep the broad private research exclusion.
+!applications/wheelathlete_mobile/assets/models/BIWHEEL3D_LICENSE.txt
 # Local release/update verification scratch
 .project/tmp_*
 .project/updater_*

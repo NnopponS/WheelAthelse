@@ -8,7 +8,9 @@ import 'package:wheelathlete/records/session_model.dart';
 TrajectoryPreprocessResult input({bool complete = true}) {
   final fixture =
       jsonDecode(
-            File('test/fixtures/biwheel3d_features.json').readAsStringSync(),
+            File(
+              '../../docs/model_analysis/fixtures/features_v1.json',
+            ).readAsStringSync(),
           )
           as Map;
   final windows = (fixture['windows'] as List)

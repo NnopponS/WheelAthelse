@@ -153,8 +153,9 @@ def test_results_page_batch_export_and_session_folder():
     # Test changing session folder
     with tempfile.TemporaryDirectory() as custom_folder:
         controller.set_session_folder(custom_folder)
-        assert controller.state.journal_root == custom_folder
-        assert results.folder_label.text() == custom_folder
+        # Hosted Windows can expose this same directory through an 8.3 alias.
+        assert Path(controller.state.journal_root).samefile(custom_folder)
+        assert Path(results.folder_label.text()).samefile(custom_folder)
 
     controller.close()
     window.close()

@@ -55,6 +55,8 @@ class PublicationSnapshotTests(unittest.TestCase):
             self.write('.project/' + name, '# Synthetic project document\n')
         self.write('docs/model_analysis/fixtures/analysis_v1.json',
                    json.dumps({'schema_version': 1, 'cases': [{} for _ in range(11)]}))
+        for name in module.REQUIRED_SOURCE_FILES:
+            self.write(name, 'Synthetic required-source placeholder')
         self.git('add', '.')
         self.git('commit', '--quiet', '-m', 'Synthetic baseline')
         root_patch = patch.object(module, 'ROOT', self.root)
@@ -122,6 +124,23 @@ class PublicationSnapshotTests(unittest.TestCase):
     def test_uppercase_text_suffix_cannot_bypass_credential_check(self):
         self.assertTrue(module.publication_errors('docs/config.TXT',
                         b'-----BEGIN ' + b'PRIVATE KEY-----'))
+
+
+    def test_missing_required_source_dependency_is_rejected(self):
+        name = module.REQUIRED_SOURCE_FILES[0]
+        self.git('rm', '--', name)
+        for staged in (False, True):
+            with self.subTest(staged=staged):
+                self.assertFalse(module.check(staged)['passed'])
+
+    def test_ignored_local_dependency_cannot_mask_missing_candidate_file(self):
+        name = module.REQUIRED_SOURCE_FILES[0]
+        self.git('rm', '--', name)
+        self.write('.gitignore', '.project/local/\n' + name + '\n')
+        self.write(name, 'Only on this computer, absent from the index')
+        self.assertTrue((self.root / name).exists())
+        self.assertFalse(module.check(False)['passed'])
+        self.assertFalse(module.check(True)['passed'])
 
 
 if __name__ == '__main__':

@@ -99,13 +99,14 @@ def test_prepare_dual_windows_resamples_non_native_rate_and_surfaces_warning():
 def test_feature_extractor_matches_mobile_python_reference_fixture():
     fixture_path = (
         REPO_ROOT
-        / "applications"
-        / "wheelathlete_mobile"
-        / "test"
+        / "docs"
+        / "model_analysis"
         / "fixtures"
-        / "biwheel3d_features.json"
+        / "features_v1.json"
     )
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["provenance"]["kind"] == "synthetic"
+    assert fixture["provenance"]["recordings_used"] is False
     windows = np.asarray(fixture["windows"], dtype=np.float32)
     expected = np.asarray(fixture["features"], dtype=np.float32)
     actual = extract_biwheel3d_features(windows)

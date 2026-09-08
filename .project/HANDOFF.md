@@ -38,7 +38,7 @@ Use one STATUS and one HANDOFF, and one conclusion per phase. Keep temporary wor
 
 ## Published implementation
 
-The source implementation was committed as `266b6929c917` and its normal push to the named feature branch was verified. The branch may additionally contain this documentation-only receipt. Main/release references and the separate research index are unchanged. Hosted source verification was running at the source-push check; do not treat that as a CI pass. Detailed local command/remote evidence is in `local/branch-handoff-2026-09-08/publication.json`.
+The published feature tip before the current repair is `0b09b7c8e7c7995d0000232656008ecbb8d9b47d`. Its hosted source verification failed on a Windows path-alias assertion plus files excluded from the published tree, while the same source passed locally. The current staged repair makes those tests self-contained and platform-safe without changing model defaults. Local verification passes 148 Windows tests, 705 Flutter tests, 16 tooling tests, the update-manifest test and Flutter analysis. Do not claim hosted CI success until the post-push checks complete. Main/release references and the separate research index remain unchanged.
 
 ## Hourly verification and future engineering runs
 
@@ -46,6 +46,6 @@ Use `history/scheduled-agent.md` as the single chronological agent-run log and `
 
 The Windows task `WheelAthlete-Hourly-Verification` runs all source verification checks once per hour from 04:00 Asia/Bangkok, starting 2026-09-08. The registered action uses an absolute Python interpreter, absolute runner path and explicit project working directory. It needs an awake PC, a logged-in task owner and AC power. No overlapping scheduled instance, wake timer, elevated run level, signing, release, model promotion, automatic commit or automatic push is configured. Logs and summary JSON are written under `.project/local/verification/`. Use Task Scheduler to inspect, pause or change this specific job; do not create a duplicate.
 
-This task is **not** the requested autonomous engineering agent. The requested model remains GPT-6 Astra Pro only. No verified scheduler route for that requirement was available in this run, so do not claim that unattended AI development has been enabled. Do not silently replace the model. The installed task-management plugin did not expose callable actions to this chat.
+A separate ChatGPT engineering continuation is now scheduled and is distinct from the deterministic Windows verification task. Each run must re-read the canonical project records, use `@lnwjud` only when available and authorized, preserve dirty/staged work and protected branches, verify before publication, and stop rather than fabricate evidence at physical/data/device/coach gates. The repository cannot guarantee a specific hosted model or future connector availability; do not describe the schedule as guaranteed GPT-6 Astra Pro routing.
 
 For a future authorized engineering run, re-read AGENTS and the current canonical documents, inspect actual Git/source state and the latest complete verification summary, check for concurrent work, then choose the highest-value implementable issue. Independent reference and grouped-capture evidence remain the gate for model selection; continue other useful regression-protected work rather than weakening accuracy gates.
