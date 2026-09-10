@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 import winsound
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ from PySide6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
+    QIcon,
     QPainter,
     QPen,
 )
@@ -321,18 +323,18 @@ QFrame#analysisSection {
     background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
 }
 QLabel#analysisEyebrow {
-    color: #0f766e; font-size: 11px; font-weight: 800;
+    color: #0f766e; font-size: 11px; font-weight: 800; letter-spacing: 0.5px;
 }
 QLabel#analysisTimeValue {
     color: #0f1f3d; font-size: 20px; font-weight: 750;
 }
 QLabel#analysisMetricReadout {
-    color: #334155; background-color: #f8fafc; border: 1px solid #e2e8f0;
-    border-radius: 8px; padding: 9px 11px;
+    color: #1e293b; background-color: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.4;
 }
 QLabel#analysisSummary {
-    color: #172033; background-color: #eef7f5; border: 1px solid #cfe8e3;
-    border-radius: 8px; padding: 9px 11px;
+    color: #0f766e; background-color: #f0fdfa; border: 1px solid #ccfbf1;
+    border-radius: 8px; padding: 9px 12px; font-weight: 600;
 }
 QLabel#analysisQuality {
     color: #475569; background-color: #fff7ed; border: 1px solid #fed7aa;
@@ -2231,6 +2233,7 @@ class SessionEditDialog(QDialog):
             self.trial_spin.setValue(1)
         self.athlete_edit = QLineEdit(str(session.get("athlete") or ""))
         self.athlete_edit.setAccessibleName("editSessionAthlete")
+        self.athlete_edit.setMaximumWidth(240)
         form.addRow("Topic", self.topic_edit)
         form.addRow("Trial", self.trial_spin)
         form.addRow("Athlete", self.athlete_edit)
@@ -3940,6 +3943,15 @@ class MainWindow(QMainWindow):
             app_root=Path(__file__).resolve().parents[2], parent=self
         )
         self._installing_update = False
+        for candidate in (
+            Path(__file__).resolve().parents[4] / "assets" / "wheelathlete-logo.png",
+            Path(__file__).resolve().parents[4] / "assets" / "wheelathlete-logo.ico",
+            Path(sys.executable).resolve().parent / "assets" / "wheelathlete-logo.png",
+            Path(sys.executable).resolve().parent / "assets" / "wheelathlete-logo.ico",
+        ):
+            if candidate.is_file():
+                self.setWindowIcon(QIcon(str(candidate)))
+                break
 
         root = QWidget()
         root.setObjectName("root")

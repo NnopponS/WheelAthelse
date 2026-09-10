@@ -204,7 +204,11 @@ def model_library_root() -> Path:
     override = os.environ.get("WHEELATHLETE_MODEL_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return (Path.home() / "Documents" / "WheelAthlete" / "Model").resolve()
+    base = (Path.home() / "Documents" / "WheelAthlete").resolve()
+    model_sub = (base / "Model").resolve()
+    if model_sub.is_dir():
+        return model_sub
+    return base
 
 
 def _runtime_root() -> Path:

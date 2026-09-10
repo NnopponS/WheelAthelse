@@ -35,7 +35,7 @@ def _install_exception_hook(log_path: Path) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="WheelAthlete Python Research Edition")
+    parser = argparse.ArgumentParser(description="WheelAthlete")
     parser.add_argument("--demo", action="store_true", help="show synthetic preview data; never writes research evidence")
     parser.add_argument("--port", type=int, default=8765, help="localhost acquisition-daemon port")
     return parser
@@ -48,7 +48,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
 
     app = QApplication(sys.argv)
-    app.setApplicationName("WheelAthlete Python Research Edition")
+    app.setApplicationName("WheelAthlete")
     app.setOrganizationName("WheelAthlete")
     controller = DemoController() if args.demo else AcquisitionController(repo_root=repo_root, port=args.port)
     window = MainWindow(controller, demo=args.demo)

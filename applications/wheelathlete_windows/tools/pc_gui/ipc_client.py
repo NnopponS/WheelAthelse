@@ -112,7 +112,7 @@ class DaemonClient(QObject):
         self.connection_changed.emit(True, "Connected to acquisition daemon")
         request_id = uuid.uuid4().hex
         self._pending[request_id] = _Pending("hello", None, None)
-        self._write_message("hello", {"client": "WheelAthlete Python Research Edition"}, request_id=request_id)
+        self._write_message("hello", {"client": "WheelAthlete"}, request_id=request_id)
 
     def _on_disconnected(self) -> None:
         self._set_ready(False)

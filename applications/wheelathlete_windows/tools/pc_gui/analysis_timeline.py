@@ -210,6 +210,7 @@ class AnalysisTimeline(QWidget):
         window_layout.addWidget(self.details)
 
         self.export_button = QPushButton("Export timeline + metadata...")
+        self.export_button.setObjectName("primaryButton")
         self.export_button.setAccessibleName("exportAnalysisButton")
         reset = QPushButton("Full window")
         reset.setAccessibleName("analysisResetWindow")
@@ -350,12 +351,12 @@ class AnalysisTimeline(QWidget):
             return
         row = self.analysis["samples"][index]
         self.time_label.setText(
-            f"Time {row['time_s']:.3f} s | sample {index + 1}/{len(self.analysis['samples'])}"
+            f"Time {row['time_s']:.3f} s  ·  Sample {index + 1:,} of {len(self.analysis['samples']):,}"
         )
         self.selected_label.setText(
-            f"Signed speed {_fmt(row['signed_speed_mps'], ' m/s')} | magnitude {_fmt(row['speed_mps'], ' m/s')}\n"
+            f"Signed speed {_fmt(row['signed_speed_mps'], ' m/s')}  ·  magnitude {_fmt(row['speed_mps'], ' m/s')}\n"
             f"Long. accel {_fmt(row['longitudinal_accel_mps2'], ' m/s2')}\n"
-            f"Yaw {_fmt(None if row['yaw_rad'] is None else math.degrees(row['yaw_rad']), ' deg')} | "
+            f"Yaw {_fmt(None if row['yaw_rad'] is None else math.degrees(row['yaw_rad']), ' deg')}  ·  "
             f"yaw rate {_fmt(None if row['yaw_rate_radps'] is None else math.degrees(row['yaw_rate_radps']), ' deg/s')}"
         )
         self.cursor_line.replace(

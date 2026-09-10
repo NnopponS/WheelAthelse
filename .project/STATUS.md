@@ -44,9 +44,10 @@ Implemented 1.8.2 release features include:
 - support for `ALLOW_UNSIGNED_RELEASE=true` community build mode setting `is_signed=false` while embedding available models;
 - installed-app update support through a verified GitHub Release manifest when a trusted signed release exists;
 - fail-closed Windows release signing that verifies packaged EXE/DLL/PYD/PowerShell components, the generated uninstaller and the installer;
+- window icon configuration using official assets and cleaned typography across Analysis timeline;
 - a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload.
 
-Fresh 2026-09-10 consolidation verification passed **195/195** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
+Fresh 2026-09-10 consolidation verification passed **198/198** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
 
 ## Firmware and optional center sensor
 

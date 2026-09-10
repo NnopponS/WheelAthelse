@@ -1,4 +1,4 @@
-"""WheelAthlete Python Research Edition desktop UI.
+"""WheelAthlete desktop UI.
 
 The Qt UI is intentionally a separate process from the lossless acquisition
 service in :mod:`tools.pc_acquisition`. Only throttled preview/status traffic
