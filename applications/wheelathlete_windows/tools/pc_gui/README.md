@@ -67,7 +67,7 @@ workflow:
 
 - current Accel X/Y/Z and Gyro X/Y/Z for both wheels;
 - acceleration and gyroscope charts using bounded preview traffic;
-- athlete, topic, trial, rate, tags and notes;
+- athlete, topic, trial and rate;
 - configures every connected board before START;
 - pre-record clock synchronization;
 - common PC monotonic scheduled T0;

@@ -1075,22 +1075,10 @@ class AcquisitionPage(QWidget):
         self.rate.addItems(["50", "100", "200"])
         self.rate.setCurrentText("100")
         self.rate.setAccessibleName("sampleRateInput")
-        self.tags = QLineEdit()
-        self.tags.setPlaceholderText("baseline, sprint, indoor")
-        self.tags.setAccessibleName("tagsInput")
-        self.notes = QTextEdit()
-        self.notes.setPlaceholderText(
-            "Session notes, conditions, athlete observations…"
-        )
-        self.notes.setMaximumHeight(80)
-        self.notes.setAccessibleName("notesInput")
-
         form.addRow("Athlete", self.athlete)
         form.addRow("Experiment", self.topic)
         form.addRow("Trial", self.trial)
         form.addRow("Rate (Hz)", self.rate)
-        form.addRow("Tags", self.tags)
-        form.addRow("Notes", self.notes)
         record_layout.addLayout(form)
 
         rec_actions = QHBoxLayout()
@@ -1220,10 +1208,8 @@ class AcquisitionPage(QWidget):
             "topic": self.topic.text().strip(),
             "trial_number": self.trial.value(),
             "sample_rate_hz": int(self.rate.currentText()),
-            "notes": self.notes.toPlainText().strip(),
-            "tags": [
-                item.strip() for item in self.tags.text().split(",") if item.strip()
-            ],
+            "notes": "",
+            "tags": [],
         }
 
     def _toggle_live(self) -> None:
@@ -1357,8 +1343,6 @@ class AcquisitionPage(QWidget):
             self.topic,
             self.trial,
             self.rate,
-            self.tags,
-            self.notes,
         ):
             widget.setEnabled(not state.recording and not state.recording_starting)
 
