@@ -133,10 +133,10 @@ def test_results_page_batch_export_and_session_folder():
             p = Path(path_str)
             assert p.exists()
             assert p.suffix == ".csv"
-            # Must be placed in a topic folder
-            assert p.parent.name == "Sprint"
+            # "Select all recordings" is system-wide even while Sprint is filtered.
+            assert p.parent.name in {"Sprint", "Endurance"}
             # Must follow Topic_Trial#_Athlete naming
-            assert p.stem.startswith("Sprint_Trial")
+            assert p.stem.startswith(f"{p.parent.name}_Trial")
             assert "Athlete" in p.stem or "Sprint" in p.stem
 
     # Test Deselect All

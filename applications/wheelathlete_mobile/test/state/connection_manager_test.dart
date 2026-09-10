@@ -55,6 +55,7 @@ void main() {
     expect(s.scanResults, isEmpty);
     expect(s.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
     expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.disconnected);
+    expect(s.bySide[WheelSide.center]!.status, ConnectionStatus.disconnected);
     expect(s.error, isNull);
   });
 
@@ -159,6 +160,37 @@ void main() {
     expect(state().isScanning, isFalse);
   });
 
+  test('center device is assigned to independent C connection slot', () async {
+    final centerBle = FakeBleRepository(
+      devices: const [FakeDevice(id: 'C1', name: 'WheelAthlete-C', rssi: -47)],
+      infoFor: const {
+        'C1': DeviceInfo(
+          wheelId: WheelId.center,
+          fwMajor: 1,
+          fwMinor: 8,
+          fwPatch: 0,
+          accelRange: 0,
+          gyroRange: 3,
+          accelScale: 6.1e-5,
+          gyroScale: 6.1e-2,
+        ),
+      },
+    );
+    final c = ProviderContainer(
+      overrides: [bleRepositoryProvider.overrideWith((ref) => centerBle)],
+    );
+    addTearDown(c.dispose);
+    await c.read(connectionManagerProvider.notifier).connect('C1');
+    final state = c.read(connectionManagerProvider);
+    expect(state.bySide[WheelSide.center]!.status, ConnectionStatus.connected);
+    expect(state.bySide[WheelSide.center]!.info!.wheelId, WheelId.center);
+    expect(state.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
+    expect(
+      state.bySide[WheelSide.right]!.status,
+      ConnectionStatus.disconnected,
+    );
+  });
+
   group('WheelConnection.copyWith', () {
     test('copies all fields', () {
       const conn = WheelConnection(
@@ -195,6 +227,7 @@ void main() {
     expect(s.scanResults, isEmpty);
     expect(s.bySide[WheelSide.left]!.status, ConnectionStatus.disconnected);
     expect(s.bySide[WheelSide.right]!.status, ConnectionStatus.disconnected);
+    expect(s.bySide[WheelSide.center]!.status, ConnectionStatus.disconnected);
     expect(s.error, isNull);
   });
 

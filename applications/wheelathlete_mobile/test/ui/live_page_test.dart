@@ -110,14 +110,16 @@ void main() {
     );
   });
 
-  testWidgets('shows both wheel panels with "not connected" when idle', (
+  testWidgets('shows L/R/C panels with "not connected" when idle', (
     tester,
   ) async {
     await pumpLivePage(tester);
 
     expect(find.text('Live IMU'), findsOneWidget);
-    // Both sides show a not-connected hint.
-    expect(find.text('Not connected'), findsNWidgets(2));
+    expect(find.text('Left wheel'), findsOneWidget);
+    expect(find.text('Right wheel'), findsOneWidget);
+    expect(find.text('Chair center'), findsOneWidget);
+    expect(find.text('Not connected'), findsNWidgets(3));
   });
 
   testWidgets('shows Start button disabled when neither wheel is connected', (

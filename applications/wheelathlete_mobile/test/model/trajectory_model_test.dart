@@ -65,6 +65,32 @@ void main() {
     );
   });
 
+  test('optional center IMU is not inserted into legacy L/R model tensor', () {
+    final lr = _dualWheel(count: 250);
+    final withCenter = <BufferedSample>[...lr];
+    for (var i = 0; i < 250; i++) {
+      final tMs = i * 10.0;
+      withCenter.add(
+        _sample(
+          side: WheelSide.center,
+          seq: i,
+          tMs: tMs,
+          ax: 9999,
+          ay: -8888,
+          az: 7777,
+          gx: 6666,
+          gy: -5555,
+          gz: 4444,
+        ),
+      );
+    }
+    final a = prepareTrajectoryInput(lr, sourceRateHz: 100);
+    final b = prepareTrajectoryInput(withCenter, sourceRateHz: 100);
+    expect(b.windows, equals(a.windows));
+    expect(b.timeSeconds, equals(a.timeSeconds));
+    expect(b.modelStepCount, a.modelStepCount);
+  });
+
   test('non-100 Hz source is resampled and surfaced as warning', () {
     final result = prepareTrajectoryInput(
       _dualWheel(count: 500, rateHz: 200),

@@ -17,6 +17,7 @@ from tools.pc_gui.model_inference import (  # noqa: E402
     discover_compatible_models,
     extract_biwheel3d_features,
     model_runtime_status,
+    model_bundle_spec,
     model_spec_runtime_status,
     prepare_dual_windows,
     run_processed_trial_model,
@@ -145,7 +146,7 @@ def test_discover_current_best_recipe_without_user_library(monkeypatch, tmp_path
     assert len(models) == 1
     assert models[0].key == CURRENT_BEST_KEY
     assert models[0].checkpoint.name == CURRENT_BEST_RECIPE_NAME
-    assert "XY + Yaw" in models[0].label
+    assert models[0].label == "Classical v1"
     assert models[0].kind == "recipe"
 
 
@@ -161,12 +162,71 @@ def test_model_library_discovers_onnx_and_recipe(monkeypatch, tmp_path):
     assert any(spec.key == CURRENT_BEST_KEY for spec in models)
 
 
+def _write_bundle(root: Path, **changes) -> Path:
+    root.mkdir()
+    (root / "model.onnx").write_bytes(b"synthetic portable model")
+    payload = {
+        "schema_version": 1,
+        "model_id": "example.portable.v1",
+        "display_name": "Portable v1",
+        "model_version": "1.0.0",
+        "runtime": {"kind": "onnx", "requires": ["numpy", "onnxruntime"]},
+        "artifact": "model.onnx",
+        "preprocessing": {
+            "id": "biwheel3d_features_v1",
+            "sample_rate_hz": 100,
+            "feature_dim": 90,
+        },
+        "required_sensor_roles": ["L", "R"],
+        "outputs": [{"name": "x_m", "unit": "m"}, {"name": "y_m", "unit": "m"}],
+        "experimental": True,
+        "description": "Synthetic test bundle.",
+    }
+    payload.update(changes)
+    manifest = root / "wheelathlete-model.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest
+
+
+def test_portable_bundle_is_discovered_without_biwheel3d(monkeypatch, tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    manifest = _write_bundle(library / "portable")
+    monkeypatch.setenv("WHEELATHLETE_MODEL_DIR", str(library))
+
+    spec = next(item for item in discover_compatible_models(tmp_path) if item.key == "example.portable.v1")
+
+    assert spec == model_bundle_spec(manifest)
+    assert spec.label == "Portable v1"
+    assert spec.checkpoint == (manifest.parent / "model.onnx").resolve()
+    assert spec.preprocessing_id == "biwheel3d_features_v1"
+    assert spec.required_sensor_roles == ("L", "R")
+    assert spec.output_capabilities == (("x_m", "m"), ("y_m", "m"))
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"schema_version": 2}, "schema_version"),
+        ({"artifact": "missing.onnx"}, "was not found"),
+        ({"artifact": "../outside.onnx"}, "escapes"),
+        ({"runtime": {"kind": "future_net", "requires": []}}, "Unsupported"),
+        ({"required_sensor_roles": ["L", "C"]}, "sensor roles"),
+        ({"preprocessing": {"id": "wrong", "sample_rate_hz": 100, "feature_dim": 90}}, "preprocessing.id"),
+    ],
+)
+def test_portable_bundle_rejects_incompatible_contract(tmp_path, changes, message):
+    manifest = _write_bundle(tmp_path / "portable", **changes)
+    with pytest.raises(ModelInferenceError, match=message):
+        model_bundle_spec(manifest)
+
+
 def test_pt_checkpoint_is_explicit_experimental_pytorch_selection(tmp_path):
     checkpoint = tmp_path / "WheelAthlete-PyTorch-Residual-v1.pt"
     checkpoint.write_bytes(b"placeholder")
     spec = custom_model_spec(checkpoint)
     assert spec.kind == "pytorch_residual"
-    assert "Experimental PyTorch" in spec.label
+    assert spec.label == "Residual v1"
     assert "does not replace" in spec.description
 
 
@@ -425,7 +485,7 @@ def test_optional_research_registry_discovers_experimental_checkpoint(
     matches = [spec for spec in models if spec.checkpoint == checkpoint.resolve()]
     assert len(matches) == 1
     assert matches[0].kind == "pytorch_residual"
-    assert matches[0].label == "Experimental PyTorch Residual v1"
+    assert matches[0].label == "Residual v1"
 
 
 def test_active_research_dataset_root_uses_registry_and_falls_back(tmp_path):
@@ -577,3 +637,28 @@ def test_optional_research_registry_discovers_slalom_course_model(
     assert len(matches) == 1
     assert matches[0].kind == "pytorch_residual_slalom_course"
     assert matches[0].course_config == (model_dir / "course.json").resolve()
+
+
+def test_discover_and_run_unified_hybrid_model():
+    pytest.importorskip("scipy")
+    models = discover_compatible_models(REPO_ROOT)
+    hybrid_spec = next((spec for spec in models if spec.kind == "unified_hybrid"), None)
+    assert hybrid_spec is not None, "Unified Hybrid model must be discovered from research registry"
+    assert hybrid_spec.label == "Hybrid v1"
+    assert "Unified 5-method hybrid" in hybrid_spec.description
+
+    ready, detail = model_spec_runtime_status(hybrid_spec)
+    assert ready, detail
+
+    result = run_session_model(REPO_ROOT, hybrid_spec, _straight_session())
+    assert result["model_kind"] == "unified_hybrid"
+    assert result["runtime_source"] == "unified_hybrid_v1"
+    assert result["point_count"] == 120
+    assert result["path_length_m"] > 5.0
+    assert result["net_yaw_deg"] is not None
+    assert result["analysis"]["metadata"]["model_key"] == hybrid_spec.key
+    assert len(result["analysis"]["samples"]) == 120
+    first_sample = result["analysis"]["samples"][0]
+    assert first_sample["signed_speed_mps"] is not None
+    assert first_sample["yaw_rad"] is not None
+    assert first_sample["yaw_rate_radps"] is not None

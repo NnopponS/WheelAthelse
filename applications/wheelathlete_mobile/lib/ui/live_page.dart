@@ -63,6 +63,8 @@ class LivePage extends ConsumerWidget {
             _WheelPanel(side: WheelSide.left),
             SizedBox(height: AppSpacing.md),
             _WheelPanel(side: WheelSide.right),
+            SizedBox(height: AppSpacing.md),
+            _WheelPanel(side: WheelSide.center),
           ],
         ),
       ),
@@ -162,13 +164,17 @@ class _PanelHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final wc = context.wheelColors;
     final role = wc.forWheel(side);
-    final label = side == WheelSide.left ? 'Left wheel' : 'Right wheel';
+    final label = side.deviceLabel;
 
     return Row(
       children: [
         StatusBadge(
-          label: side == WheelSide.left ? 'L' : 'R',
-          tone: side == WheelSide.left ? BadgeTone.left : BadgeTone.right,
+          label: side.shortLabel,
+          tone: switch (side) {
+            WheelSide.left => BadgeTone.left,
+            WheelSide.right => BadgeTone.right,
+            WheelSide.center => BadgeTone.center,
+          },
         ),
         const SizedBox(width: AppSpacing.sm),
         Text(

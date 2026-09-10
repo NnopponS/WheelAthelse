@@ -4,16 +4,16 @@
 
 WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายและขวาเพื่อเก็บข้อมูล accelerometer และ gyroscope แบบซิงโครไนซ์ พร้อมแอปสำหรับมือถือและ Windows เพื่อใช้เก็บข้อมูลภาคสนาม ดูสถานะ ตรวจคุณภาพ จัดการ session ส่งออกข้อมูล และวิเคราะห์ trajectory แบบเสริม
 
-> **Release ปัจจุบัน:** `v1.8.1`
-> **Mobile application:** `1.8.0+10`
-> **Firmware:** `1.8.1`
+> **Release ปัจจุบัน:** `v1.8.2` (Windows-first)
+> **Mobile application:** source `1.8.2+12` อยู่ระหว่างบำรุงรักษาและยังไม่เปิดให้ใช้งาน
+> **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.1`
+> **Windows package:** `1.8.2`
 > **ภาษา:** [English](README.md) | ไทย
 
-## การพัฒนาฟีเจอร์วิเคราะห์การเคลื่อนไหว
+## WheelAthlete 1.8.2 สำหรับ Windows
 
-Branch: `feature/dual-imu-coaching-analysis` เป็นงานพัฒนาแบบทดลอง ไม่ใช่ release ใหม่ และยังคงเลขเวอร์ชันเสถียรเดิม แอป Windows รองรับการเลือกเวลาและช่วงเวลาเพื่อดูเส้นทาง ความเร็ว และ yaw ส่วนมือถือยังใช้ M4 แบบ XY-only จึงไม่แสดง yaw หรือความเร็วเดินหน้าแบบมีเครื่องหมายที่โมเดลไม่ได้ให้มา
+รุ่น 1.8.2 เผยแพร่เฉพาะ Windows ส่วน source และ tests ของ Flutter iOS/Android ยังคงอยู่ใน repository เพื่อบำรุงรักษา แต่ไม่มีไฟล์ติดตั้ง ลิงก์ดาวน์โหลด หรือ mobile update ใน release นี้ แพ็กเกจ Windows สำหรับเผยแพร่ต้องมีลายเซ็น Authenticode ที่เชื่อถือได้; checksum หรือแพ็กเกจที่ไม่ได้เซ็นไม่สามารถแก้ download reputation warning หรือ Application Control error 4551 ได้
 
 สถานะปัจจุบันอยู่ใน `.project/STATUS.md` และงานต่อเนื่องอยู่ใน `.project/HANDOFF.md` ข้อมูลวิจัย log และเอกสารเก่าถูกเก็บใน `.project/local/` ซึ่งไม่นำขึ้น Git ตรวจโครงสร้างก่อน commit ด้วย `python scripts/verify_project.py` การผ่าน source tests ไม่ใช่การรับรองความแม่นยำจากข้อมูลจริง
 
@@ -253,8 +253,8 @@ Output จะอยู่ที่:
 
 ```text
 applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.1-portable.zip
-└── WheelAthleteSetup-1.8.1.exe
+├── WheelAthlete-1.8.2-portable.zip
+└── WheelAthleteSetup-1.8.2.exe
 ```
 
 ทั้ง portable package และ installer จะ bundle `WheelAthleteDaemon.exe` ไปด้วย
@@ -348,11 +348,11 @@ Automated test ไม่สามารถแทน physical acceptance test ท
 
 | Component | Version |
 |---|---:|
-| Product release | `1.8.1` |
-| WheelAthlete Mobile Application | `1.8.0+10` |
-| WheelAthlete Windows Research Application | `1.8.1` |
-| M5StickC Plus2 firmware | `1.8.1` |
-| XIAO nRF52840 Sense firmware | `1.8.1` |
+| Product release | `1.8.2` |
+| WheelAthlete Mobile Application source | `1.8.2+12` (อยู่ระหว่างบำรุงรักษา; ยังไม่เปิดให้ใช้งาน) |
+| WheelAthlete Windows Research Application | `1.8.2` |
+| M5StickC Plus2 firmware | `1.8.2` |
+| XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |
 
 ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation

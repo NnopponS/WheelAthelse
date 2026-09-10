@@ -33,7 +33,7 @@ void main() {
     );
   }
 
-  testWidgets('shows two ConnectionCards (L and R) initially disconnected', (
+  testWidgets('shows L/R/C sensor cards initially disconnected', (
     tester,
   ) async {
     final ble = FakeBleRepository(devices: const []);
@@ -41,7 +41,8 @@ void main() {
 
     expect(find.text('Left wheel'), findsOneWidget);
     expect(find.text('Right wheel'), findsOneWidget);
-    expect(find.text('Disconnected'), findsNWidgets(2));
+    expect(find.text('Chair center'), findsOneWidget);
+    expect(find.text('Disconnected'), findsNWidgets(3));
   });
 
   testWidgets('shows empty-state hint when no devices found and not scanning', (

@@ -1,11 +1,11 @@
 # WheelAthlete Applications
 
-This directory contains the two maintained operator-facing WheelAthlete applications.
+This directory contains the available Windows application and retained mobile source.
 
 | Directory | Official product name | Platform |
 |---|---|---|
-| `wheelathlete_mobile/` | **WheelAthlete Mobile Application** | iOS / Android |
 | `wheelathlete_windows/` | **WheelAthlete Windows Research Application** | Windows 10/11 |
+| `wheelathlete_mobile/` | **WheelAthlete Mobile Application** | iOS / Android source under maintenance; not currently available |
 
 Only one operator application should own a given left/right sensor pair at a time.
 

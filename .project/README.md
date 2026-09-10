@@ -1,31 +1,42 @@
 # WheelAthlete engineering workspace
 
-Start with **STATUS.md**, then **HANDOFF.md**. These are the only current status and continuation records.
+Updated: 2026-09-08.
 
-## Directory contract
+Start with **STATUS.md**, then **HANDOFF.md**. Those two files are the current source of truth for project state and continuation. Read **decisions.md** before changing architecture, model defaults, firmware roles, release behavior, or publication scope.
+
+## Canonical layout
 
 ```text
 .project/
-  README.md          Navigation and housekeeping policy
-  STATUS.md          Current phase status, capabilities and verified checks
-  HANDOFF.md         Next actions, branch/publication scope and working rules
-  architecture.md    Runtime/data ownership and model boundaries
-  decisions.md       Durable engineering and release decisions
-  plans/             The active two-hub roadmap
-  phases/            One conclusion per phase, not competing final reports
-  history/           Milestones and durable lessons
-  reports/           Small sanitized verification reports
-  local/             Ignored logs, private evidence, archives and generated files
+  README.md                         navigation and housekeeping policy
+  STATUS.md                         current measured state and open gates
+  HANDOFF.md                        exact continuation instructions
+  architecture.md                   runtime/data/model boundaries
+  decisions.md                      active durable decisions
+  plans/motion-analysis-roadmap.md  maintained roadmap
+  phases/P0-P1.md ... P7.md         one detailed conclusion per phase
+  history/                          chronological milestones and durable lessons
+  reports/                          small sanitized verification snapshots
+  local/                            ignored raw logs, snapshots, scripts and private evidence
 ```
 
-The active branch is `feature/dual-imu-coaching-analysis`, not a release line. The root repository is `NnopponS/WheelAthelse`; the product name remains **WheelAthlete**. No repository rename, main merge, release tag or updater publication is part of this work.
+The active root branch is `feature/dual-imu-coaching-analysis`. At this update the root HEAD and remote feature ref are both `be2e4725576775249796d376ef0e64cceb7aa04e`, but the current Slalom-v3 and optional-center-IMU work is still **uncommitted working-tree work**. Do not describe it as published until a later explicit commit/push is verified.
 
-## Rules that keep this folder readable
+`BiWheel3D/` is a separate local research repository, not a root submodule and not an application dependency. Preserve its index/worktree exactly unless a task explicitly owns research changes. Raw athlete data, generated models, private paths and research evidence stay local.
 
-Keep raw evidence, ad-hoc scripts, console logs, screenshots with participant information, machine paths and generated packages under `local/`. Never add them to Git. Use date/topic subdirectories there. Store reusable verification code under `scripts/`, not in this directory. Update the same STATUS/HANDOFF files; do not create FINAL, FINAL_v2 or model-specific alternate trackers.
+## Current technical direction
 
-The complete pre-organization state was preserved byte-for-byte locally: unpacked under `local/legacy/` and in `local/branch-handoff-2026-09-08/project-state-before.zip`. The move manifest and original hashes are in that run folder. Historical scripts are archived for reference and must not be blindly rerun after relocation.
+The validated product baseline remains the two wheel-hub sensors `L` and `R`. Source firmware and both apps now additionally support optional chair-center role `C` (`0x43`) for future experiments. The center mounting contract is `+Z` down toward the floor; X/Y remain physical board axes until forward/lateral orientation is measured. Existing trajectory models deliberately ignore C.
 
-Public contract and synthetic fixtures: `docs/model_analysis/`. Detailed phase conclusions: `phases/`. Historical private journal paths and names are intentionally not published.
+Windows keeps the frozen classical recipe first/default and exposes experimental PyTorch/Slalom choices only for research review. Mobile keeps the existing M4 XY-only ONNX default. P3 model promotion remains blocked by independent synchronized moving optical reference and a locked final group.
 
-Scheduled maintenance history: [one canonical run log](history/scheduled-agent.md). Latest sanitized maintenance checks: [scheduled-agent-validation.json](reports/scheduled-agent-validation.json). The local verification schedule must not be confused with an enabled autonomous AI agent.
+## Documentation rules
+
+- Keep one current STATUS, one current HANDOFF and one maintained roadmap. Do not create `FINAL`, `FINAL_v2`, duplicate trackers or alternate current-state documents.
+- Phase files are conclusions. Historical measured values remain historical even when later work supersedes the old next-step wording.
+- `reports/branch-validation.json` is the latest sanitized working-tree verification snapshot. `reports/scheduled-agent-validation.json` is a historical scheduler-maintenance snapshot and is intentionally not rewritten to imitate current results.
+- Put raw command logs, screenshots, hashes, build outputs, participant-sensitive evidence, machine-specific receipts and ad-hoc patch scripts under `local/`.
+- Do not execute archived scripts in `local/legacy/` blindly.
+- Public model semantics/fixtures live under `docs/model_analysis/`; BLE semantics live in `docs/ble-protocol.md`.
+
+The pre-organization state remains preserved under `local/legacy/` and prior verified archives. Current 3-IMU evidence is under `local/three-imu-2026-09-08/`; current document-refresh evidence is under `local/project-docs-refresh-2026-09-08/`.

@@ -35,16 +35,22 @@ class CsvSampleParser {
   /// rows (too few fields) are skipped rather than throwing, so a single
   /// corrupt line doesn't take down the whole session.
   static List<BufferedSample> parse(String content) {
-    final left = <BufferedSample>[];
-    final right = <BufferedSample>[];
+    final bySide = {
+      for (final side in WheelSide.values) side: <BufferedSample>[],
+    };
     for (final line in content.split('\n')) {
       final sample = parseLine(line);
       if (sample == null) continue;
-      (sample.wheel == WheelSide.left ? left : right).add(sample);
+      bySide[sample.wheel]!.add(sample);
     }
-    left.sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
-    right.sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
-    return _mergeByTime(left, right);
+    for (final side in WheelSide.values) {
+      bySide[side]!.sort(
+        (a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs),
+      );
+    }
+    var merged = List<BufferedSample>.of(bySide[WheelSide.left]!);
+    merged = _mergeByTime(merged, bySide[WheelSide.right]!);
+    return _mergeByTime(merged, bySide[WheelSide.center]!);
   }
 
   /// Parses one CSV data line into a [BufferedSample], or null if the line
@@ -78,7 +84,12 @@ class CsvSampleParser {
           gy: double.parse(f[8]),
           gz: double.parse(f[9]),
         ),
-        wheel: f[1] == 'L' ? WheelSide.left : WheelSide.right,
+        wheel: switch (f[1]) {
+          'L' => WheelSide.left,
+          'R' => WheelSide.right,
+          'C' => WheelSide.center,
+          _ => throw const FormatException('Unknown sensor role'),
+        },
         timestampAppMs: int.parse(f[2]),
         timestampSyncedMs: utcMs,
         marker: f[10] == '1',

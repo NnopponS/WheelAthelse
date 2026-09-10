@@ -98,7 +98,7 @@ class BoardIngestor:
         envelope = NotificationEnvelope(
             kind=kind,
             payload=bytes(payload),
-            arrival_ns=time.monotonic_ns() if arrival_ns is None else int(arrival_ns),
+            arrival_ns=time.perf_counter_ns() if arrival_ns is None else int(arrival_ns),
             packet_id=self._next_packet_id,
         )
         self._next_packet_id += 1

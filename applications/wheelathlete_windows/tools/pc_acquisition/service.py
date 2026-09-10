@@ -192,6 +192,25 @@ class AcquisitionService:
             await self.engine.stop()
             self._started = False
 
+    async def prepare_shutdown(self) -> dict[str, bool]:
+        """Stop acquisition cleanly before the installed binaries are replaced."""
+        finalized = False
+        if self._journal is not None:
+            if self._record_started_ns is None:
+                raise RuntimeError(
+                    "Recording startup is still in progress. Wait for it to start or cancel it before uninstalling."
+                )
+            await self._cmd_end_record({})
+            finalized = True
+        live_stopped = bool(self._live_sides)
+        if live_stopped:
+            await self._cmd_stop_live({})
+        return {
+            "ready": True,
+            "recording_finalized": finalized,
+            "live_stopped": live_stopped,
+        }
+
     def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._event_sink is not None:
             self._event_sink(event_type, payload)
@@ -533,7 +552,7 @@ class AcquisitionService:
             # boundary after sync traffic has drained and before scheduling T0.
             await self.engine.reset_sequences(sides)
             lead_time_s = float(payload.get("lead_time_s", 5.0))
-            monotonic_now_ns = time.monotonic_ns()
+            monotonic_now_ns = time.perf_counter_ns()
             utc_now_ns = time.time_ns()
             pc_start_ns = monotonic_now_ns + int(lead_time_s * 1_000_000_000)
             utc_start_ms = (utc_now_ns + (pc_start_ns - monotonic_now_ns)) // 1_000_000
@@ -584,7 +603,7 @@ class AcquisitionService:
         sides = self._record_sides
         stop_results = await self.lifecycle.stop_all(sides)
         await self.engine.join()
-        end_ns = time.monotonic_ns()
+        end_ns = time.perf_counter_ns()
         duration_s = max(
             0.001,
             (end_ns - (self._record_started_ns or end_ns)) / 1_000_000_000,
@@ -986,7 +1005,7 @@ class AcquisitionService:
 
     def status(self) -> dict[str, Any]:
         boards: dict[str, Any] = {}
-        now_ns = time.monotonic_ns()
+        now_ns = time.perf_counter_ns()
         for side in WheelSide:
             device_id = self.engine.device_id(side)
             metrics = self.engine.metrics(side)

@@ -40,6 +40,17 @@ class UpdateManifestTests(unittest.TestCase):
             self.assertTrue(windows["url"].endswith(exe.name))
             self.assertTrue(manifest["platforms"]["ios"]["store_managed"])
 
+    def test_windows_only_manifest_omits_unavailable_mobile_platforms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            installer = Path(tmp) / "WheelAthleteSetup-1.8.2.exe"
+            installer.write_bytes(b"signed-installer")
+            manifest = build_manifest(
+                version="1.8.2",
+                windows_installer=installer,
+                notes="Windows-first release",
+            )
+            self.assertEqual(set(manifest["platforms"]), {"windows"})
+
 
 if __name__ == "__main__":
     unittest.main()

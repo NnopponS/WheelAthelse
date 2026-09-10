@@ -58,7 +58,8 @@ void main() {
   group('filterByWheel', () {
     final left = _sample(_r(0), wheel: WheelSide.left);
     final right = _sample(_r(1), wheel: WheelSide.right);
-    final mixed = [left, right, left, right];
+    final center = _sample(_r(2), wheel: WheelSide.center);
+    final mixed = [left, right, center, left, right, center];
 
     test('both returns input unchanged', () {
       expect(filterByWheel(mixed, PreviewWheelSelection.both), same(mixed));
@@ -74,6 +75,12 @@ void main() {
       final out = filterByWheel(mixed, PreviewWheelSelection.right);
       expect(out.length, 2);
       expect(out.every((s) => s.wheel == WheelSide.right), isTrue);
+    });
+
+    test('center filters to chair-center samples', () {
+      final out = filterByWheel(mixed, PreviewWheelSelection.center);
+      expect(out.length, 2);
+      expect(out.every((s) => s.wheel == WheelSide.center), isTrue);
     });
 
     test('empty input -> empty output', () {

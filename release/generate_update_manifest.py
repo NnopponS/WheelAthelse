@@ -31,9 +31,9 @@ def artifact_record(path: Path, *, url: str) -> dict[str, Any]:
 def build_manifest(
     *,
     version: str,
-    android_apk: Path,
     windows_installer: Path,
-    android_build: int,
+    android_apk: Path | None = None,
+    android_build: int | None = None,
     notes: str = "",
     ios_url: str = "",
     repo: str = REPO,
@@ -42,31 +42,36 @@ def build_manifest(
     tag = f"v{version}"
     base = f"https://github.com/{repo}/releases/download/{tag}"
     release_page = f"https://github.com/{repo}/releases/tag/{tag}"
+    platforms: dict[str, Any] = {
+        "windows": {
+            "version": version,
+            **artifact_record(
+                windows_installer,
+                url=f"{base}/{windows_installer.name}",
+            ),
+        }
+    }
+    if android_apk is not None:
+        if android_build is None:
+            raise ValueError("android_build is required when android_apk is provided")
+        platforms["android"] = {
+            "version": version,
+            "build": int(android_build),
+            **artifact_record(android_apk, url=f"{base}/{android_apk.name}"),
+        }
+    if ios_url.strip() or android_apk is not None:
+        platforms["ios"] = {
+            "version": version,
+            "url": ios_url.strip() or release_page,
+            "store_managed": True,
+        }
     manifest = {
         "schema": SCHEMA_VERSION,
         "version": version,
         "channel": channel,
         "release_url": release_page,
         "notes": notes.strip(),
-        "platforms": {
-            "android": {
-                "version": version,
-                "build": int(android_build),
-                **artifact_record(android_apk, url=f"{base}/{android_apk.name}"),
-            },
-            "windows": {
-                "version": version,
-                **artifact_record(
-                    windows_installer,
-                    url=f"{base}/{windows_installer.name}",
-                ),
-            },
-            "ios": {
-                "version": version,
-                "url": ios_url.strip() or release_page,
-                "store_managed": True,
-            },
-        },
+        "platforms": platforms,
     }
     return manifest
 
@@ -76,8 +81,8 @@ def parse_args() -> argparse.Namespace:
         description="Generate the WheelAthlete cross-platform update manifest."
     )
     parser.add_argument("--version", required=True)
-    parser.add_argument("--android", required=True, type=Path)
-    parser.add_argument("--android-build", required=True, type=int)
+    parser.add_argument("--android", type=Path)
+    parser.add_argument("--android-build", type=int)
     parser.add_argument("--windows", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--repo", default=REPO)

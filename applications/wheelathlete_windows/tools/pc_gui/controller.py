@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import math
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -178,20 +180,29 @@ class AcquisitionController(BaseController):
     ) -> None:
         super().__init__(parent)
         self.client = DaemonClient(port=port, parent=self)
+        self.daemon_logger = logging.getLogger("wheelathlete.daemon")
+        self.gui_logger = logging.getLogger("wheelathlete.gui")
         self.process_manager = DaemonProcessManager(repo_root=repo_root, port=port, parent=self)
+        self.daemon_log.connect(self.daemon_logger.info)
         self.process_manager.log_line.connect(self.daemon_log)
         self.client.ready_changed.connect(self._on_ready)
         self.client.connection_changed.connect(self._on_connection)
         self.client.event_received.connect(self._on_event)
         self.client.command_failed.connect(self.command_error)
+        self.client.command_failed.connect(
+            lambda cmd, err: self.gui_logger.warning("Daemon command '%s' failed: %s", cmd, err)
+        )
         self.client.protocol_error.connect(lambda text: self.command_error.emit("protocol", text))
+        self.client.protocol_error.connect(
+            lambda err: self.gui_logger.error("Daemon protocol error: %s", err)
+        )
         self._poll = QTimer(self)
         self._poll.setInterval(1000)
         self._poll.timeout.connect(self.refresh_status)
         self._started = False
         settings = load_gui_settings()
         saved_folder = settings.get("session_folder")
-        if saved_folder:
+        if saved_folder and Path(saved_folder).is_dir():
             self.state.journal_root = str(saved_folder)
 
     def start(self) -> None:
@@ -378,6 +389,7 @@ class AcquisitionController(BaseController):
 
     def refresh_status(self) -> None:
         if not self.client.ready:
+            self.process_manager.ensure_running()
             self.client.connect_to_daemon()
             return
         self._command("status", {}, self._apply_status, quiet=True)
@@ -708,6 +720,9 @@ class AcquisitionController(BaseController):
         self.state.recording = True
         self.state.recording_starting = False
         self.state.countdown = None
+        pc_start_ns = result.get("pc_start_ns")
+        if pc_start_ns is not None and self.state.recording_target_pc_ns is None:
+            self.state.recording_target_pc_ns = int(pc_start_ns)
         utc_start = result.get("utc_start_ms")
         if utc_start is not None:
             self.state.recording_started_utc_ms = int(utc_start)
@@ -721,6 +736,7 @@ class AcquisitionController(BaseController):
         self.state.recording_starting = False
         self.state.countdown = None
         self.state.recording_started_utc_ms = None
+        self.state.recording_target_pc_ns = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
         self.recording_finished.emit(result)
@@ -731,6 +747,7 @@ class AcquisitionController(BaseController):
         self.state.recording_starting = False
         self.state.countdown = None
         self.state.recording_started_utc_ms = None
+        self.state.recording_target_pc_ns = None
         self.state.live_busy = False
         self.state_changed.emit(self.state)
         self.refresh_status()
@@ -770,6 +787,10 @@ class AcquisitionController(BaseController):
             if state == "countdown":
                 self.state.recording_starting = True
                 self.state.countdown = max(1, int(payload.get("seconds", 5)))
+                pc_start_ns = payload.get("pc_start_ns")
+                self.state.recording_target_pc_ns = (
+                    int(pc_start_ns) if pc_start_ns is not None else None
+                )
                 utc_start = payload.get("utc_start_ms")
                 if utc_start is not None:
                     self.state.recording_started_utc_ms = int(utc_start)
@@ -785,6 +806,7 @@ class AcquisitionController(BaseController):
                 self.state.recording_starting = False
                 self.state.countdown = None
                 self.state.recording_started_utc_ms = None
+                self.state.recording_target_pc_ns = None
             self.state_changed.emit(self.state)
         elif event_type == "live_state":
             self.state.live = bool(payload.get("live"))
@@ -811,7 +833,7 @@ class DemoController(BaseController):
                 connected=True,
                 device_id=f"DEMO-{side}",
                 name=f"WheelAthlete-{side}",
-                firmware="1.8.1",
+                firmware="1.8.2",
                 battery_percent={"L": 92, "R": 88, "C": 90}[side],
                 rssi=rssi,
                 mtu=247,
@@ -830,8 +852,10 @@ class DemoController(BaseController):
         self._timer.setInterval(100)
         self._timer.timeout.connect(self._tick)
         self._seq = 0
-        self._started_ns = time.monotonic_ns()
-        demo_now_utc_ms = int(time.time() * 1000)
+        self._started_ns = time.perf_counter_ns()
+        demo_day = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+        demo_today_utc_ms = int(demo_day.timestamp() * 1000)
+        demo_yesterday_utc_ms = int((demo_day - timedelta(days=1)).timestamp() * 1000)
         self.sessions = [
             {
                 "session_id": "demo_sprint_01",
@@ -845,8 +869,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1520, "R": 1520},
                 "tags": ["100m", "accel"],
                 "notes": "Fast sprint demo",
-                "started_utc_ms": demo_now_utc_ms - 3_600_000,
-                "recorded_utc_ms": demo_now_utc_ms - 3_600_000,
+                "started_utc_ms": demo_today_utc_ms,
+                "recorded_utc_ms": demo_today_utc_ms,
             },
             {
                 "session_id": "demo_sprint_02",
@@ -860,8 +884,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1480, "R": 1480},
                 "tags": ["100m", "accel"],
                 "notes": "Second sprint demo",
-                "started_utc_ms": demo_now_utc_ms - 7_200_000,
-                "recorded_utc_ms": demo_now_utc_ms - 7_200_000,
+                "started_utc_ms": demo_today_utc_ms - 3_600_000,
+                "recorded_utc_ms": demo_today_utc_ms - 3_600_000,
             },
             {
                 "session_id": "demo_endurance_01",
@@ -875,8 +899,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 3000, "R": 3000},
                 "tags": ["aerobic"],
                 "notes": "Steady pace demo",
-                "started_utc_ms": demo_now_utc_ms - 86_400_000,
-                "recorded_utc_ms": demo_now_utc_ms - 86_400_000,
+                "started_utc_ms": demo_yesterday_utc_ms,
+                "recorded_utc_ms": demo_yesterday_utc_ms,
             },
         ]
 
@@ -964,7 +988,7 @@ class DemoController(BaseController):
             for i in range(20):
                 writer.writerow([
                     session_id, "L" if i % 2 == 0 else "R", i, i * 10000,
-                    time.monotonic_ns(), 100, 200, 16000, 10, 20, 30
+                    time.perf_counter_ns(), 100, 200, 16000, 10, 20, 30
                 ])
         self.message.emit(f"CSV exported: {output_path}")
 
@@ -1119,14 +1143,14 @@ class DemoController(BaseController):
     def start_record(self, metadata: dict[str, Any]) -> None:
         self.state.recording = True
         self.state.recording_started_utc_ms = int(time.time() * 1000)
-        self._started_ns = time.monotonic_ns()
+        self._started_ns = time.perf_counter_ns()
         self.state.session_id = f"DEMO-{uuid.uuid4().hex[:8]}"
         self.state_changed.emit(self.state)
         self.message.emit("DEMO recording started — no research data is being written")
 
     def stop_record(self) -> None:
         self.state.recording = False
-        duration = max(0.1, (time.monotonic_ns() - self._started_ns) / 1e9)
+        duration = max(0.1, (time.perf_counter_ns() - self._started_ns) / 1e9)
         new_session = {
             "session_id": self.state.session_id or f"DEMO-{uuid.uuid4().hex[:8]}",
             "athlete": "Athlete",
@@ -1158,7 +1182,7 @@ class DemoController(BaseController):
         self.refresh_sessions()
 
     def _tick(self) -> None:
-        t = (time.monotonic_ns() - self._started_ns) / 1e9
+        t = (time.perf_counter_ns() - self._started_ns) / 1e9
         for index, side in enumerate(("L", "R", "C")):
             phase = t + index * 0.45
             accel_scale = self.state.boards[side].accel_scale
@@ -1167,7 +1191,7 @@ class DemoController(BaseController):
                 side=side,
                 seq=self._seq,
                 device_us=int(t * 1_000_000) & 0xFFFFFFFF,
-                pc_ns=time.monotonic_ns(),
+                pc_ns=time.perf_counter_ns(),
                 ax=int((0.35 * math.sin(phase * 2.3)) / accel_scale),
                 ay=int((0.22 * math.sin(phase * 1.7 + 1.0)) / accel_scale),
                 az=int((1.0 + 0.08 * math.sin(phase * 2.0)) / accel_scale),

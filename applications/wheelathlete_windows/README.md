@@ -2,7 +2,7 @@
 
 The **WheelAthlete Windows Research Application** is the reliability-first Windows acquisition and research client. It uses a PySide6 operator interface and a separate Python acquisition daemon so BLE capture and authoritative raw-data recording remain isolated from UI rendering and optional analysis workloads.
 
-Current package version: `1.8.0`
+Current package version: `1.8.2`
 
 ## Architecture
 
@@ -49,6 +49,12 @@ packaging\windows\build_installer.bat
 ```
 
 Generated packages are written to `release/`.
+
+Public packages require a trusted Authenticode certificate and RFC3161 timestamp URL. The build signs and verifies the GUI, daemon, and installer and writes `signing-report.json` plus `SHA256SUMS.txt`. An unsigned local build is suitable for development only and does not resolve download reputation warnings or Application Control error 4551.
+
+Upgrade and uninstall run the installation-specific daemon shutdown helper first. It finishes an active journal before exit and blocks file removal if the daemon cannot stop. Recordings and custom models in the user's `Documents/WheelAthlete` tree are preserved.
+
+Portable model bundles use a `wheelathlete-model.json` manifest and are documented in [`../../docs/model_analysis/MODEL_BUNDLES.md`](../../docs/model_analysis/MODEL_BUNDLES.md).
 
 ## Automatic updates
 

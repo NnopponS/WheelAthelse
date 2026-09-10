@@ -63,3 +63,19 @@ def test_protocol_mismatch_is_rejected():
         assert "protocol mismatch" in str(exc)
     else:
         raise AssertionError("protocol mismatch was accepted")
+
+
+def test_large_response_is_handled_by_client():
+    client = DaemonClient(auto_reconnect=False)
+    results: list[dict] = []
+    client._pending["req-large"] = _Pending("list_sessions", results.append, None)
+    # Generate a dummy large session result exceeding 64 KB
+    large_payload = {
+        "ok": True,
+        "result": {
+            "sessions": [{"id": f"s-{i}", "padding": "x" * 500} for i in range(150)]
+        },
+    }
+    client._handle_message(_message("response", large_payload, "req-large"))
+    assert len(results) == 1
+    assert len(results[0]["sessions"]) == 150

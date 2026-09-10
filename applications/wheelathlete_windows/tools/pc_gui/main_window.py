@@ -1085,7 +1085,7 @@ class AcquisitionPage(QWidget):
         self.notes.setAccessibleName("notesInput")
 
         form.addRow("Athlete", self.athlete)
-        form.addRow("Topic", self.topic)
+        form.addRow("Experiment", self.topic)
         form.addRow("Trial", self.trial)
         form.addRow("Rate (Hz)", self.rate)
         form.addRow("Tags", self.tags)
@@ -1193,9 +1193,18 @@ class AcquisitionPage(QWidget):
 
         self._countdown_timer = QTimer(self)
         self._countdown_timer.setInterval(1000)
+        self._countdown_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._countdown_timer.timeout.connect(self._countdown_tick)
         self._countdown_remaining = 0
         self._countdown_started = False
+        # The daemon has an authoritative scheduled T0.  Keep the final start
+        # cue on its own precise timer so a recording_state event cannot cancel
+        # the sound by racing the 1 s UI countdown timer.
+        self._start_cue_timer = QTimer(self)
+        self._start_cue_timer.setSingleShot(True)
+        self._start_cue_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._start_cue_timer.timeout.connect(self._play_start_cue)
+        self._start_cue_played = False
         self._record_clock_timer = QTimer(self)
         self._record_clock_timer.setInterval(100)
         self._record_clock_timer.timeout.connect(self._update_record_clock)
@@ -1225,6 +1234,28 @@ class AcquisitionPage(QWidget):
     def _start(self) -> None:
         self.controller.start_record(self.metadata())
 
+    def _schedule_start_cue(
+        self, *, target_pc_ns: int | None, target_utc_ms: int | None, fallback_seconds: int
+    ) -> None:
+        """Arm the final start cue independently from the visual countdown."""
+        self._start_cue_timer.stop()
+        self._start_cue_played = False
+        if target_pc_ns is not None:
+            delay_ms = max(0, (int(target_pc_ns) - time.perf_counter_ns()) // 1_000_000)
+        elif target_utc_ms is not None:
+            delay_ms = max(0, int(target_utc_ms) - (time.time_ns() // 1_000_000))
+        else:
+            delay_ms = max(0, int(fallback_seconds) * 1000)
+        self._start_cue_timer.start(int(delay_ms))
+
+    def _play_start_cue(self) -> None:
+        if self._start_cue_played:
+            return
+        self._start_cue_played = True
+        self.countdown_label.setText("START!")
+        _play_tone(1200, 500)
+        QTimer.singleShot(600, self._update_record_clock)
+
     def _countdown_tick(self) -> None:
         self._countdown_remaining -= 1
         if self._countdown_remaining > 0:
@@ -1232,9 +1263,9 @@ class AcquisitionPage(QWidget):
             _play_tone(700, 120)
             return
         self._countdown_timer.stop()
-        self.countdown_label.setText("START!")
-        _play_tone(1200, 500)
-        QTimer.singleShot(600, self._update_record_clock)
+        # Fallback for legacy/no-T0 state.  _play_start_cue is idempotent, so
+        # this cannot duplicate the precise T0 timer cue.
+        self._play_start_cue()
 
     def _update_record_clock(self) -> None:
         state = self.controller.state
@@ -1286,7 +1317,17 @@ class AcquisitionPage(QWidget):
 
         if state.recording:
             self._countdown_timer.stop()
+            # Do not stop _start_cue_timer here.  The real recording event may
+            # arrive a few milliseconds before the GUI's final countdown tick.
+            # Keeping the independent T0 timer alive fixes the intermittent
+            # missing final beep.
+            was_counting_down = self._countdown_started
             self._countdown_started = False
+            if was_counting_down and not self._start_cue_played:
+                # The daemon's recording event is the authoritative actual-start
+                # edge. Fire immediately if the scheduled GUI timer has not
+                # already done so; the idempotent guard prevents duplicates.
+                self._play_start_cue()
             if not self._record_clock_timer.isActive():
                 self._record_clock_timer.start()
             self._update_record_clock()
@@ -1296,11 +1337,18 @@ class AcquisitionPage(QWidget):
             self._countdown_remaining = state.countdown
             self.countdown_label.setText(f"Starting in {state.countdown} s")
             _play_tone(700, 120)
+            self._schedule_start_cue(
+                target_pc_ns=state.recording_target_pc_ns,
+                target_utc_ms=state.recording_started_utc_ms,
+                fallback_seconds=state.countdown,
+            )
             self._countdown_timer.start()
         elif not state.recording_starting:
             self._countdown_timer.stop()
+            self._start_cue_timer.stop()
             self._record_clock_timer.stop()
             self._countdown_started = False
+            self._start_cue_played = False
             self.countdown_label.clear()
 
         for widget in (
@@ -1741,7 +1789,7 @@ class GroupNameEdit(QLineEdit):
 
 
 class TopicCard(Card):
-    """Collapsible card displaying a single topic's summary and expandable trials list."""
+    """Collapsible experiment card with an expandable trial list."""
 
     selection_changed = Signal()
     preview_requested = Signal(str)
@@ -1766,7 +1814,7 @@ class TopicCard(Card):
         header.setSpacing(12)
 
         self.check = QCheckBox()
-        self.check.setToolTip("Select all trials in this topic")
+        self.check.setToolTip("Select all trials in this experiment")
         header.addWidget(self.check)
 
         self.title_label = GroupNameEdit(self.topic, self)
@@ -2213,6 +2261,9 @@ class ResultsPage(QWidget):
         super().__init__()
         self.controller = controller
         self._sessions: list[dict[str, Any]] = []
+        self._selected_ids: set[str] = set()
+        self._collapsed_days: set[int] = set()
+        self._expanded_topics: set[tuple[int, str]] = set()
         self._visible: list[dict[str, Any]] = []
         self._topic_cards: list[TopicCard] = []
         self._date_headers: list[QFrame] = []
@@ -2269,15 +2320,15 @@ class ResultsPage(QWidget):
         self.search.setAccessibleName("sessionSearch")
 
         self.topic_filter = QComboBox()
-        self.topic_filter.addItem("All topics")
+        self.topic_filter.addItem("All experiments")
         self.topic_filter.setAccessibleName("topicFilter")
 
         self.trial_filter = QComboBox()
         self.trial_filter.addItem("All trials")
         self.trial_filter.setAccessibleName("trialFilter")
 
-        self.select_all_btn = _button("Select all", "selectAllButton")
-        self.deselect_all_btn = _button("Deselect all", "deselectAllButton")
+        self.select_all_btn = _button("Select all recordings", "selectAllButton")
+        self.deselect_all_btn = _button("Clear selection", "deselectAllButton")
 
         self.model_button = _button("Open in MODEL", "openModelButton")
         self.model_button.setAccessibleName("openSelectedInModel")
@@ -2299,6 +2350,10 @@ class ResultsPage(QWidget):
         filter_layout.addWidget(self.export_button)
         filter_layout.addWidget(self.delete_button)
         root.addWidget(filter_card)
+        self.selection_summary = QLabel("No recordings selected")
+        self.selection_summary.setWordWrap(True)
+        self.selection_summary.setAccessibleName("selectionSummary")
+        root.addWidget(self.selection_summary)
 
         # Telemetry Preview Drawer (Collapsible)
         self.preview_drawer = SessionPreviewDrawer(self.controller, self)
@@ -2319,7 +2374,7 @@ class ResultsPage(QWidget):
         self.topic_layout.setSpacing(10)
         self.topic_layout.addStretch(1)
         self.topic_scroll.setWidget(self.topic_container)
-        self.view_tabs.addTab(self.topic_scroll, "Date / Topic")
+        self.view_tabs.addTab(self.topic_scroll, "Day / Experiment")
 
         # Tab 2: Flat Table View
         flat_container = QWidget()
@@ -2330,7 +2385,7 @@ class ResultsPage(QWidget):
             [
                 "Select",
                 "Quality",
-                "Topic",
+                "Experiment",
                 "Trial",
                 "Athlete",
                 "Rate",
@@ -2431,7 +2486,8 @@ class ResultsPage(QWidget):
         self.folder_label.setText(state.journal_root or "Default folder")
 
     def update_sessions(self, sessions: list[dict[str, Any]]) -> None:
-        self._sessions = list(sessions)
+        self._sessions = list({str(item["session_id"]): item for item in sessions if item.get("session_id")}.values())
+        self._selected_ids.intersection_update(str(item["session_id"]) for item in self._sessions)
 
         # Update topic filter combo
         current_topic = self.topic_filter.currentText()
@@ -2440,7 +2496,7 @@ class ResultsPage(QWidget):
         )
         self.topic_filter.blockSignals(True)
         self.topic_filter.clear()
-        self.topic_filter.addItem("All topics")
+        self.topic_filter.addItem("All experiments")
         for t in topics:
             self.topic_filter.addItem(t)
         idx = self.topic_filter.findText(current_topic)
@@ -2477,7 +2533,7 @@ class ResultsPage(QWidget):
         for item in self._sessions:
             item_topic = str(item.get("topic", "")).strip()
             item_trial = str(item.get("trial_number", ""))
-            if selected_topic != "All topics" and item_topic != selected_topic:
+            if selected_topic != "All experiments" and item_topic != selected_topic:
                 continue
             if (
                 selected_trial != "All trials"
@@ -2503,7 +2559,7 @@ class ResultsPage(QWidget):
                 | Qt.ItemFlag.ItemIsEnabled
                 | Qt.ItemFlag.ItemIsSelectable
             )
-            check_item.setCheckState(Qt.CheckState.Unchecked)
+            check_item.setCheckState(Qt.CheckState.Checked if str(item.get("session_id")) in self._selected_ids else Qt.CheckState.Unchecked)
             self.table.setItem(row, 0, check_item)
 
             counts = (
@@ -2554,6 +2610,11 @@ class ResultsPage(QWidget):
 
         # 2. Populate date-first Topic Group Cards.
         for card in self._topic_cards:
+            key = (_session_date_bucket(card.sessions[0])[0], card.topic)
+            if card.property("expanded"):
+                self._expanded_topics.add(key)
+            else:
+                self._expanded_topics.discard(key)
             self.topic_layout.removeWidget(card)
             card.deleteLater()
         self._topic_cards.clear()
@@ -2580,27 +2641,35 @@ class ResultsPage(QWidget):
             date_title.setObjectName("dateTitle")
             total_duration = sum(float(item.get("duration_s", 0.0) or 0.0) for item in date_sessions)
             date_meta = QLabel(
-                f"{len(date_sessions)} recording(s)  |  {len(date_topics)} topic(s)  |  {total_duration:.1f} s"
+                f"{len(date_sessions)} recording(s)  |  {len(date_topics)} experiment(s)  |  {total_duration:.1f} s"
             )
             date_meta.setObjectName("dateMeta")
             date_layout.addWidget(date_title)
             date_layout.addStretch(1)
             date_layout.addWidget(date_meta)
+            toggle_day = _button("Show experiments" if date_key[0] in self._collapsed_days else "Hide experiments", "toggleDay")
+            toggle_day.clicked.connect(lambda _=False, day=date_key[0]: self._toggle_day(day))
+            select_day = _button("Select this day", "selectDay")
+            select_day.clicked.connect(lambda _=False, day=date_key[0]: self._select_day(day))
+            date_layout.addWidget(toggle_day)
+            date_layout.addWidget(select_day)
             self._date_headers.append(date_header)
             self.topic_layout.insertWidget(self.topic_layout.count() - 1, date_header)
 
             for topic_name, topic_sessions in date_topics.items():
                 card = TopicCard(topic_name, topic_sessions, self.topic_container)
-                card.selection_changed.connect(self._on_topic_card_selection_changed)
+                card.selection_changed.connect(lambda c=card: self._on_topic_card_selection_changed(c))
                 card.preview_requested.connect(self.preview_session)
                 card.metadata_changed.connect(self._save_inline_metadata)
                 card.topic_rename_requested.connect(self._rename_topic_group)
                 if self._active_session_id:
                     card.set_active_preview(self._active_session_id)
+                card.set_expanded((date_key[0], topic_name) in self._expanded_topics)
+                card.setVisible(date_key[0] not in self._collapsed_days)
                 self._topic_cards.append(card)
                 self.topic_layout.insertWidget(self.topic_layout.count() - 1, card)
 
-        self._update_action_counts()
+        self._sync_selection_widgets()
 
     def preview_session(self, session_id: str) -> None:
         if not session_id:
@@ -2666,7 +2735,12 @@ class ResultsPage(QWidget):
                         it.setBackground(bg_color)
             finally:
                 self._block_table_signals = False
-            self._update_action_counts()
+            sid = str(self._visible[row]["session_id"])
+            if is_checked:
+                self._selected_ids.add(sid)
+            else:
+                self._selected_ids.discard(sid)
+            self._sync_selection_widgets()
             return
 
         row = item.row()
@@ -2688,7 +2762,7 @@ class ResultsPage(QWidget):
                 edited_topic = item.text().strip()
                 if not edited_topic:
                     item.setText(topic)
-                    self.controller.message.emit("Topic cannot be empty")
+                    self.controller.message.emit("Experiment cannot be empty")
                     return
                 item.setText(edited_topic)
                 if edited_topic != topic:
@@ -2718,11 +2792,56 @@ class ResultsPage(QWidget):
         if changed:
             self._save_inline_metadata(session_id, topic, trial, athlete)
 
-    def _on_topic_card_selection_changed(self) -> None:
+    def _on_topic_card_selection_changed(self, card: TopicCard) -> None:
+        self._selected_ids.difference_update(str(item["session_id"]) for item in card.sessions)
+        self._selected_ids.update(str(item["session_id"]) for item in card.get_selected_sessions())
+        self._sync_selection_widgets()
+
+    def _sync_selection_widgets(self) -> None:
+        self._block_table_signals = True
+        for row, session in enumerate(self._visible):
+            checked = str(session["session_id"]) in self._selected_ids
+            self.table.item(row, 0).setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+            background = QColor("#f0fdfa") if checked else QColor("#ffffff")
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row, column)
+                if item is not None:
+                    item.setBackground(background)
+        self._block_table_signals = False
+        for card in self._topic_cards:
+            card._block_signals = True
+            for row, session in enumerate(card.sessions):
+                checked = str(session["session_id"]) in self._selected_ids
+                card.table.item(row, 0).setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+                card._highlight_row(row, checked)
+            card._sync_topic_check()
+            card._block_signals = False
         self._update_action_counts()
+
+    def _toggle_day(self, day: int) -> None:
+        if day in self._collapsed_days:
+            self._collapsed_days.remove(day)
+        else:
+            self._collapsed_days.add(day)
+        self._filter()
+
+    def _select_day(self, day: int) -> None:
+        self._selected_ids = {str(item["session_id"]) for item in self._sessions if _session_date_bucket(item)[0] == day}
+        self._sync_selection_widgets()
+
+    def _selection_text(self) -> str:
+        selected = self._get_selected_sessions()
+        dates = sorted({_session_date_bucket(item) for item in selected}, reverse=True)
+        scope = (
+            "; ".join(label for _, label in dates)
+            if len(dates) <= 3
+            else f"across {len(dates)} days"
+        )
+        return f"{len(selected)} recording(s) selected · {scope}" if selected else "No recordings selected"
 
     def _update_action_counts(self) -> None:
         count = len(self._get_selected_sessions())
+        self.selection_summary.setText(self._selection_text())
         self.model_button.setEnabled(count == 1)
         self.model_button.setToolTip(
             "Open the selected recording for offline model analysis"
@@ -2753,7 +2872,7 @@ class ResultsPage(QWidget):
         old_athlete = str(session.get("athlete") or "").strip()
         changes: list[str] = []
         if topic != old_topic:
-            changes.append(f'Topic: "{old_topic}" → "{topic}"')
+            changes.append(f'Experiment: "{old_topic}" → "{topic}"')
         if trial_number != old_trial:
             changes.append(f"Trial: {old_trial} → {trial_number}")
         if athlete != old_athlete:
@@ -2800,8 +2919,8 @@ class ResultsPage(QWidget):
         answer = QMessageBox.question(
             self,
             "Confirm group rename",
-            f'Rename group "{old_topic}" to "{new_topic}" for {len(matching)} recording(s)?\n\n'
-            "The session files will move to the new topic folder. Internal UUIDs and raw data stay unchanged.",
+            f'Rename experiment "{old_topic}" to "{new_topic}" for {len(matching)} recording(s)?\n\n'
+            "The session files will move to the renamed experiment folder. Internal UUIDs and raw data stay unchanged.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -2825,74 +2944,15 @@ class ResultsPage(QWidget):
         self.model_requested.emit(session_id)
 
     def _select_all(self) -> None:
-        # Select all topic cards
-        for card in self._topic_cards:
-            card.select_all(True)
-
-        # Select all rows in flat table
-        self._block_table_signals = True
-        for row in range(self.table.rowCount()):
-            item = self.table.item(row, 0)
-            if item is not None:
-                item.setCheckState(Qt.CheckState.Checked)
-            for col in range(self.table.columnCount()):
-                it = self.table.item(row, col)
-                if it is not None:
-                    it.setBackground(QColor("#f0fdfa"))
-        self._block_table_signals = False
-        self._update_action_counts()
+        self._selected_ids = {str(item["session_id"]) for item in self._sessions}
+        self._sync_selection_widgets()
 
     def _deselect_all(self) -> None:
-        for card in self._topic_cards:
-            card.select_all(False)
-
-        self._block_table_signals = True
-        for row in range(self.table.rowCount()):
-            item = self.table.item(row, 0)
-            if item is not None:
-                item.setCheckState(Qt.CheckState.Unchecked)
-            for col in range(self.table.columnCount()):
-                it = self.table.item(row, col)
-                if it is not None:
-                    it.setBackground(QColor("#ffffff"))
-        self._block_table_signals = False
-        self._update_action_counts()
+        self._selected_ids.clear()
+        self._sync_selection_widgets()
 
     def _get_selected_sessions(self) -> list[dict[str, Any]]:
-        # Collect from topic cards if in topic view
-        card_selected = []
-        for card in self._topic_cards:
-            card_selected.extend(card.get_selected_sessions())
-
-        table_checked = []
-        for row in range(self.table.rowCount()):
-            item = self.table.item(row, 0)
-            if item is not None:
-                is_checked = item.checkState() in (
-                    Qt.CheckState.Checked,
-                    Qt.CheckState.Checked.value,
-                    2,
-                ) or item.data(Qt.ItemDataRole.CheckStateRole) in (
-                    Qt.CheckState.Checked,
-                    Qt.CheckState.Checked.value,
-                    2,
-                )
-                if is_checked and row < len(self._visible):
-                    table_checked.append(self._visible[row])
-
-        # Merge unique sessions by session_id
-        merged = {}
-        for s in card_selected + table_checked:
-            sid = s.get("session_id") or id(s)
-            merged[sid] = s
-        if merged:
-            return list(merged.values())
-
-        # Fallback to selected rows in table
-        selected_rows = {index.row() for index in self.table.selectedIndexes()}
-        return [
-            self._visible[r] for r in sorted(selected_rows) if r < len(self._visible)
-        ]
+        return [item for item in self._sessions if str(item["session_id"]) in self._selected_ids]
 
     def _change_folder(self) -> None:
         current_dir = self.controller.state.journal_root or str(
@@ -2927,7 +2987,7 @@ class ResultsPage(QWidget):
 
         default_dir = str(Path.home() / "Documents" / "WheelAthlete" / "Exports")
         chosen_dir = QFileDialog.getExistingDirectory(
-            self, "Select Directory for CSV Export", default_dir
+            self, "Export · " + self._selection_text(), default_dir
         )
         if not chosen_dir:
             return
@@ -2936,7 +2996,7 @@ class ResultsPage(QWidget):
         _show_info_dialog(
             self,
             "Export Complete",
-            f"Successfully exported {len(exported)} session CSV(s) organized by topic folders to:\n\n{chosen_dir}",
+            f"Successfully exported {len(exported)} session CSV(s) organized by experiment folders to:\n\n{chosen_dir}",
         )
 
     def _delete_selected(self) -> None:
@@ -3037,11 +3097,9 @@ class ModelPage(QWidget):
         self.model_detail = QLabel("")
         self.model_detail.setObjectName("mutedText")
         self.model_detail.setWordWrap(True)
-        self.model_detail.hide()
         self.runtime_label = QLabel("")
         self.runtime_label.setObjectName("mutedText")
         self.runtime_label.setWordWrap(True)
-        self.runtime_label.hide()
 
         controls_layout.addWidget(model_label, 0, 0)
         controls_layout.addWidget(self.model_combo, 0, 1)
@@ -3051,6 +3109,8 @@ class ModelPage(QWidget):
         controls_layout.addWidget(self.session_combo, 1, 1)
         controls_layout.addWidget(self.browse_research_button, 1, 2)
         controls_layout.addWidget(self.generate_button, 1, 3)
+        controls_layout.addWidget(self.model_detail, 2, 0, 1, 4)
+        controls_layout.addWidget(self.runtime_label, 3, 0, 1, 4)
         controls_layout.setColumnStretch(1, 2)
         root.addWidget(controls)
 
@@ -3252,13 +3312,22 @@ class ModelPage(QWidget):
     def _update_model_detail(self) -> None:
         spec = self.model_combo.currentData()
         if isinstance(spec, ModelSpec):
-            self.model_detail.setText(f"{spec.description}  ·  {spec.checkpoint}")
+            outputs = ", ".join(name for name, _unit in spec.output_capabilities) or "legacy contract"
+            maturity = "Experimental" if spec.experimental else "Supported"
+            technical = (
+                f"{maturity} · {spec.kind} · version {spec.model_version} · "
+                f"inputs {'/'.join(spec.required_sensor_roles)} via {spec.preprocessing_id} · "
+                f"outputs {outputs}"
+            )
+            self.model_detail.setText(
+                f"{spec.description}  ·  {technical}  ·  {spec.checkpoint}"
+            )
             ready, detail = model_spec_runtime_status(spec)
             self.runtime_label.setText(
                 ("Ready · " if ready else "Unavailable · ") + detail
             )
             self.model_combo.setToolTip(
-                f"{spec.description}\n{spec.checkpoint}\n"
+                f"{spec.description}\n{technical}\n{spec.checkpoint}\n"
                 + (("Ready · " if ready else "Unavailable · ") + detail)
             )
             self.generate_button.setEnabled(

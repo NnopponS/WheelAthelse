@@ -1,63 +1,83 @@
-# WheelAthlete — Development History
+# WheelAthlete development milestones
 
-This is a compact index of important milestones. Detailed implementation history remains in Git.
+Updated: 2026-09-08. This is a compact chronology; Git and phase files contain implementation detail.
 
-## Stable mobile data-collection line
+## Stable data-collection line
 
-- `v0.1.0` (2026-07-06): first usable dual-wheel data-collection MVP
-- `v1.7.0` (2026-07-25): stable dual-wheel reliability release
-  - app `1.7.0+8`
-  - firmware `1.7.0`
-  - BLE contract `1.7.0`
+- `v0.1.0` (2026-07-06): first usable dual-wheel data-collection MVP.
+- `v1.7.0` (2026-07-25): stable dual-wheel reliability release.
+- `v1.8.0`: current stable release identity across maintained product components; experimental September work does not advance it by itself.
 
-Key mobile work before v1.7.0 included dual BLE connection, clock sync, recording, protocol templates, experiment tracking, session tags/search, session preview, quality badges, UTC alignment, and export hardening.
+## Windows acquisition evolution
 
-## Windows acquisition evolution on `codex/pc-version`
+Major historical milestones included:
+- headless dual-board ingestion,
+- clock sync + scheduled start/lifecycle acknowledgement,
+- append-only `.waj` + recovery/QC/derived CSV,
+- physical-acceptance harness preparation,
+- Python/PySide6 Research Edition,
+- Windows installer/update packaging.
 
-Important commits:
+Retired Flutter-Windows/Tkinter experiments remain in Git history rather than current architecture.
 
-- `b970b69` — parity / architecture baseline
-- `8d0d0a9` — XIAO BLE/timing hardening and diagnostics
-- `857a164` — headless Python/Bleak dual-board ingestion engine
-- `da6249a` — clock sync, scheduled start, lifecycle acknowledgements
-- `118e1bc` — append-only `.waj`, recovery, QC, derived CSV
-- `a8927ae` — historical Flutter Windows IPC experiment (retired)
-- `4b4aef9` — Android regression checkpoint
-- `083d7c8` — historical Flutter Windows UI experiment (retired)
-- `f23d1c1` — simulated long-run/fault hardening
-- `78b4fba` — physical two-XIAO acceptance harness preparation
-- `9a96601` — Python Research Edition desktop UI
-- `d81638a` — Python desktop UI polish / workflow hardening
-- `0c40859` — production Windows installer packaging
+## 2026-09-05 - Product consolidation
 
-## 2026-09-05 product consolidation
+The supported product surface was reduced to:
+- Flutter mobile Android/iOS,
+- Python/PySide6 Windows,
+- M5StickC Plus2 firmware,
+- XIAO nRF52840 Sense firmware.
 
-The repository was simplified to match the actual supported product direction:
+Duplicated project trackers and retired UI paths were removed/archived.
 
-- keep Flutter mobile (iOS/Android)
-- keep Python Windows app (PySide6 + acquisition daemon)
-- remove legacy Tkinter desktop GUI
-- remove Flutter Windows implementation
-- remove Flutter Web scaffold
-- consolidate Windows packaging under `applications/wheelathlete_windows/packaging/windows/`
-- replace duplicated `.project` phase documents/prompts with current canonical state
-- advance coordinated product metadata to v1.8.0; mobile build `1.8.0+9`
+## 2026-09-06 - Formal source hierarchy
 
-The retired source remains available in Git history if future comparison is needed.
-## 2026-09-06 formal repository hierarchy
+The repository was organized into `applications/`, `hardware_firmware/`, `docs/`, `.project/` and portable verification tooling. Windows launch/package documentation was aligned with the maintained architecture.
 
-The source tree was reorganized around explicit product domains without changing the supported product set:
+## 2026-09-07/08 - P0/P1 evaluation repair
 
-- `applications/wheelathlete_mobile/` — WheelAthlete Mobile Application;
-- `applications/wheelathlete_windows/` — WheelAthlete Windows Research Application;
-- `hardware_firmware/m5stickc_plus2/` — M5StickC Plus2 firmware;
-- `hardware_firmware/xiao_nrf52840_sense/` — XIAO nRF52840 Sense firmware.
+Lag/crop/source-time/reference bookkeeping was audited and made reproducible. Corrected evaluation preserved explicit coverage/exclusions. Result: evaluation trust improved, but independent final/reference evidence remained missing.
 
-The Windows launcher was renamed to `run_wheelathlete_windows.bat`, documentation and packaging paths were migrated, and root English/Thai READMEs were rewritten to reflect the formal architecture. No change was made to the rule that the active PC work remains on `codex/pc-version` and not on `main`.
-## 2026-09-07/08 - Experimental offline coaching analysis
+## 2026-09-08 - P2 L/R physics diagnostics
 
-P0/P1 repaired and documented lag/crop/evaluation behavior without promoting an estimator. P2 added analytical diagnostics with unchanged production defaults. P4/P5 implemented shared kinematics/time/QC and Windows review/export. P6 added matching review semantics for the unchanged mobile M4. P3 and physical P7 acceptance remain open.
+Zero-delay and one-wheel center-speed physics were tested without changing defaults. Supported-subinterval improvements and severe full-cache Slalom counterexamples were both retained. Result: no production selection.
 
-## 2026-09-08 - Feature branch and project-state consolidation
+## 2026-09-08 - P4/P5/P6 offline coaching contract
 
-The user authorized a descriptive new GitHub feature branch and direct project-folder cleanup. Current state moved to STATUS/HANDOFF; originals, private evidence, duplicated finals and temporary scripts were retained in a local-only archive. New portable verification and hygiene checks prevent recurring tracker clutter. This does not rename the GitHub repository or advance a stable release.
+Windows/mobile gained a common time/quality/result language, native full-session cursor/window review and create-only export. Mobile correctly continued to expose only what the M4 XY model can provide.
+
+## 2026-09-08 - Experimental PyTorch Residual v1
+
+A residual BiGRU was trained over the L/R physics baseline and integrated into Windows as an explicit research choice. Runtime/research numerical parity was checked. The model improved historical local validation but remained blocked from promotion by reference/final-data requirements and Slalom drift.
+
+## 2026-09-08 - Research dataset catalog and Qualisys audit
+
+`BiWheel3D/data/datasets/` became the non-destructive research catalog. The Sep-5 Qualisys audit established that all 19 dynamic archived C3Ds have no point trajectories (`POINT.USED=0`). Generated pseudo markers were explicitly labeled do-not-train/do-not-score.
+
+## 2026-09-08 - Slalom full-course diagnosis and Course v1
+
+GT-vs-model full-trajectory/turn review showed heading/yaw-waveform error accumulating after U-turns. Course v1 used the declared fixed-course return-to-start protocol while keeping PyTorch weights frozen. `SL_04` full-cache ATE/heading changed from about `0.790 m / 21.67 deg` raw to `0.219 m / 4.53 deg` constrained. The imposed endpoint closure was explicitly not treated as independent odometry evidence.
+
+## 2026-09-08 - Slalom v2 rejected
+
+A per-turn numerical optimizer produced attractive exploratory values but did not reproduce through the app because float32 finite-difference sensitivity collapsed into numerical noise. The candidate was retained as rejected evidence rather than promoted.
+
+## 2026-09-08 - Slalom Calibrated Course v3
+
+A deterministic replacement kept residual-v1 weights frozen and added small train-derived linear yaw/speed calibration, sign-aware turn detection and guarded course closure. Formal `SL_04` validation reached **ATE `0.179216 m` / heading RMSE `3.57882 deg`**; historical test remained unopened and non-SL validation remained exact no-op. P3 still remained blocked for general promotion.
+
+## 2026-09-08 - Optional chair-center IMU source support
+
+The user authorized adding optional center role `C` (`0x43`) for future experiments with +Z pointing down toward the floor.
+
+Source support was implemented across:
+- XIAO center firmware with yellow RGB blink/heartbeat,
+- M5 center firmware with yellow identity + blinking `C` glyph,
+- Windows L/R/C acquisition, journal v2, preview/export,
+- Flutter L/R/C acquisition, schema/export/preview.
+
+Current trajectory models still consume L/R only and regression tests enforce exact legacy tensor invariance to C. Both center firmware targets compile successfully, but no center board was flashed in this source pass.
+
+## Current frontier
+
+The next substantive evidence is physical center bench acceptance and new synchronized L/R/C + valid moving C3D capture. Only then should the project evaluate whether a center-aware model improves over the frozen two-hub baseline.

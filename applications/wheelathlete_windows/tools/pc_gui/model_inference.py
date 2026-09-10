@@ -19,6 +19,29 @@ CURRENT_BEST_WHEEL_RADIUS_M = 0.30
 CURRENT_BEST_TRACK_WIDTH_M = 0.52
 CURRENT_BEST_KEY = "biwheel3d:xy_yaw_current_best"
 CURRENT_BEST_RECIPE_NAME = "BiWheel3D-XY-Yaw-current_best.json"
+MODEL_BUNDLE_MANIFEST = "wheelathlete-model.json"
+SUPPORTED_BUNDLE_INPUTS = {
+    "recipe": ("biwheel3d_dual_hub_v1", 60, ("numpy",)),
+    "onnx": ("biwheel3d_features_v1", BIWHEEL3D_FEATURE_DIM, ("numpy", "onnxruntime")),
+    "pytorch_residual": ("biwheel3d_residual_features_v1", 88, ("numpy", "torch")),
+    "pytorch_residual_slalom_course": (
+        "biwheel3d_residual_features_v1",
+        88,
+        ("numpy", "torch"),
+    ),
+    "unified_hybrid": ("biwheel3d_dual_hub_v1", 60, ("numpy", "scipy", "biwheel3d")),
+}
+SUPPORTED_OUTPUT_UNITS = {
+    "x_m": "m",
+    "y_m": "m",
+    "signed_speed_mps": "m/s",
+    "speed_mps": "m/s",
+    "longitudinal_accel_mps2": "m/s2",
+    "yaw_rad": "rad",
+    "yaw_rate_radps": "rad/s",
+    "lateral_accel_mps2": "m/s2",
+    "speed_change_mps2": "m/s2",
+}
 
 
 class ModelInferenceError(RuntimeError):
@@ -34,6 +57,146 @@ class ModelSpec:
     kind: str = "recipe"
     bundled: bool = False
     course_config: Path | None = None
+    model_version: str = "legacy"
+    preprocessing_id: str = "legacy"
+    required_sensor_roles: tuple[str, ...] = ("L", "R")
+    output_capabilities: tuple[tuple[str, str], ...] = ()
+    runtime_requirements: tuple[str, ...] = ()
+    experimental: bool = False
+    bundle_manifest: Path | None = None
+
+
+def _short_label(value: str, fallback: str) -> str:
+    label = " ".join(value.split()).strip() or fallback
+    return label if len(label) <= 32 else label[:29].rstrip() + "..."
+
+
+def _bundle_path(root: Path, value: Any, field: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ModelInferenceError(f"Model bundle {field} must be a relative file path.")
+    relative = Path(value)
+    if relative.is_absolute():
+        raise ModelInferenceError(f"Model bundle {field} must stay inside the bundle.")
+    resolved = (root / relative).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ModelInferenceError(f"Model bundle {field} escapes the bundle directory.") from exc
+    if not resolved.is_file():
+        raise ModelInferenceError(f"Model bundle {field} was not found: {value}")
+    return resolved
+
+
+def model_bundle_spec(manifest_path: Path) -> ModelSpec:
+    """Validate one portable model bundle before exposing it to the runtime."""
+    manifest = manifest_path.expanduser().resolve()
+    if not manifest.is_file() or manifest.name.lower() != MODEL_BUNDLE_MANIFEST:
+        raise ModelInferenceError(f"Choose a {MODEL_BUNDLE_MANIFEST} bundle manifest.")
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ModelInferenceError(f"Model bundle manifest is not valid JSON: {manifest}") from exc
+    if not isinstance(payload, dict):
+        raise ModelInferenceError("Model bundle manifest must contain a JSON object.")
+    version = payload.get("schema_version")
+    if isinstance(version, bool) or version != 1:
+        raise ModelInferenceError(f"Unsupported model bundle schema_version: {version!r}; expected 1.")
+
+    model_id = payload.get("model_id")
+    display_name = payload.get("display_name")
+    model_version = payload.get("model_version")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ModelInferenceError("Model bundle model_id must be a non-empty string.")
+    if not isinstance(display_name, str) or not display_name.strip():
+        raise ModelInferenceError("Model bundle display_name must be a non-empty string.")
+    if not isinstance(model_version, str) or not model_version.strip():
+        raise ModelInferenceError("Model bundle model_version must be a non-empty string.")
+
+    runtime = payload.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ModelInferenceError("Model bundle runtime must be an object.")
+    kind = runtime.get("kind")
+    if kind not in SUPPORTED_BUNDLE_INPUTS:
+        supported = ", ".join(SUPPORTED_BUNDLE_INPUTS)
+        raise ModelInferenceError(f"Unsupported model bundle runtime kind {kind!r}; supported: {supported}.")
+    preprocessing_id, expected_dim, expected_requirements = SUPPORTED_BUNDLE_INPUTS[kind]
+    requirements = runtime.get("requires")
+    if requirements != list(expected_requirements):
+        raise ModelInferenceError(
+            f"Model bundle runtime.requires for {kind} must be {list(expected_requirements)!r}."
+        )
+
+    preprocessing = payload.get("preprocessing")
+    if not isinstance(preprocessing, dict):
+        raise ModelInferenceError("Model bundle preprocessing must be an object.")
+    if preprocessing.get("id") != preprocessing_id:
+        raise ModelInferenceError(
+            f"Model bundle preprocessing.id for {kind} must be {preprocessing_id!r}."
+        )
+    if preprocessing.get("sample_rate_hz") != TARGET_SAMPLE_HZ:
+        raise ModelInferenceError(f"Model bundle sample_rate_hz must be {TARGET_SAMPLE_HZ}.")
+    feature_dim = preprocessing.get("feature_dim")
+    if isinstance(feature_dim, bool) or feature_dim != expected_dim:
+        raise ModelInferenceError(f"Model bundle feature_dim for {kind} must be {expected_dim}.")
+
+    roles = payload.get("required_sensor_roles")
+    if roles != ["L", "R"]:
+        raise ModelInferenceError("This app supports model bundles requiring sensor roles ['L', 'R'].")
+    raw_outputs = payload.get("outputs")
+    if not isinstance(raw_outputs, list) or not raw_outputs:
+        raise ModelInferenceError("Model bundle outputs must be a non-empty array.")
+    outputs: list[tuple[str, str]] = []
+    for output in raw_outputs:
+        if not isinstance(output, dict):
+            raise ModelInferenceError("Each model bundle output must be an object.")
+        name, unit = output.get("name"), output.get("unit")
+        if SUPPORTED_OUTPUT_UNITS.get(name) != unit:
+            raise ModelInferenceError(f"Unsupported model bundle output or unit: {name!r} / {unit!r}.")
+        if (name, unit) in outputs:
+            raise ModelInferenceError(f"Duplicate model bundle output: {name}.")
+        outputs.append((name, unit))
+    if not {"x_m", "y_m"}.issubset(name for name, _unit in outputs):
+        raise ModelInferenceError("Model bundle outputs must include x_m and y_m.")
+
+    root = manifest.parent.resolve()
+    checkpoint = _bundle_path(root, payload.get("artifact"), "artifact")
+    expected_suffixes = {
+        "recipe": {".json"},
+        "onnx": {".onnx"},
+        "pytorch_residual": {".pt", ".pth"},
+        "pytorch_residual_slalom_course": {".pt", ".pth"},
+        "unified_hybrid": {".json"},
+    }[kind]
+    if checkpoint.suffix.lower() not in expected_suffixes:
+        raise ModelInferenceError(f"Model bundle artifact extension is incompatible with {kind}.")
+    if kind == "recipe":
+        _recipe_spec(checkpoint, strict=True)
+    course_config = None
+    if kind == "pytorch_residual_slalom_course":
+        course_config = _bundle_path(root, payload.get("course_config"), "course_config")
+
+    experimental = payload.get("experimental")
+    if not isinstance(experimental, bool):
+        raise ModelInferenceError("Model bundle experimental must be true or false.")
+    description = payload.get("description")
+    if description is not None and not isinstance(description, str):
+        raise ModelInferenceError("Model bundle description must be a string when provided.")
+    return ModelSpec(
+        key=model_id.strip(),
+        label=_short_label(display_name, model_id),
+        checkpoint=checkpoint,
+        description=(description or f"Portable {kind} model bundle.").strip(),
+        kind=kind,
+        bundled=True,
+        course_config=course_config,
+        model_version=model_version.strip(),
+        preprocessing_id=preprocessing_id,
+        required_sensor_roles=("L", "R"),
+        output_capabilities=tuple(outputs),
+        runtime_requirements=expected_requirements,
+        experimental=experimental,
+        bundle_manifest=manifest,
+    )
 
 
 def model_library_root() -> Path:
@@ -75,7 +238,13 @@ def _recipe_spec(
             )
         return None
     key = str(payload.get("model_id") or f"recipe:{resolved}")
-    label = str(payload.get("label") or resolved.stem)
+    raw_label = str(payload.get("label") or resolved.stem)
+    label = (
+        "Classical v1"
+        if key == CURRENT_BEST_KEY
+        or raw_label in {"BiWheel3D XY + Yaw - current_best", "BiWheel3D-XY-Yaw-current_best", "BiWheel3D Classical Kinematic Baseline [Classical v1]"}
+        else raw_label
+    )
     description = str(
         payload.get("description")
         or payload.get("recipe")
@@ -88,6 +257,16 @@ def _recipe_spec(
         description=description,
         kind="recipe",
         bundled=bundled,
+        model_version="1",
+        preprocessing_id="biwheel3d_dual_hub_v1",
+        output_capabilities=(
+            ("x_m", "m"),
+            ("y_m", "m"),
+            ("signed_speed_mps", "m/s"),
+            ("yaw_rad", "rad"),
+            ("yaw_rate_radps", "rad/s"),
+        ),
+        runtime_requirements=("numpy",),
     )
 
 
@@ -100,9 +279,9 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
     if suffix == ".onnx":
         stem = resolved.stem.lower()
         label = (
-            "BiWheel3D M4 - ONNX"
+            "Mobile M4"
             if "biwheel3d" in stem and "m4" in stem
-            else f"ONNX - {resolved.stem}"
+            else _short_label(resolved.stem, "ONNX model")
         )
         return ModelSpec(
             key=f"onnx:{resolved}",
@@ -113,17 +292,50 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
                 "Runs locally with ONNX Runtime on CPU."
             ),
             kind="onnx",
+            model_version="M4" if "biwheel3d" in stem and "m4" in stem else "legacy",
+            preprocessing_id="biwheel3d_features_v1",
+            output_capabilities=(("x_m", "m"), ("y_m", "m")),
+            runtime_requirements=("numpy", "onnxruntime"),
         )
     if suffix == ".json":
+        if resolved.name.lower() == MODEL_BUNDLE_MANIFEST:
+            return model_bundle_spec(resolved)
+        try:
+            payload = json.loads(resolved.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and payload.get("model_type") == "unified_hybrid":
+                return ModelSpec(
+                    key=str(payload.get("model_id") or f"unified_hybrid:{resolved}"),
+                    label="Hybrid v1",
+                    checkpoint=resolved,
+                    description=str(
+                        payload.get("description")
+                        or "Unified 5-method hybrid wheelchair estimator combining 3D camber kinematics, multi-scale shock features, biomechanical phase InEKF (ZUPT/ZARU), RTS smoothing, and skid-steer ICR adjustment."
+                    ),
+                    kind="unified_hybrid",
+                    bundled=False,
+                    model_version="1",
+                    preprocessing_id="biwheel3d_dual_hub_v1",
+                    output_capabilities=(
+                        ("x_m", "m"),
+                        ("y_m", "m"),
+                        ("signed_speed_mps", "m/s"),
+                        ("yaw_rad", "rad"),
+                        ("yaw_rate_radps", "rad/s"),
+                    ),
+                    runtime_requirements=("numpy", "scipy", "biwheel3d"),
+                    experimental=True,
+                )
+        except Exception:
+            pass
         spec = _recipe_spec(resolved, bundled=False, strict=True)
         assert spec is not None
         return spec
     if suffix in {".pt", ".pth"}:
         stem = resolved.stem.lower()
         label = (
-            "Experimental PyTorch Residual v1"
+            "Residual v1"
             if "residual" in stem or stem == "best"
-            else f"Experimental PyTorch - {resolved.stem}"
+            else _short_label(resolved.stem, "PyTorch model")
         )
         return ModelSpec(
             key=f"pytorch_residual:{resolved}",
@@ -135,6 +347,17 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
                 "it does not replace the frozen production recipe."
             ),
             kind="pytorch_residual",
+            model_version="1",
+            preprocessing_id="biwheel3d_residual_features_v1",
+            output_capabilities=(
+                ("x_m", "m"),
+                ("y_m", "m"),
+                ("signed_speed_mps", "m/s"),
+                ("yaw_rad", "rad"),
+                ("yaw_rate_radps", "rad/s"),
+            ),
+            runtime_requirements=("numpy", "torch"),
+            experimental=True,
         )
     raise ModelInferenceError(
         "Choose a BiWheel3D .onnx, .pt/.pth research checkpoint, or supported .json recipe."
@@ -186,12 +409,37 @@ def _research_registry_specs(repo_root: Path) -> list[ModelSpec]:
             manifest_path = (research_root / manifest_rel).resolve()
             manifest_path.relative_to(research_root)
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            artifact_rel = manifest["artifacts"]["pytorch"]["path"]
-            artifact = (research_root / artifact_rel).resolve()
-            artifact.relative_to(research_root)
-            base_spec = custom_model_spec(artifact)
             registry_kind = str(entry.get("kind") or "")
-            if registry_kind == "pytorch_residual_slalom_course":
+            if registry_kind == "unified_hybrid":
+                config_rel = (manifest.get("artifacts") or {}).get("config", {}).get("path")
+                config_path = (research_root / config_rel).resolve() if config_rel else manifest_path
+                spec = ModelSpec(
+                    key=str(entry.get("model_id") or "biwheel3d:unified_hybrid_v1"),
+                    label="Hybrid v1",
+                    checkpoint=config_path,
+                    description=str(
+                        entry.get("description")
+                        or manifest.get("description")
+                        or "Unified 5-method hybrid wheelchair estimator combining 3D camber kinematics, multi-scale shock features, biomechanical phase InEKF (ZUPT/ZARU), RTS smoothing, and skid-steer ICR adjustment."
+                    )
+                    + " Discovered from the local BiWheel3D research registry.",
+                    kind="unified_hybrid",
+                    bundled=False,
+                    model_version="1",
+                    preprocessing_id="biwheel3d_dual_hub_v1",
+                    output_capabilities=(
+                        ("x_m", "m"),
+                        ("y_m", "m"),
+                        ("signed_speed_mps", "m/s"),
+                        ("yaw_rad", "rad"),
+                        ("yaw_rate_radps", "rad/s"),
+                    ),
+                    experimental=True,
+                )
+            elif registry_kind == "pytorch_residual_slalom_course":
+                artifact_rel = manifest["artifacts"]["pytorch"]["path"]
+                artifact = (research_root / artifact_rel).resolve()
+                artifact.relative_to(research_root)
                 course_rel = manifest["artifacts"]["course_config"]["path"]
                 course_config = (research_root / course_rel).resolve()
                 course_config.relative_to(research_root)
@@ -201,10 +449,7 @@ def _research_registry_specs(repo_root: Path) -> list[ModelSpec]:
                     key=str(
                         entry.get("model_id") or f"pytorch_slalom_course:{artifact}"
                     ),
-                    label=str(
-                        entry.get("label")
-                        or "Experimental PyTorch + Slalom Course Constraint"
-                    ),
+                    label="Slalom v1",
                     checkpoint=artifact,
                     description=(
                         "Research-only PyTorch residual v1 with an explicit fixed-course Slalom "
@@ -214,16 +459,36 @@ def _research_registry_specs(repo_root: Path) -> list[ModelSpec]:
                     kind="pytorch_residual_slalom_course",
                     bundled=False,
                     course_config=course_config,
+                    model_version="1",
+                    preprocessing_id="biwheel3d_residual_features_v1",
+                    output_capabilities=(
+                        ("x_m", "m"),
+                        ("y_m", "m"),
+                        ("signed_speed_mps", "m/s"),
+                        ("yaw_rad", "rad"),
+                        ("yaw_rate_radps", "rad/s"),
+                    ),
+                    experimental=True,
                 )
             else:
+                artifact_rel = manifest["artifacts"]["pytorch"]["path"]
+                artifact = (research_root / artifact_rel).resolve()
+                artifact.relative_to(research_root)
+                base_spec = custom_model_spec(artifact)
                 spec = ModelSpec(
                     key=base_spec.key,
-                    label=str(entry.get("label") or base_spec.label),
+                    label="Residual v1",
                     checkpoint=base_spec.checkpoint,
                     description=base_spec.description
                     + " Discovered from the local BiWheel3D research registry.",
                     kind=base_spec.kind,
                     bundled=False,
+                    model_version=base_spec.model_version,
+                    preprocessing_id=base_spec.preprocessing_id,
+                    required_sensor_roles=base_spec.required_sensor_roles,
+                    output_capabilities=base_spec.output_capabilities,
+                    runtime_requirements=base_spec.runtime_requirements,
+                    experimental=True,
                 )
         except (
             KeyError,
@@ -276,6 +541,20 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
     discovered: list[ModelSpec] = []
     seen_keys: set[str] = set()
     seen_paths: set[Path] = set()
+
+    for root in _candidate_model_dirs():
+        if not root.is_dir():
+            continue
+        for manifest in sorted(root.glob(f"*/{MODEL_BUNDLE_MANIFEST}")):
+            try:
+                spec = model_bundle_spec(manifest)
+            except ModelInferenceError:
+                continue
+            if spec.key in seen_keys or spec.checkpoint in seen_paths:
+                continue
+            discovered.append(spec)
+            seen_keys.add(spec.key)
+            seen_paths.add(spec.checkpoint)
 
     # Prefer a user-visible copy of the current recipe when setup has seeded it.
     for root in _candidate_model_dirs():
@@ -352,6 +631,9 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
         return False, "NumPy is required for trajectory analysis."
     if not spec.checkpoint.is_file():
         return False, f"Model file not found: {spec.checkpoint}"
+    for requirement in spec.runtime_requirements:
+        if importlib.util.find_spec(requirement) is None:
+            return False, f"This model requires the Python package {requirement}."
     if spec.kind == "onnx":
         if importlib.util.find_spec("onnxruntime") is None:
             return False, "ONNX Runtime is required for this model."
@@ -383,6 +665,10 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
             True,
             "Experimental PyTorch residual runtime ready (CPU/GPU selected by local PyTorch).",
         )
+    if spec.kind == "unified_hybrid":
+        if importlib.util.find_spec("scipy") is None:
+            return False, "SciPy is required for Unified Hybrid trajectory optimization."
+        return True, "Unified Hybrid InEKF + RTS runtime ready."
     return False, f"Unsupported model kind: {spec.kind}"
 
 
@@ -1043,6 +1329,106 @@ def _run_onnx_model(spec: ModelSpec, windows: Any, np: Any) -> dict[str, Any]:
         "feature_dim": BIWHEEL3D_FEATURE_DIM,
     }
 
+
+def _run_unified_hybrid_model(
+    spec: ModelSpec,
+    windows: Any,
+    session_data: dict[str, Any],
+    np: Any,
+) -> dict[str, Any]:
+    """Run the 5-method Unified Hybrid Estimator (PINN-InEKF + ICR + RTS)."""
+    try:
+        from .biwheel3d_runtime.infer_eval import align_first_travel_xy
+    except ImportError as exc:
+        raise ModelInferenceError("BiWheel3D runtime is missing.") from exc
+
+    candidate_roots = [
+        spec.checkpoint.parents[3] if len(spec.checkpoint.parents) > 3 else None,
+        Path(__file__).resolve().parents[5] / "BiWheel3D",
+        Path(__file__).resolve().parents[4] / "BiWheel3D",
+    ]
+    imported = False
+    for cand in candidate_roots:
+        if cand and (cand / "biwheel3d").is_dir():
+            if str(cand) not in sys.path:
+                sys.path.insert(0, str(cand))
+            try:
+                from biwheel3d.hybrid_estimator import (
+                    HybridEstimatorConfig,
+                    run_hybrid_estimator,
+                )
+                imported = True
+                break
+            except ImportError:
+                continue
+    if not imported:
+        try:
+            from biwheel3d.hybrid_estimator import (
+                HybridEstimatorConfig,
+                run_hybrid_estimator,
+            )
+            imported = True
+        except ImportError as exc:
+            raise ModelInferenceError(
+                f"BiWheel3D Unified Hybrid Estimator runtime could not be imported: {exc}"
+            ) from exc
+
+    config = HybridEstimatorConfig()
+    if spec.checkpoint.is_file():
+        try:
+            cfg_dict = json.loads(spec.checkpoint.read_text(encoding="utf-8"))
+            if isinstance(cfg_dict, dict):
+                for k, v in cfg_dict.items():
+                    if hasattr(config, k):
+                        setattr(config, k, v)
+        except Exception:
+            pass
+
+    raw_windows = np.asarray(windows, dtype=np.float32)
+    if raw_windows.ndim != 3 or raw_windows.shape[1:] != (5, 12):
+        raise ModelInferenceError(
+            f"Unified Hybrid expected (T,5,12) windows, got {raw_windows.shape}."
+        )
+
+    try:
+        hyb = run_hybrid_estimator(raw_windows, config=config, dt=config.dt)
+    except Exception as exc:
+        raise ModelInferenceError(
+            f"Unified Hybrid trajectory estimation failed: {exc}"
+        ) from exc
+
+    xyz = np.asarray(hyb["xyz"], dtype=np.float64)
+    yaw = np.asarray(hyb["psi"], dtype=np.float64)
+    v = np.asarray(hyb["v"], dtype=np.float64)
+    omega = np.asarray(hyb["omega"], dtype=np.float64)
+
+    aligned_xyz, _ = align_first_travel_xy(xyz, None)
+    net_yaw_deg = float(np.degrees(yaw[-1] - yaw[0])) if len(yaw) else 0.0
+
+    return {
+        "xy": np.asarray(aligned_xyz[:, :2], dtype=np.float64),
+        "signed_speed_mps": v.tolist(),
+        "yaw_rad": yaw.tolist(),
+        "yaw_rate_radps": omega.tolist(),
+        "xy_frame": "first_travel_display",
+        "yaw_frame": "initial_chair_heading",
+        "net_yaw_deg": net_yaw_deg,
+        "yaw_source": "unified_hybrid_inekf_rts",
+        "yaw_delay_frames": int(config.yaw_delay_frames),
+        "yaw_delay_pad": str(config.yaw_delay_pad),
+        "yaw_delay_bursts": 0,
+        "gyro_scale": float(config.gyro_scale),
+        "chassis_yaw_scale": float(config.chassis_yaw_scale),
+        "wheel_radius_m": float(config.wheel_radius_m),
+        "track_width_m": float(config.track_width_m),
+        "recipe": spec.label,
+        "runtime_source": "unified_hybrid_v1",
+        "warnings": [
+            "Unified Physics-Informed Hybrid Estimator: 3D camber kinematics, dynamic ZUPT/ZARU InEKF, and RTS backward smoothing.",
+        ],
+    }
+
+
 def run_session_model(
     repo_root: Path,
     spec: ModelSpec,
@@ -1071,6 +1457,8 @@ def run_session_model(
         model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
     elif spec.kind == "pytorch_residual_slalom_course":
         model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
+    elif spec.kind == "unified_hybrid":
+        model_result = _run_unified_hybrid_model(spec, windows, session_data, np)
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
 
@@ -1232,6 +1620,8 @@ def run_processed_trial_model(
         model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
     elif spec.kind == "pytorch_residual_slalom_course":
         model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
+    elif spec.kind == "unified_hybrid":
+        model_result = _run_unified_hybrid_model(spec, windows, session_data, np)
     else:
         raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
     if file_identity(spec.checkpoint) != checkpoint_before:

@@ -575,7 +575,7 @@ void BleService::sendAcqHealth() {
     AcqState acq_state = AcqState::Ready;
     if (state_ == BleState::Countdown) acq_state = AcqState::Sync;
     if (state_ == BleState::Recording) acq_state = AcqState::Recording;
-    if (transport_failures_ > 0) acq_state = AcqState::Retry;
+    if (consecutive_transport_failures_ > 0) acq_state = AcqState::Retry;
     if (imu().dropCount() > 0) acq_state = AcqState::Error;
     uint8_t buf[ACQ_HEALTH_SIZE];
     const uint32_t produced_samples = imu().sampleCount() + imu().queueDropCount();
@@ -608,7 +608,7 @@ void BleService::restoreLeds() {
         digitalWrite(LED_BLUE, HIGH);
         return;
     }
-    if (transport_failures_ > 0) {
+    if (consecutive_transport_failures_ > 0) {
         const bool red = (millis() / 125) % 2 == 0;
         digitalWrite(LED_RED, red ? LOW : HIGH);
         digitalWrite(LED_GREEN, HIGH);

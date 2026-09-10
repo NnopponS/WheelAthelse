@@ -1,83 +1,91 @@
-# WheelAthlete — Current Decisions
+# WheelAthlete current engineering decisions
 
-Updated: 2026-09-08
+Updated: 2026-09-08.
 
-Only active decisions are kept here. Superseded phase decisions belong in Git history, not in the current project state.
+Only active durable decisions belong here. Historical experiment outcomes belong in phase/history files.
 
-## D1 — Two user-facing apps only
+## D1 - Maintained applications
 
-WheelAthlete has two product applications:
+WheelAthlete maintains:
+- Flutter mobile for Android/iOS.
+- Python/PySide6 Windows Research Edition.
 
-- Flutter mobile app for iOS/Android
-- Python Windows app using PySide6
+Flutter Windows/Web and the retired Tkinter GUI are not maintained product paths.
 
-Flutter Windows, Flutter Web, and the old Tkinter GUI are retired and removed.
+## D2 - One BLE protocol, explicit role semantics
 
-## D2 — Shared BLE protocol
+Both clients use `docs/ble-protocol.md`. Role bytes are `L=0x4C`, `R=0x52`, optional chair-center `C=0x43`. Packet/command semantic changes require coordinated clients/firmware documentation and compatibility tests.
 
-Both clients use the same firmware BLE contract in `docs/ble-protocol.md`. Firmware changes that affect packet layout, commands, characteristics, or semantics require a coordinated protocol/version update.
+## D3 - L/R remains the model baseline; C is optional instrumentation
 
-## D3 — Dual-wheel acquisition
+L/R wheel hubs remain the baseline sensing configuration and current model input. The user has authorized source support for optional center sensor C. This authorization does not establish that C improves trajectory accuracy.
 
-Left and right wheel sensors are acquired together. Sequence counters, loss telemetry, synchronization, and per-wheel diagnostics must remain visible. RSSI is context, not proof of data integrity.
+C is a chair-frame IMU with declared **+Z down toward the floor**. X/Y remain board axes until physically mapped. Do not call C a wheel or infer its forward/lateral axes from convenience.
 
-## D4 — Sampling rates
+## D4 - Supported acquisition rates
 
-Supported acquisition rates are 50, 100, and 200 Hz. A recording configuration must be applied to the connected board(s), not stored as metadata only.
+Supported board acquisition rates are 50, 100 and 200 Hz. Configuration must be applied to the actual connected boards; metadata alone is not configuration evidence.
 
-## D5 — Mobile owns BLE directly
+## D5 - Mobile owns BLE directly
 
-The Flutter mobile app uses `flutter_blue_plus` and remains independent from the Windows acquisition daemon. Mobile recording/export behavior must continue to work without any PC process.
+Mobile uses its native BLE path and remains independent of the Windows acquisition daemon/server.
 
-## D6 — Windows GUI does not own authoritative raw data
+## D6 - Windows raw data ownership stays outside the GUI
 
-On Windows, `tools.pc_acquisition` owns BLE, synchronization, raw journal writes, QC, and recovery. `tools.pc_gui` receives control/state/diagnostics and bounded preview traffic over localhost IPC.
+`tools.pc_acquisition` owns BLE, clocks, sequence/loss accounting, raw journal writes, QC and recovery. `tools.pc_gui` receives state/preview/control over localhost IPC. Preview may drop; raw capture must fail visibly rather than silently overwrite unread data.
 
-This process boundary is a reliability requirement, not an implementation detail.
+## D7 - Windows `.waj` is authoritative
 
-## D7 — Windows authoritative format is `.waj`
+Windows raw recording truth is append-only `.waj`; CSV is derived. L/R-only recordings keep journal v1. Recordings containing C use journal v2 with explicit C side code. Readers must preserve historical v1 semantics.
 
-The append-only `.waj` journal is the source of truth for Windows recordings. CSV is a derived export artifact. Incomplete journals must remain recoverable.
+## D8 - Mobile storage remains mobile-native and backward-compatible
 
-## D8 — Mobile storage remains mobile-native
+Mobile uses its versioned app storage. Center support is additive. A C recording may add `center_raw.csv`; legacy L/R training/export schema must not silently become 18-channel data.
 
-The mobile app stores its session data under its app documents area using topic/trial/session organization and versioned metadata. Existing mobile data compatibility must not be broken merely to match the Windows `.waj` implementation.
+## D9 - Synchronization requires provenance
 
-## D9 — Synchronization
+Cross-sensor timing uses saved clock observations/drift fitting and common scheduled start evidence. A saved affine map documents a mapping but is not independent proof of physical simultaneity. Never synchronize L/R/C by independently zeroing their epochs.
 
-Cross-wheel time mapping uses low-RTT clock synchronization and drift fitting. Recording start is scheduled against a common client timeline and verified with firmware lifecycle acknowledgements. Exported synchronized timestamps must retain clear provenance.
+## D10 - One operator client per sensor set
 
-## D10 — One operator client per sensor pair
+Do not operate the same connected L/R[/C] set concurrently from mobile and Windows.
 
-Do not attempt to operate the same two BLE peripherals from the mobile and Windows clients simultaneously. A pair should be controlled by one operator client at a time.
+## D11 - Release/build artifacts are not source state
 
-## D11 — Packaging is source-controlled, artifacts are not
-
-Windows installer definitions live in `applications/wheelathlete_windows/packaging/windows/`. Generated `build/` and `release/` artifacts remain ignored by Git.
+Packaging definitions are source-controlled; generated installers/firmware binaries/build directories remain untracked/ignored. A successful build is not an installation, flash, release or physical acceptance.
 
 ## D12 - Feature-branch safety
 
-Current work belongs on `feature/dual-imu-coaching-analysis`. No main/release merge, force push, tag, repository rename or release publication is authorized. Leave the separate research repository untouched. Existing release workflow work not owned by this feature stays local.
+Current work belongs on `feature/dual-imu-coaching-analysis`. Preserve `main` and `release/main-v1.8.0`; no merge, force-push, tag, updater/release publication or repository rename without explicit user direction. Preserve unrelated `.github/workflows/release.yml` work.
 
-## D13 — Release coordination
+## D13 - Stable version identity remains unchanged
 
-Current release line is `v1.8.0`:
+The stable v1.8.0 product/release identity remains the release line. Experimental model and center-sensor source work does not advance stable version metadata by itself.
 
-- Mobile: `1.8.0+10`
-- Firmware: `1.8.0`
-- BLE protocol: `1.8.0`
-- Windows package: `1.8.0`
+## D14 - Physical claims require physical evidence
 
-Version consistency is checked by automated tests.
+Unit tests, simulated BLE and compile output can prove software/build behavior. They cannot establish real RF throughput, actual start skew, gravity orientation, range configuration, loss rate or trajectory accuracy. Those require hardware/reference measurements.
 
-## D14 — Physical claims require physical evidence
+## D15 - Model defaults remain frozen until P3 acceptance
 
-Automated tests and simulation may establish software behavior, but must not be used to claim real RF throughput, real two-wheel start skew, or hardware-level loss performance. Those require the physical two-XIAO acceptance matrix.
+Inherited geometry/calibration values remain assumptions unless separately measured. Windows classical default and mobile M4 ONNX default remain unchanged. PyTorch residual/Slalom paths are explicitly experimental. P3 remains `blocked_by_reference_data`.
 
-## D15 - Two hubs and explicit model status
+## D16 - Public source vs private research evidence
 
-Keep inherited radius 0.30 m, hub spacing 0.52 m and zero camber; they are assumptions, not fresh measurements. The existing classical recipe and mobile ONNX asset remain frozen. A third sensor or model promotion requires a separate evidence-backed decision. Current P3 status is blocked_by_reference_data.
+Do not publish athlete recordings, derived participant data, pseudo-GT, generated private models, absolute private paths, signing material or local evidence. `BiWheel3D/` remains a separate local research repository.
 
-## D16 - Public source, private research evidence
+## D17 - Center data cannot silently enter the legacy model
 
-Do not publish raw/derived athlete sessions, absolute private machine paths, signing material, archived logs or generated executables/ZIPs in a feature branch. `.project/local/` is ignored. Only sanitized summaries, synthetic fixtures, maintained source/tests and reproducible tooling belong in Git.
+Current L/R model feature extraction must produce exactly the same tensor with or without C samples. Any center-aware estimator gets a new explicit model/feature contract, training set and validation/final gate. Never extend the legacy tensor merely by iterating every enum role.
+
+## D18 - Course constraints must be labeled as constraints
+
+Slalom endpoint/heading closure uses known protocol structure. Report raw pose, constrained pose and correction magnitudes separately. A constrained endpoint near zero cannot be advertised as independent odometry accuracy.
+
+## D19 - Runtime reproducibility is a model-selection requirement
+
+Exploratory metrics are not accepted until the same algorithm reproduces deterministically through the intended application/runtime. Slalom course v2 is the negative precedent: numerically unstable float32 finite-difference behavior produced apparent gains that collapsed in app execution. Keep it as rejected evidence; do not resurrect its headline numbers as validated performance.
+
+## D20 - Reference timing errors must not be learned away
+
+If C3D/IMU alignment exhibits drift/time-scale mismatch, audit reference clock provenance before training more model complexity. A neural/calibration model must not be used to compensate an unverified reference timeline simply because that reduces a plotted error.

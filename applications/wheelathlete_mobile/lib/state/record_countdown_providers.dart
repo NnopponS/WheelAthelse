@@ -146,8 +146,7 @@ class RecordCountdownNotifier extends Notifier<RecordCountdownState> {
     _pendingConfig = config;
     _startFired
       ..clear()
-      ..[WheelSide.left] = false
-      ..[WheelSide.right] = false;
+      ..addEntries(WheelSide.values.map((side) => MapEntry(side, false)));
     state = const RecordCountdownState(status: RecordCountdownStatus.syncing);
 
     // Live and Record share the same raw BLE stream. Firmware resets its

@@ -16,9 +16,12 @@ class ExcelExporter {
       ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
     final right = samples.where((s) => s.wheel == WheelSide.right).toList()
       ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
+    final center = samples.where((s) => s.wheel == WheelSide.center).toList()
+      ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
 
     _writeSheet(excel, 'L', left);
     _writeSheet(excel, 'R', right);
+    if (center.isNotEmpty) _writeSheet(excel, 'C', center);
 
     // Delete default Sheet1 if present to keep it clean.
     if (excel.tables.containsKey('Sheet1')) {
@@ -52,7 +55,7 @@ class ExcelExporter {
     sheet.appendRow(headers);
 
     for (final s in samples) {
-      final wheel = s.wheel == WheelSide.left ? 'L' : 'R';
+      final wheel = s.wheel.shortLabel;
       final marker = s.marker ? 1 : 0;
       sheet.appendRow([
         IntCellValue(s.reading.seq),

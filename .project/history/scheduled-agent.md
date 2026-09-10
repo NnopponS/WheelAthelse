@@ -67,3 +67,45 @@ The existing Windows hourly task remains verification-only. A separate ChatGPT e
 ### Remaining gates
 
 Independent synchronized moving wheel-marker optical reference, grouped untouched final capture, physical Android/iOS acceptance and athlete/coach sign-off are still absent. P3 model selection and any mobile classical-model promotion remain blocked by those evidence gates.
+
+## 2026-09-08 - Slalom-v3 and optional center-IMU source continuation
+
+Timestamp: 2026-09-08 evening (Asia/Bangkok).
+Branch: `feature/dual-imu-coaching-analysis`.
+Starting/published tip during the run: `be2e4725576775249796d376ef0e64cceb7aa04e`. The current working-tree changes described below were **not committed or pushed** in this continuation.
+
+### Slalom research conclusion
+
+Full-course GT-vs-model review showed that the long Slalom failure is driven by cumulative local yaw-rate waveform/timing error, not only final net yaw. Course-v1 confirmed that known return-to-start constraints can make the path much more useful for this fixed protocol, but its near-zero endpoint is constrained rather than independent odometry evidence.
+
+A per-turn v2 optimizer produced attractive exploratory metrics but failed application-runtime reproducibility because float32 finite-difference perturbations fell into numerical noise. V2 is therefore rejected for accuracy claims and retained as negative evidence.
+
+A deterministic calibrated-course v3 was then frozen with residual-v1 weights unchanged, small train-derived linear yaw/speed residual calibration, sign-aware turn detection and guarded fixed-course closure. Formal `SL_04` validation improved from raw residual-v1 `0.790368 m / 21.6689 deg` ATE/heading RMSE and course-v1 `0.218728 m / 4.53390 deg` to **v3 `0.179216 m / 3.57882 deg`**. Historical test remained unevaluated; non-SL formal validation was exact no-op; C3D was never an inference input.
+
+### Optional center instrumentation
+
+The user authorized source support for a third chair-center IMU C (`0x43`) with +Z pointing down toward the floor. X/Y remain physical board axes pending physical mapping.
+
+The implementation extended both firmware targets, Windows and Flutter through role parsing, synchronization, recording, preview and export. L/R-only Windows journals remain v1; C sessions use journal v2 with explicit C side code. Mobile storage/export is additive and emits `center_raw.csv` only when C exists. Existing model preprocessing explicitly remains L/R-only and regression tests prove C does not alter the legacy 12-channel input.
+
+XIAO center uses yellow RGB identity/heartbeat. M5 center uses a yellow identity bar plus blinking yellow `C` glyph without violating the display anti-flicker rule.
+
+### Measured software/build verification
+
+- project audit: 444 candidate files, 0 errors,
+- mobile: 715/715 tests, analyzer clean,
+- Windows bounded three-IMU suite: 167/167,
+- focused center/journal/sequence/stress: 13/13,
+- normal Windows suite: 171 passed / 1 failed from an unrelated Slalom-v3 test using the wrong `applications/BiWheel3D` path,
+- M5 host firmware: 147/147,
+- XIAO host firmware: 18/18,
+- M5 center compile: success, 15.4% RAM / 62.3% flash,
+- XIAO center compile: success, 10.8% RAM / 18.2% flash.
+
+No board was flashed, no app was installed, no current model was promoted and the nested `BiWheel3D` Git status matched its pre-center snapshot exactly.
+
+### Next action
+
+Fix the Slalom-v3 test root path and rerun the complete Windows suite. After explicit physical-flash authorization, bench-verify C role/ranges/+Z-down gravity and three-stream clock/loss behavior, then collect new synchronized L/R/C + valid moving optical reference before training a center-aware estimator.
+
+Local raw evidence: `.project/local/three-imu-2026-09-08/`. Current canonical conclusions: `../STATUS.md`, `../HANDOFF.md`, `../phases/P3.md` through `P7.md`.

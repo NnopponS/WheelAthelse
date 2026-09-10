@@ -26,7 +26,7 @@ def test_scheduled_record_start_pushes_same_utc_t0_before_start():
         await engine.start()
         await engine.connect(WheelSide.LEFT, "left")
 
-        now_ns = time.monotonic_ns()
+        now_ns = time.perf_counter_ns()
         controller.install_clock_model(
             WheelSide.LEFT,
             ClockModel.nominal(

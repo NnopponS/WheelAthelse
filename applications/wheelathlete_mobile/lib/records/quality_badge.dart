@@ -36,8 +36,11 @@ class QualityBadge {
   static SyncQuality fromMeta(SessionMeta meta) {
     final left = meta.driftResidualRmsMsLeft;
     final right = meta.driftResidualRmsMsRight;
-    if (left == null && right == null) return SyncQuality.unknown;
-    final max = [left, right].whereType<double>().fold<double?>(
+    final center = meta.driftResidualRmsMsCenter;
+    if (left == null && right == null && center == null) {
+      return SyncQuality.unknown;
+    }
+    final max = [left, right, center].whereType<double>().fold<double?>(
       null,
       (a, b) => a == null ? b : (a > b ? a : b),
     );

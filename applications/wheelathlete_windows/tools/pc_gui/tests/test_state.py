@@ -49,6 +49,7 @@ def test_board_view_maps_host_firmware_and_sync_metrics():
                 "gyro_scale": 0.06103515625,
             },
             "health": {
+                "state": 2,
                 "produced": 1234,
                 "notified": 1234,
                 "queue_drops": 0,
@@ -75,6 +76,29 @@ def test_board_view_maps_host_firmware_and_sync_metrics():
     assert board.best_rtt_ms == 1.5
     assert board.residual_rms_ms == 0.125
     assert board.healthy
+    assert board.fault_summary is None
+
+
+def test_board_view_exposes_specific_check_fault_and_active_retry():
+    dropped = BoardView.from_status(
+        "C",
+        {"connected": True, "health": {"state": 4, "queue_drops": 3}},
+    )
+    retrying = BoardView.from_status(
+        "C",
+        {"connected": True, "health": {"state": 3, "transport_failures": 7}},
+    )
+    recovered = BoardView.from_status(
+        "C",
+        {"connected": True, "health": {"state": 2, "transport_failures": 7}},
+    )
+
+    assert not dropped.healthy
+    assert dropped.fault_summary == "firmware sample queue drop: 3"
+    assert not retrying.healthy
+    assert retrying.fault_summary == "BLE notification retry active; cumulative failures: 7"
+    assert recovered.healthy
+    assert recovered.fault_summary is None
 
 
 def test_app_state_preserves_both_wheels_and_ipc_counters():

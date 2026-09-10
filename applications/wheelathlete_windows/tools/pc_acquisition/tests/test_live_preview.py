@@ -63,7 +63,7 @@ def test_live_preview_has_explicit_start_stop_state_without_opening_a_journal(
             await service.handle_command("connect", {"device_id": "left"})
             await service.handle_command("connect", {"device_id": "right"})
 
-            now_ns = time.monotonic_ns()
+            now_ns = time.perf_counter_ns()
             model = ClockModel.nominal(device_us=1_000_000, pc_ns=now_ns, rtt_ns=1_000_000)
             service.lifecycle.synchronize = AsyncMock(return_value=model)
             service.lifecycle.scheduled_start = AsyncMock(

@@ -216,12 +216,12 @@ class JournalRecorder:
                 if item is _STOP:
                     return
                 assert isinstance(item, ReceivedSample)
-                started = time.monotonic_ns()
+                started = time.perf_counter_ns()
                 self._append_record(RecordKind.SAMPLE, self._pack_sample(item))
                 self.metrics.samples_written += 1
                 self.metrics.max_write_latency_ns = max(
                     self.metrics.max_write_latency_ns,
-                    time.monotonic_ns() - started,
+                    time.perf_counter_ns() - started,
                 )
             except Exception as exc:
                 if self.fatal_fault is None:

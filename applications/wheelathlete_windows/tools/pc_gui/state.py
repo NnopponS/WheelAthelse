@@ -105,6 +105,7 @@ class BoardView:
     queue_overflow_faults: int = 0
     produced: int | None = None
     notified: int | None = None
+    acquisition_state: int | None = None
     firmware_queue_drops: int | None = None
     transport_failures: int | None = None
     firmware_queue_depth: int | None = None
@@ -155,6 +156,7 @@ class BoardView:
             queue_overflow_faults=int(data.get("queue_overflow_faults", 0) or 0),
             produced=_as_int(health.get("produced")),
             notified=_as_int(health.get("notified")),
+            acquisition_state=_as_int(health.get("state")),
             firmware_queue_drops=_as_int(health.get("queue_drops")),
             transport_failures=_as_int(health.get("transport_failures")),
             firmware_queue_depth=_as_int(health.get("queue_depth")),
@@ -193,7 +195,33 @@ class BoardView:
 
     @property
     def healthy(self) -> bool:
-        return self.connected and self.loss_count == 0 and self.fatal_fault is None
+        return (
+            self.connected
+            and self.loss_count == 0
+            and self.fatal_fault is None
+            and self.acquisition_state not in {3, 4}
+        )
+
+    @property
+    def fault_summary(self) -> str | None:
+        if self.fatal_fault:
+            return str(self.fatal_fault.get("message") or self.fatal_fault.get("code") or "Host acquisition fault")
+        faults = [
+            (self.sequence_gaps, "host sequence gap"),
+            (self.queue_overflow_faults, "host notification queue overflow"),
+            (self.firmware_queue_drops or 0, "firmware sample queue drop"),
+            (self.fifo_dropped_samples or 0, "firmware FIFO sample loss"),
+            (self.fifo_faults or 0, "firmware FIFO fault"),
+            (self.malformed_packets, "malformed BLE packet"),
+        ]
+        for count, label in faults:
+            if count:
+                return f"{label}: {count}"
+        if self.acquisition_state == 3:
+            return f"BLE notification retry active; cumulative failures: {self.transport_failures or 0}"
+        if self.acquisition_state == 4:
+            return "Firmware reported an acquisition error"
+        return None
 
 
 @dataclass(slots=True)
@@ -204,6 +232,7 @@ class AppViewState:
     recording_starting: bool = False
     countdown: int | None = None
     recording_started_utc_ms: int | None = None
+    recording_target_pc_ns: int | None = None
     live: bool = False
     live_sides: tuple[str, ...] = ()
     live_busy: bool = False

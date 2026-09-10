@@ -91,6 +91,52 @@ void main() {
       expect(restored.imuFifoFaults['R'], 2);
       expect(restored.imuFifoDroppedSamples['R'], 3);
     });
+    test(
+      'schema v5 roundtrips optional chair-center timing and axis contract',
+      () {
+        final meta = SessionMeta(
+          sessionId: 'three-imu',
+          topic: 'slalom',
+          trialNumber: 19,
+          sampleRateHz: 100,
+          startTime: DateTime.utc(2026, 9, 8),
+          durationMs: 5000,
+          sampleCount: 1500,
+          markerCount: 0,
+          offsetUsLeft: 10,
+          offsetUsRight: -20,
+          offsetUsCenter: 35,
+          driftResidualRmsMsLeft: 0.5,
+          driftResidualRmsMsRight: 0.7,
+          driftResidualRmsMsCenter: 1.1,
+          recordedSides: const ['L', 'R', 'C'],
+          sensorAxisConventions: const {
+            'C': {
+              'sensor_role': 'chair_center',
+              'z_axis': 'down_toward_floor',
+              'x_y_axes': 'board_axes_unmapped',
+            },
+          },
+        );
+        final json = meta.toJson();
+        expect(json['schema_version'], 5);
+        expect(json['offset_us_center'], 35);
+        expect(json['drift_residual_rms_ms_center'], 1.1);
+        final restored = SessionMeta.fromJson(json);
+        expect(restored.recordedSides, ['L', 'R', 'C']);
+        expect(restored.offsetUsCenter, 35);
+        expect(restored.driftResidualRmsMsCenter, 1.1);
+        expect(
+          restored.sensorAxisConventions['C']?['z_axis'],
+          'down_toward_floor',
+        );
+        expect(
+          restored.sensorAxisConventions['C']?['x_y_axes'],
+          'board_axes_unmapped',
+        );
+      },
+    );
+
     test('serializes to JSON with all fields', () {
       final meta = SessionMeta(
         sessionId: 'abc123',

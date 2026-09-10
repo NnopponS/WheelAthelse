@@ -15,6 +15,8 @@ def test_xiao_batches_for_slow_dual_board_links_and_backs_off_retries():
     assert "retry_after_ms_" in header
     assert "notificationRetryDue" in source
     assert "consecutive_transport_failures_" in source
+    assert "if (consecutive_transport_failures_ > 0) acq_state = AcqState::Retry" in source
+    assert "if (transport_failures_ > 0) acq_state = AcqState::Retry" not in source
 
 
 def test_xiao_stop_drains_late_samples_before_final_health():

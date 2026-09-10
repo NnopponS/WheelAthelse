@@ -95,7 +95,7 @@ class SyncLifecycleController:
         count: int = 10,
         timeout_s: float = 1.0,
         inter_ping_s: float = 0.01,
-        clock_ns: Callable[[], int] = time.monotonic_ns,
+        clock_ns: Callable[[], int] = time.perf_counter_ns,
     ) -> ClockModel:
         if count < 1:
             raise ValueError("count must be >= 1")
@@ -140,7 +140,7 @@ class SyncLifecycleController:
         if not selected:
             raise ValueError("at least one wheel is required")
         if pc_start_ns is None:
-            pc_start_ns = time.monotonic_ns() + round(lead_time_s * 1_000_000_000)
+            pc_start_ns = time.perf_counter_ns() + round(lead_time_s * 1_000_000_000)
 
         targets: dict[WheelSide, int] = {}
         waiters: dict[WheelSide, asyncio.Future[StartFiredEvent]] = {}
@@ -184,7 +184,7 @@ class SyncLifecycleController:
         # only prevents a local timer race; actual mapped start time still comes
         # from START_FIRED and therefore cannot make sync quality look better.
         remaining_to_start_s = max(
-            0.0, (pc_start_ns - time.monotonic_ns()) / 1_000_000_000
+            0.0, (pc_start_ns - time.perf_counter_ns()) / 1_000_000_000
         )
         start_wait_timeout_s = (
             remaining_to_start_s + ack_timeout_s + _HOST_TIMER_SLACK_S

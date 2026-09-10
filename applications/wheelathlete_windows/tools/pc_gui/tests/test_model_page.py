@@ -132,12 +132,13 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     _APP.processEvents()
 
     assert model.model_combo.count() >= 1
-    assert "XY + Yaw" in model.model_combo.itemText(0)
+    assert model.model_combo.itemText(0) == "Classical v1"
     assert model.model_combo.currentIndex() == 0
     assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
     assert "recipe ready" in model.runtime_label.text()
-    assert model.model_detail.isHidden()
-    assert model.runtime_label.isHidden()
+    assert "biwheel3d_dual_hub_v1" in model.model_detail.text()
+    assert not model.model_detail.isHidden()
+    assert not model.runtime_label.isHidden()
     assert not model.browse_model_button.isHidden()
     assert "ONNX" in model.browse_model_button.toolTip()
 

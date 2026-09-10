@@ -124,11 +124,12 @@ class SessionStatsCalculator {
   /// - One `null` → the other value.
   /// - Both set → `max(left, right)`.
   static double? _maxDrift(SessionMeta meta) {
-    final left = meta.driftResidualRmsMsLeft;
-    final right = meta.driftResidualRmsMsRight;
-    if (left == null && right == null) return null;
-    if (left == null) return right;
-    if (right == null) return left;
-    return math.max(left, right);
+    final values = [
+      meta.driftResidualRmsMsLeft,
+      meta.driftResidualRmsMsRight,
+      meta.driftResidualRmsMsCenter,
+    ].whereType<double>();
+    if (values.isEmpty) return null;
+    return values.reduce(math.max);
   }
 }

@@ -126,16 +126,19 @@ class BoardSummaryCard(Card):
             else "Not connected"
         )
         if board.connected:
+            fault = board.fault_summary
             self.status.setText(
                 "STREAMING"
                 if active and board.healthy
                 else "CONNECTED"
                 if board.healthy
-                else "CHECK"
+                else f"CHECK · {fault or 'unknown fault'}"
             )
+            self.status.setToolTip(fault or "Sensor is healthy")
             self.status.setProperty("state", "good" if board.healthy else "warning")
         else:
             self.status.setText("OFFLINE")
+            self.status.setToolTip("Sensor is not connected")
             self.status.setProperty("state", "offline")
         self.status.style().unpolish(self.status)
         self.status.style().polish(self.status)

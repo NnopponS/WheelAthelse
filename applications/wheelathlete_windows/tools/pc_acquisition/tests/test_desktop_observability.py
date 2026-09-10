@@ -150,7 +150,7 @@ def test_status_rate_remains_defined_on_equal_monotonic_tick(tmp_path: Path, mon
     metrics = service.engine.metrics(WheelSide.LEFT)
     metrics.notifications_received = 1
     metrics.samples_received = 2
-    monkeypatch.setattr("tools.pc_acquisition.service.time.monotonic_ns", lambda: 123456)
+    monkeypatch.setattr("tools.pc_acquisition.service.time.perf_counter_ns", lambda: 123456)
     status = service.status()
     board = status["boards"]["L"]
     assert board["notifications_hz"] == pytest.approx(1_000_000_000.0)

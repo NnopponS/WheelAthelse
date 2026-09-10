@@ -42,7 +42,7 @@ def test_start_record_preserves_protocol_template_and_tags_in_authoritative_meta
         service = AcquisitionService(transport, journal_root=tmp_path)
         await service.handle_command("connect", {"device_id": "left"})
 
-        now_ns = time.monotonic_ns()
+        now_ns = time.perf_counter_ns()
         model = ClockModel.nominal(
             device_us=1_000_000,
             pc_ns=now_ns,

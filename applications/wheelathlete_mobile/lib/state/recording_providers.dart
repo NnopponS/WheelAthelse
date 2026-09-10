@@ -392,8 +392,11 @@ class RecordingNotifier extends Notifier<RecordingState> {
   /// Interval between continuous sync pings during recording.
   static const _continuousSyncInterval = Duration(seconds: 10);
 
-  static String _sideLabel(WheelSide side) =>
-      side == WheelSide.left ? 'left wheel' : 'right wheel';
+  static String _sideLabel(WheelSide side) => switch (side) {
+    WheelSide.left => 'left wheel',
+    WheelSide.right => 'right wheel',
+    WheelSide.center => 'chair-center sensor',
+  };
 
   void _promoteWhenFirstSamplesReady() {
     if (state.status != RecordingStatus.awaitingSamples) return;
@@ -552,7 +555,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
           status: RecordingStatus.failed,
           error:
               'Recording stopped: $_forcedDegradation. '
-              'Reconnect both wheels and retry; partial data was quarantined.',
+              'Reconnect the affected sensors and retry; partial data was quarantined.',
         );
       }
     } on Object catch (error) {
@@ -766,7 +769,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
     if (state.status == RecordingStatus.awaitingSamples) {
       state = state.copyWith(status: RecordingStatus.stopping);
       await _failBeforeSamples(
-        'Recording stopped before every wheel delivered its first sample. '
+        'Recording stopped before every connected sensor delivered its first sample. '
         'Nothing was saved.',
       );
       return;
@@ -777,7 +780,7 @@ class RecordingNotifier extends Notifier<RecordingState> {
     if (_buffer.isEmpty) {
       state = state.copyWith(status: RecordingStatus.stopping);
       await _failBeforeSamples(
-        'Recording contained 0 samples. Check both wheel connections and retry.',
+        'Recording contained 0 samples. Check the connected sensor links and retry.',
       );
       return;
     }
@@ -890,10 +893,13 @@ class RecordingNotifier extends Notifier<RecordingState> {
     _finalizeTimeline(syncState);
     final leftOffset = syncState.bySide[WheelSide.left]!.offset?.offsetUs;
     final rightOffset = syncState.bySide[WheelSide.right]!.offset?.offsetUs;
+    final centerOffset = syncState.bySide[WheelSide.center]!.offset?.offsetUs;
     final leftResidual =
         syncState.bySide[WheelSide.left]!.driftFit?.residualRmsMs;
     final rightResidual =
         syncState.bySide[WheelSide.right]!.driftFit?.residualRmsMs;
+    final centerResidual =
+        syncState.bySide[WheelSide.center]!.driftFit?.residualRmsMs;
 
     final sessionId = config.sessionId;
     final meta = SessionMeta(
@@ -908,58 +914,64 @@ class RecordingNotifier extends Notifier<RecordingState> {
       markerCount: 0,
       offsetUsLeft: leftOffset,
       offsetUsRight: rightOffset,
+      offsetUsCenter: centerOffset,
       driftResidualRmsMsLeft: leftResidual,
       driftResidualRmsMsRight: rightResidual,
+      driftResidualRmsMsCenter: centerResidual,
       notes: config.notes,
       utcStartMs: config.utcStartMs,
       recordedSides: _trackers.keys
-          .map((side) => side == WheelSide.left ? 'L' : 'R')
+          .map((side) => side.shortLabel)
           .toList(growable: false),
+      sensorAxisConventions: _trackers.containsKey(WheelSide.center)
+          ? const {
+              'C': {
+                'sensor_role': 'chair_center',
+                'z_axis': 'down_toward_floor',
+                'x_y_axes': 'board_axes_unmapped',
+              },
+            }
+          : const {},
       firmwareVersions: {
         for (final side in WheelSide.values)
           if (ref.read(connectionManagerProvider).bySide[side]!.info
               case final info?)
-            (side == WheelSide.left ? 'L' : 'R'): info.fwVersion,
+            side.shortLabel: info.fwVersion,
       },
       boardModels: {
         for (final side in WheelSide.values)
           if (ref.read(connectionManagerProvider).bySide[side]!.info
               case final info?)
-            (side == WheelSide.left ? 'L' : 'R'): info.hardwareModel.label,
+            side.shortLabel: info.hardwareModel.label,
       },
       dropCounts: {
-        'L': syncState.bySide[WheelSide.left]!.dropCount,
-        'R': syncState.bySide[WheelSide.right]!.dropCount,
+        for (final side in stopSides)
+          side.shortLabel: syncState.bySide[side]!.dropCount,
       },
       sampleQueueDrops: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              syncState.bySide[side]!.acqHealth?.queueDrops ?? 0,
+          side.shortLabel: syncState.bySide[side]!.acqHealth?.queueDrops ?? 0,
       },
       imuFifoFaults: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              syncState.bySide[side]!.acqHealth?.fifoFaults ?? 0,
+          side.shortLabel: syncState.bySide[side]!.acqHealth?.fifoFaults ?? 0,
       },
       imuFifoDroppedSamples: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
+          side.shortLabel:
               syncState.bySide[side]!.acqHealth?.fifoDroppedSamples ?? 0,
       },
       recoveredSamples: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              recoveryMetrics[side]!.recoveredSamples,
+          side.shortLabel: recoveryMetrics[side]!.recoveredSamples,
       },
       unrecoveredSamples: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              recoveryMetrics[side]!.unrecoveredSamples,
+          side.shortLabel: recoveryMetrics[side]!.unrecoveredSamples,
       },
       replayAttempts: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              recoveryMetrics[side]!.replayAttempts,
+          side.shortLabel: recoveryMetrics[side]!.replayAttempts,
       },
       degradationReason: _degradationReason(
         stopSides: stopSides,
@@ -968,38 +980,33 @@ class RecordingNotifier extends Notifier<RecordingState> {
       ),
       sequenceGaps: {
         for (final entry in _trackers.entries)
-          (entry.key == WheelSide.left ? 'L' : 'R'): entry.value.totalGaps,
+          entry.key.shortLabel: entry.value.totalGaps,
       },
       startAcknowledgedUs: {
-        // ignore: use_null_aware_elements
-        if (syncState.bySide[WheelSide.left]!.lastStartFiredUs
-            case final value?)
-          'L': value,
-        // ignore: use_null_aware_elements
-        if (syncState.bySide[WheelSide.right]!.lastStartFiredUs
-            case final value?)
-          'R': value,
+        for (final side in stopSides)
+          // ignore: use_null_aware_elements
+          if (syncState.bySide[side]!.lastStartFiredUs case final value?)
+            side.shortLabel: value,
       },
       startDeltaUs: _startDelta(syncState),
       transportFailures: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
+          side.shortLabel:
               syncState.bySide[side]!.acqHealth?.transportFailures ?? 0,
       },
       firmwareProducedSamples: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
+          side.shortLabel:
               syncState.bySide[side]!.acqHealth?.producedSamples ?? 0,
       },
       firmwareNotifiedSamples: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
+          side.shortLabel:
               syncState.bySide[side]!.acqHealth?.notifiedSamples ?? 0,
       },
       queueDepth: {
         for (final side in stopSides)
-          side == WheelSide.left ? 'L' : 'R':
-              syncState.bySide[side]!.acqHealth?.queueDepth ?? 0,
+          side.shortLabel: syncState.bySide[side]!.acqHealth?.queueDepth ?? 0,
       },
     );
 

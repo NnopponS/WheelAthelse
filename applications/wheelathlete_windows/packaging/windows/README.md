@@ -14,6 +14,7 @@ This folder contains the only supported Windows packaging path for the Python Re
 - Python with the Windows app dependencies installed
 - PyInstaller (`python -m pip install pyinstaller`)
 - Inno Setup 6 installed at the standard per-user location
+- Windows SDK `signtool.exe`, a trusted code-signing certificate installed in the current user's certificate store, and an RFC3161 timestamp service for public packages
 
 ## Build
 
@@ -25,15 +26,35 @@ applications\wheelathlete_windows\packaging\windows\build_installer.bat
 
 The script builds the GUI, builds a standalone `WheelAthleteDaemon.exe`, bundles the daemon into the GUI distribution, creates a portable ZIP, then creates the Inno Setup installer.
 
+For a trusted release, set the certificate thumbprint and timestamp URL in the build environment:
+
+```bat
+set WHEELATHLETE_SIGN_CERT_SHA1=<40-hex-certificate-thumbprint>
+set WHEELATHLETE_TIMESTAMP_URL=https://<rfc3161-service>
+applications\wheelathlete_windows\packaging\windows\build_installer.bat
+```
+
+The build signs and verifies `WheelAthlete.exe`, both packaged copies of `WheelAthleteDaemon.exe`, and the final installer. It fails a requested signed build unless every Authenticode status is `Valid`. The certificate and private key must never be added to the repository. With no signing variables, the script creates an explicitly unsigned local-development package; this does not fix Microsoft Defender download reputation or Application Control error 4551.
+
 ## Outputs
 
 Generated files are written to the ignored `applications/wheelathlete_windows/release/` directory:
 
 - `WheelAthlete-<version>-portable.zip`
 - `WheelAthleteSetup-<version>.exe`
+- `SHA256SUMS.txt`
+- `signing-report.json`
 
 Intermediate PyInstaller files are written under ignored `applications/wheelathlete_windows/build/pyinstaller/`.
 
-The GUI bundle includes the root `VERSION` file so the updater can identify the installed version. Inno Setup preserves one AppId across releases and understands `/AUTOUPDATE=1` so a verified in-app update can close the GUI, replace files, and relaunch WheelAthlete. The build script prints the final installer SHA-256 and byte size used by the shared release manifest.
+The GUI bundle includes the root `VERSION` file so the updater can identify the installed version. Inno Setup preserves one AppId across releases and understands `/AUTOUPDATE=1` so a verified in-app update can close the GUI, replace files, and relaunch WheelAthlete.
+
+## Upgrade and uninstall behavior
+
+Before upgrade or uninstall, setup runs `stop_installed_daemon.ps1` for the selected installation root. New daemons receive the explicit IPC shutdown request; an active recording is finalized and live acquisition stops before the daemon exits. For older layouts, the helper asks the daemon to end recording and live state before stopping only verified `WheelAthleteDaemon.exe` processes whose executable path is inside that installation. Setup blocks and shows the helper's actionable error when safe shutdown cannot be confirmed.
+
+The application binaries, Start menu entry, desktop shortcut, and uninstall registration belong to the install. Recordings, logs, experiment presets, and custom model bundles under `Documents/WheelAthlete` are user data and survive upgrade and uninstall.
+
+After uninstall, verify that no `WheelAthlete.exe` or installation-owned `WheelAthleteDaemon.exe` process remains, the selected installation directory and shortcuts are removed, and the WheelAthlete uninstall registration is gone. Do not delete `Documents/WheelAthlete` when checking cleanup.
 
 Do not commit generated EXE/ZIP/build output. Commit only the packaging source in this folder.

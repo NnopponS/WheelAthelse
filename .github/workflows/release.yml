@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      android_build: ${{ steps.meta.outputs.android_build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,78 +22,17 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import os, re
+          import os
           from pathlib import Path
 
           version = Path('VERSION').read_text(encoding='utf-8').strip()
-          pubspec = Path('applications/wheelathlete_mobile/pubspec.yaml').read_text(encoding='utf-8')
-          match = re.search(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+(\d+)\s*$', pubspec, re.M)
-          if not match:
-              raise SystemExit('Could not read Flutter version/build from pubspec.yaml')
-          if match.group(1) != version:
-              raise SystemExit(f'Flutter version {match.group(1)} != root VERSION {version}')
           ref = os.environ.get('GITHUB_REF_NAME', '')
           if ref.startswith('v') and ref != f'v{version}':
               raise SystemExit(f'Tag {ref} != v{version}')
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
               stream.write(f'version={version}\n')
-              stream.write(f'android_build={match.group(2)}\n')
           PY
-
-  android:
-    needs: metadata
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Prepare persistent Android release key
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "Missing required GitHub secret: $name" >&2
-              exit 1
-            fi
-          done
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/wheelathlete-release.jks"
-
-      - name: Test and build Android release
-        working-directory: applications/wheelathlete_mobile
-        env:
-          WHEELATHLETE_KEYSTORE_PATH: ${{ runner.temp }}/wheelathlete-release.jks
-          WHEELATHLETE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          WHEELATHLETE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          WHEELATHLETE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          flutter pub get
-          flutter analyze
-          flutter test
-          flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk \
-            "WheelAthlete-Android-${{ needs.metadata.outputs.version }}.apk"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-release
-          path: applications/wheelathlete_mobile/WheelAthlete-Android-${{ needs.metadata.outputs.version }}.apk
-          if-no-files-found: error
 
   windows:
     needs: metadata
@@ -113,11 +51,38 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller pytest
           python -m pip install -r applications/wheelathlete_windows/tools/pc_gui/requirements.txt
+          python -m pip install -r applications/wheelathlete_windows/tools/pc_gui/requirements-model.txt
           python -m pip install -r applications/wheelathlete_windows/tools/pc_acquisition/requirements.txt
 
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
+
+      - name: Import trusted Windows signing certificate
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.WHEELATHLETE_SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.WHEELATHLETE_SIGN_PFX_PASSWORD }}
+          TIMESTAMP_URL: ${{ vars.WHEELATHLETE_TIMESTAMP_URL }}
+        run: |
+          if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD -or -not $env:TIMESTAMP_URL) {
+            throw "Trusted Windows signing secrets and timestamp URL are required for publication."
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "wheelathlete-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          try {
+            $password = ConvertTo-SecureString $env:SIGN_PFX_PASSWORD -AsPlainText -Force
+            $imported = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+            $signingCertificates = @($imported | Where-Object HasPrivateKey)
+            if ($signingCertificates.Count -ne 1) {
+              throw "Signing PFX must contain exactly one certificate with a private key."
+            }
+            $certificate = $signingCertificates[0]
+            "WHEELATHLETE_SIGN_CERT_SHA1=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
+            "WHEELATHLETE_TIMESTAMP_URL=$env:TIMESTAMP_URL" >> $env:GITHUB_ENV
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Test Windows application
         working-directory: applications/wheelathlete_windows
@@ -136,19 +101,18 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: applications/wheelathlete_windows/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
+          path: |
+            applications/wheelathlete_windows/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
+            applications/wheelathlete_windows/release/WheelAthlete-${{ needs.metadata.outputs.version }}-portable.zip
+            applications/wheelathlete_windows/release/signing-report.json
+            applications/wheelathlete_windows/release/SHA256SUMS.txt
           if-no-files-found: error
 
   publish:
-    needs: [metadata, android, windows]
+    needs: [metadata, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-release
-          path: dist
 
       - uses: actions/download-artifact@v4
         with:
@@ -157,17 +121,12 @@ jobs:
 
       - name: Generate verified-artifact update manifest
         shell: bash
-        env:
-          IOS_UPDATE_URL: ${{ vars.WHEELATHLETE_IOS_UPDATE_URL }}
         run: |
           python release/generate_update_manifest.py \
             --version "${{ needs.metadata.outputs.version }}" \
-            --android "dist/WheelAthlete-Android-${{ needs.metadata.outputs.version }}.apk" \
-            --android-build "${{ needs.metadata.outputs.android_build }}" \
             --windows "dist/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe" \
             --out dist/latest.json \
-            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} stable release" \
-            --ios-url "$IOS_UPDATE_URL"
+            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} Windows release; mobile is under maintenance"
           cat dist/latest.json
 
       - name: Publish GitHub Release
@@ -177,6 +136,8 @@ jobs:
           name: WheelAthlete v${{ needs.metadata.outputs.version }}
           generate_release_notes: true
           files: |
-            dist/WheelAthlete-Android-${{ needs.metadata.outputs.version }}.apk
             dist/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
+            dist/WheelAthlete-${{ needs.metadata.outputs.version }}-portable.zip
+            dist/signing-report.json
+            dist/SHA256SUMS.txt
             dist/latest.json

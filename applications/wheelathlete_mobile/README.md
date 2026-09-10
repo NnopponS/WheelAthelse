@@ -1,8 +1,10 @@
 # WheelAthlete Mobile Application
 
-Flutter application for **iOS and Android only**. The mobile app connects directly to the left/right WheelAthlete BLE sensors, previews realtime IMU data, records synchronized sessions, manages experiment metadata, and exports research data.
+Flutter source for **iOS and Android only**. This application is under maintenance and is not currently available for installation or download. Its source and tests remain in the repository for repair and future validation.
 
-Current version: `1.8.0+10`
+Source version: `1.8.2+12`
+
+WheelAthlete v1.8.2 is a Windows-only distribution. Do not publish a mobile binary, show a mobile download, or enable mobile update offers for this release.
 
 ## Supported platforms
 
@@ -105,15 +107,15 @@ flutter analyze
 
 BLE integration requires a physical device for real hardware validation.
 
-## Automatic updates
+## Update code under maintenance
 
-Release/profile builds check the stable WheelAthlete GitHub Releases manifest after startup and every six hours. Manual **Software update** checking is always available from the Home AppBar.
+The existing update implementation is retained for maintenance and testing, but the v1.8.2 manifest contains no mobile artifact and no mobile update is offered.
 
 Android downloads the release APK to the app cache, verifies the manifest byte size and SHA-256, then hands the file to Android's system installer through a private `FileProvider`. Installation is never launched during Live, countdown, or recording. Android may ask the operator to enable **Install unknown apps** for WheelAthlete. Public/direct-GitHub releases must always use the same persistent signing key.
 
 iOS uses the same update manifest for discovery but opens the configured App Store/TestFlight page for installation.
 
-## Release builds
+## Local maintenance builds
 
 ```bash
 flutter build apk --release
@@ -125,3 +127,8 @@ flutter build ios --release
 ## Protocol
 
 The canonical BLE contract is `../../docs/ble-protocol.md`. Mobile, both firmware targets, and the Windows acquisition daemon must preserve compatible protocol semantics.
+
+
+## Residual-v1 development bundle (not enabled by default)
+
+The separate BiWheel3D research checkout can export a Flutter development bundle containing the experimental residual-v1 ONNX network, normalizer/contract metadata, and for the Slalom wrapper, `course.json`. The shared recording-free fixture is `docs/model_analysis/fixtures/slalom_course_v1.json`. This is preparation for a future Dart parity port only: the shipped mobile default remains the existing M4 XY-only ONNX model until the 88-D residual feature path, zero-delay center-mean physics, course adapter, and P3 acceptance are all verified.
