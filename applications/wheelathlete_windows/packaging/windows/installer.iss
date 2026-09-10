@@ -31,6 +31,14 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=force
 RestartApplications=no
 Uninstallable=yes
+#ifdef MySignedBuild
+SignTool=wheelathlete
+SignedUninstaller=yes
+SignToolRetryCount=3
+SignToolRetryDelay=1000
+#else
+SignedUninstaller=no
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -45,10 +53,9 @@ Name: "{app}\PC Sessions"; Flags: uninsneveruninstall
 Name: "{app}\Logs"; Flags: uninsneveruninstall
 
 [Files]
-Source: "{#WindowsAppRoot}\packaging\windows\stop_installed_daemon.ps1"; Flags: dontcopy
+Source: "{#WindowsAppRoot}\release\WheelAthlete\stop_installed_daemon.ps1"; Flags: dontcopy
 ; Keep binaries isolated from research data under Documents\WheelAthlete.
 Source: "{#WindowsAppRoot}\release\WheelAthlete\*"; DestDir: "{app}\Application"; Excludes: "Model\*"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#WindowsAppRoot}\packaging\windows\stop_installed_daemon.ps1"; DestDir: "{app}\Application"; Flags: ignoreversion
 ; Seed a user-visible model library. Existing and seeded files survive uninstall.
 Source: "{#WindowsAppRoot}\release\WheelAthlete\Model\*"; DestDir: "{app}\Model"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs uninsneveruninstall
 

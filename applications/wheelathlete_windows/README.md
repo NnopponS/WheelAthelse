@@ -50,7 +50,7 @@ packaging\windows\build_installer.bat
 
 Generated packages are written to `release/`.
 
-Public packages require a trusted Authenticode certificate and RFC3161 timestamp URL. The build signs and verifies the GUI, daemon, and installer and writes `signing-report.json` plus `SHA256SUMS.txt`. An unsigned local build is suitable for development only and does not resolve download reputation warnings or Application Control error 4551.
+Public packages require a trusted RSA Authenticode code-signing certificate and RFC3161 timestamp URL. The build signs and verifies all packaged executable components, the daemon-stop helper, generated uninstaller, and installer, then writes `signing-report.json` plus `SHA256SUMS.txt`. An unsigned local build is suitable for development only and does not resolve download reputation warnings or Application Control error 4551.
 
 Upgrade and uninstall run the installation-specific daemon shutdown helper first. It finishes an active journal before exit and blocks file removal if the daemon cannot stop. Recordings and custom models in the user's `Documents/WheelAthlete` tree are preserved.
 
