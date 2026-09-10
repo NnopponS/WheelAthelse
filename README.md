@@ -271,6 +271,10 @@ https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 
 Every downloadable artifact is pinned by exact byte size and SHA-256 in `latest.json`.
 
+The current v1.8.2 GitHub Release is source-only because trusted Windows signing
+is not configured. It publishes no `latest.json` and sends no application update
+offer. Windows binaries will be added only after Authenticode verification passes.
+
 - **Windows:** the installed PyInstaller build checks automatically after startup and every six hours, downloads and verifies the Inno Setup installer, then can silently update the existing AppId and relaunch WheelAthlete.
 - **Acquisition safety:** the Windows app will not install an update while Live preview, countdown, or recording is active.
 

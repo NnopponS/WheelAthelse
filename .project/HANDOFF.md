@@ -102,6 +102,11 @@
   `v1.8.2` tag/assets. When hardware returns, separately run the Python-app C
   record/QC/reopen/export check and the simultaneous L/R/C acceptance. Do not
   publish the current unsigned binaries.
+- Active user-authorized GitHub action: remove the v1.8.0 and v1.8.1 Release
+  entries while retaining their Git tags, then publish v1.8.2 as the latest
+  source-only Release. Pre-delete metadata and asset digests are saved under
+  ignored `.project/local/v1.8.2/github-releases-before-replacement/`. Do not
+  upload the unsigned local Windows artifacts or a `latest.json` update offer.
 
 Updated: 2026-09-08. This file is the continuation checklist after publishing the Windows/firmware 1.8.1 release branch while preserving unrelated dirty work.
 

@@ -2,13 +2,17 @@
 
 Version 1.8.2 distributes the Windows Research Application only. Flutter mobile source and tests remain under maintenance, but the release workflow does not build, publish, or advertise Android/iOS downloads.
 
-The stable update manifest is:
+The stable update manifest location is:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-The v1.8.2 manifest contains only the Windows installer. The client accepts an installer only when its HTTPS URL belongs to this repository's GitHub Releases path and its exact byte size and SHA-256 match the manifest.
+The source-only v1.8.2 release does not publish this manifest. Installed clients
+therefore receive no v1.8.2 update offer. When trusted signing is available, the
+manifest will contain only the signed Windows installer. The client accepts an
+installer only when its HTTPS URL belongs to this repository's GitHub Releases
+path and its exact byte size and SHA-256 match the manifest.
 
 ## Required signing configuration
 
@@ -36,9 +40,11 @@ Before creating `v1.8.2`:
 6. Import the synthetic portable model bundle in a clean installed app and confirm invalid bundles are rejected.
 7. Review the final diff and release contents for recordings, private paths, credentials, and generated research data.
 
-If signing or hardware acceptance is still open, keep the tag and GitHub Release unpublished and state the gate accurately.
+If signing or hardware acceptance is still open, do not publish binaries or an
+update manifest. A source-only Release page may be published when requested, but
+its notes must state the open gates accurately.
 
-## Published assets
+## Planned signed assets
 
 ```text
 WheelAthleteSetup-1.8.2.exe
@@ -48,6 +54,10 @@ signing-report.json
 latest.json
 ```
 
-The GitHub workflow tests source, imports signing material, builds the Windows outputs, verifies signatures, generates `latest.json`, and publishes the assets. The source branch is merged to `main` without force-pushing before the release tag is created.
+The v1.8.2 GitHub page currently contains GitHub's automatic source archives
+only. The GitHub workflow tests source, imports signing material, builds the
+Windows outputs, verifies signatures, generates `latest.json`, and publishes the
+listed assets only after signing succeeds. The source branch was merged to
+`main` without force-pushing before the release tag was created.
 
 See [RELEASE_NOTES_1.8.2.md](RELEASE_NOTES_1.8.2.md) for the prepared release notes and `applications/wheelathlete_windows/packaging/windows/README.md` for local build and uninstall details.

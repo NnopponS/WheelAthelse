@@ -15,4 +15,12 @@ WheelAthlete 1.8.2 is a Windows-first reliability and workflow release. The Flut
 
 ## Trust and acceptance status
 
-The release must be signed by a trusted Windows publisher certificate. Checksums alone do not remove Microsoft download reputation warnings or bypass an organization’s Application Control policy. The GitHub Release remains gated until `signing-report.json` shows valid signatures and the Windows installed-lifecycle and hardware acceptance checks in `.project/STATUS.md` are complete.
+This GitHub Release publishes the tested source snapshot only. Windows binaries,
+`latest.json`, and mobile binaries are withheld. The locally tested Windows
+packages are unsigned, and checksums alone do not remove Microsoft download
+reputation warnings or bypass an organization’s Application Control policy.
+
+A later binary release requires a trusted Windows publisher certificate and a
+`signing-report.json` in which the GUI, daemon, and installer are all `Valid`.
+Hardware acceptance still requires the deferred Python-app C QC/export and
+simultaneous L/R/C run described in `.project/STATUS.md`.

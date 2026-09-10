@@ -263,20 +263,27 @@ applications/wheelathlete_windows/release/
 
 ## ระบบอัปเดตแอปอัตโนมัติ
 
-Flutter Mobile และ Python Windows ใช้ manifest กลางจาก GitHub Releases เดียวกัน:
+ตำแหน่ง manifest สำหรับ Python Windows คือ:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-ไฟล์ที่ดาวน์โหลดทุกไฟล์มีทั้งขนาดแบบ exact bytes และ SHA-256 อยู่ใน `latest.json` เพื่อให้ client ตรวจสอบก่อนติดตั้ง
+Release `v1.8.2` ปัจจุบันเผยแพร่เฉพาะ source code เพราะยังไม่มี trusted
+Windows signing certificate จึงไม่มี `latest.json` และไม่มี update offer ในแอป
+ไฟล์ Windows จะเผยแพร่เมื่อ GUI, daemon และ installer ผ่าน Authenticode
+verification ครบทั้งหมดเท่านั้น
 
-- **Android:** release app ตรวจอัปเดตหลังเปิดแอปและทุก 6 ชั่วโมง ดาวน์โหลดเฉพาะ APK จาก HTTPS GitHub Release ของ repository นี้ ตรวจขนาดและ SHA-256 แล้วเปิด Android system installer ให้ผู้ใช้กดยืนยัน การอัปเดต APK ต่อเนื่องจำเป็นต้องใช้ release signing key เดิมทุกเวอร์ชัน ดังนั้น GitHub release workflow จะหยุดทันทีหากยังไม่ได้ตั้ง signing secrets
-- **iOS:** ใช้ manifest เดียวกันสำหรับตรวจเวอร์ชัน แต่การติดตั้งต้องส่งต่อไป App Store/TestFlight เพราะ iOS ไม่อนุญาตให้แอปดาวน์โหลด binary แล้วแทนที่ตัวเองโดยตรง
-- **Windows:** ตัวติดตั้งจริงที่ build ด้วย PyInstaller/Inno Setup จะตรวจอัปเดตหลังเปิดแอปและทุก 6 ชั่วโมง ดาวน์โหลด installer แล้วตรวจ size + SHA-256 ก่อน update AppId เดิมและเปิด WheelAthlete ใหม่อัตโนมัติ
-- **ความปลอดภัยระหว่างเก็บข้อมูล:** Mobile และ Windows จะไม่เริ่มติดตั้งอัปเดตขณะ Live preview, countdown หรือ recording กำลังทำงาน
+- **Windows:** เมื่อมี signed release แอปจะตรวจ exact size และ SHA-256 จาก
+  `latest.json` ก่อนติดตั้งอัปเดต
+- **ความปลอดภัยระหว่างเก็บข้อมูล:** แอป Windows จะไม่เริ่มติดตั้งอัปเดตขณะ
+  Live preview, countdown หรือ recording กำลังทำงาน
+- **Mobile:** Flutter อยู่ระหว่าง maintenance และไม่มี download/update ใน
+  `v1.8.2`
 
-ระบบ release อัตโนมัติอยู่ที่ `.github/workflows/release.yml` เมื่อสร้าง tag `v<version>` ระบบจะ test/build ทั้ง Android และ Windows, สร้าง `latest.json` และ publish APK + EXE + manifest ใน GitHub Release เดียวกัน ดูรายละเอียดที่ [`release/README.md`](release/README.md)
+ระบบ release อัตโนมัติอยู่ที่ `.github/workflows/release.yml` และจะ publish
+เฉพาะ Windows assets หลัง signing ผ่าน ดูรายละเอียดที่
+[`release/README.md`](release/README.md)
 
 > หมายเหตุ bootstrap: แอปเวอร์ชันเก่าที่ติดตั้งก่อนมี updater ไม่สามารถอัปเดตตัวเองได้ ต้องติดตั้ง updater-enabled release ครั้งแรกด้วยตนเอง 1 ครั้ง หลังจากนั้นจึงใช้อัปเดตในแอปได้
 
