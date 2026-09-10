@@ -176,15 +176,19 @@ Authenticode reports `NotSigned` for the GUI, daemon, and installer, so
 `public_release_ready` is false and these artifacts must not be published as a
 trusted release.
 
-### Stage 10 - GitHub release-page replacement: authorized and active
+### Stage 10 - GitHub release-page replacement: complete
 
 On 2026-09-10 the user explicitly authorized deleting the GitHub Release entries
 for v1.8.0 and v1.8.1 and adding v1.8.2 as the latest release. Their release
 metadata and asset digests are preserved under ignored
 `.project/local/v1.8.2/github-releases-before-replacement/`. Historical Git tags
-will be retained. Because trusted signing is still unavailable, v1.8.2 will be a
-source-only GitHub Release with no installer, portable ZIP, update manifest, or
-mobile binary. Release notes state these limits directly.
+were retained. Release entries v1.8.0 and v1.8.1 were removed, and v1.8.2 was
+published as the latest non-prerelease at
+`https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.2`. Tag v1.8.2 points
+to tested source commit `30446c5`; the release contains zero uploaded assets.
+Because trusted signing is still unavailable, it is source-only with no
+installer, portable ZIP, update manifest, or mobile binary. Release notes state
+these limits directly.
 
 The final installed lifecycle used the real default Documents layout and covered
 install, GUI launch, daemon listen/shutdown, same-version upgrade while the daemon
