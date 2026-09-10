@@ -150,6 +150,11 @@ The reviewed 111-path consolidation is staged; staged publication hygiene passes
 with the same 455 candidates and zero errors. No absolute user path, signing key,
 generated release package, or `BiWheel3D` file is present in the index.
 
+The reviewed source was committed on `codex/v1.8.2-repairs` as `667a7e0`
+(`release: prepare WheelAthlete 1.8.2 repairs`). The tracked worktree was clean
+after commit. GitHub branch/main publication is the active remaining software
+task; binary release publication remains blocked.
+
 The user directed this release to skip Flutter verification and instead complete
 the XIAO C record/QC workflow in the Python app. The mobile suite was stopped and
 is not a v1.8.2 release gate. Before it was stopped, `flutter analyze` passed; a

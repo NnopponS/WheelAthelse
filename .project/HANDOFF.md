@@ -88,9 +88,11 @@
 - The reviewed 111-path source consolidation is staged. Staged hygiene passes
   with 455 candidates and zero errors; ignored user data, packages, and local
   evidence are absent from the index.
-- Immediate next action: commit, merge to `main` without force, rerun
-  release-critical checks, and push source. Do not publish binaries or tag
-  `v1.8.2` because all three artifacts are unsigned.
+- Branch commit `667a7e0` (`release: prepare WheelAthlete 1.8.2 repairs`) contains
+  the reviewed consolidation. The tracked worktree was clean after commit.
+- Immediate next action: fetch GitHub, push `codex/v1.8.2-repairs`, merge to
+  `main` without force, rerun release-critical checks, and push source. Do not
+  publish binaries or tag `v1.8.2` because all three artifacts are unsigned.
 
 Updated: 2026-09-08. This file is the continuation checklist after publishing the Windows/firmware 1.8.1 release branch while preserving unrelated dirty work.
 
