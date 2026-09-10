@@ -2,15 +2,12 @@
 
 ## Active session: v1.8.2 repairs (2026-09-10)
 
-Branch: `codex/v1.8.2-repairs`. Implementation authorized, including tested source
-publication to main and gated v1.8.2 release. The maintained execution plan is
+Branch: `main`. Implementation and local acceptance are complete. The maintained execution plan is
 `.project/plans/v1.8.2-repair-release.md`.
 Pre-existing tracked changes and untracked source were copied to ignored
 `.project/local/v1.8.2/preexisting/`, with staged/unstaged binary patches.
 
-Work queue: complete final source/diff hygiene, commit the scoped repair set,
-merge it into `main` without force, rerun release-critical checks at the main
-SHA, and push source. Results, graceful daemon shutdown, signing support,
+Work queue: commit this final handoff and push tested `main`. Results, graceful daemon shutdown, signing support,
 portable model bundles, center firmware/clock repair, release documentation,
 Windows packaging, and the installed lifecycle are complete. The Python-app C
 record/QC/reopen/export check and full L/R/C hardware acceptance are deferred
@@ -152,8 +149,12 @@ generated release package, or `BiWheel3D` file is present in the index.
 
 The reviewed source was committed on `codex/v1.8.2-repairs` as `667a7e0`
 (`release: prepare WheelAthlete 1.8.2 repairs`). The tracked worktree was clean
-after commit. GitHub branch/main publication is the active remaining software
-task; binary release publication remains blocked.
+after commit. The repair branch is published at `origin/codex/v1.8.2-repairs`.
+It was merged without force or conflicts into local `main` at `c66c6ba`. That
+exact merge tree passes project hygiene with 455 candidates and zero errors and
+passes the full Windows suite **195/195** in 57.527 s. Main push is the only
+remaining software publication action; binary release publication remains
+blocked.
 
 The user directed this release to skip Flutter verification and instead complete
 the XIAO C record/QC workflow in the Python app. The mobile suite was stopped and

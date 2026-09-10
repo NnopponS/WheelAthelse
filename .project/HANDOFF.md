@@ -2,7 +2,8 @@
 
 ## Active v1.8.2 session handoff (2026-09-10)
 
-- Working branch: `codex/v1.8.2-repairs`; preserve the existing dirty work.
+- Working branch: `main`; the tracked tree was clean before this final handoff
+  update. The original dirty work remains archived under ignored local evidence.
 - User authorizes implementing the repair plan, updating main without force,
   and publishing v1.8.2 only after release gates. This supersedes historical
   main/publication restrictions below for this scoped task.
@@ -90,9 +91,12 @@
   evidence are absent from the index.
 - Branch commit `667a7e0` (`release: prepare WheelAthlete 1.8.2 repairs`) contains
   the reviewed consolidation. The tracked worktree was clean after commit.
-- Immediate next action: fetch GitHub, push `codex/v1.8.2-repairs`, merge to
-  `main` without force, rerun release-critical checks, and push source. Do not
-  publish binaries or tag `v1.8.2` because all three artifacts are unsigned.
+- `origin/codex/v1.8.2-repairs` is published. Local `main` merged it normally at
+  `c66c6ba` without conflicts or force. The exact merge tree passes project
+  hygiene (455 candidates, zero errors) and Windows **195/195** in 57.527 s.
+- Immediate next action: commit this final handoff, verify the documentation-only
+  tip, and push `main`. Do not publish binaries or tag `v1.8.2` because all three
+  artifacts are unsigned.
 
 Updated: 2026-09-08. This file is the continuation checklist after publishing the Windows/firmware 1.8.1 release branch while preserving unrelated dirty work.
 
