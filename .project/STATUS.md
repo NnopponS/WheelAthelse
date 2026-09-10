@@ -6,7 +6,7 @@ Updated: 2026-09-10
 
 - Product: **WheelAthlete 1.8.2**
 - Primary branch: `main`
-- Release branch target: `release/main-v1.8.2`
+- Public release branch: `release/main-v1.8.2`
 - Windows application: `1.8.2`
 - M5StickC Plus2 firmware: `1.8.2`
 - XIAO nRF52840 Sense firmware: `1.8.2`
@@ -15,9 +15,16 @@ Updated: 2026-09-10
 
 ## Consolidation state
 
-The 1.8.2 repair work and earlier dual-IMU coaching-analysis work are already ancestors of `main`. The remaining Windows trust-hardening branch was merged into `main` on 2026-09-10 without force-pushing or conflicts. No mobile source file was introduced by that merge.
+The 1.8.2 repair work, earlier dual-IMU coaching-analysis work, and Windows trust-hardening work are all integrated into `main`. The trust-hardening merge was normal/non-force and conflict-free. No mobile application source or `BiWheel3D` file was introduced by this consolidation.
 
-The current consolidation is standardizing the public repository around only two remote branches: `main` and `release/main-v1.8.2`. Historical release entries are being removed from the GitHub Releases page while historical version tags are retained for traceability. The separate local `BiWheel3D/` repository is outside this publication boundary.
+All obsolete remote development/archive/release branches were verified as ancestors of the integrated `main` before removal. The intended final GitHub branch surface is only:
+
+- `main`
+- `release/main-v1.8.2`
+
+Old visible GitHub Release entries were removed so the Releases page contains only `v1.8.2`. Historical version tags are retained for traceability. The `v1.8.2` release/tag is source-only and is finalized at the exact consolidated release commit; no unsigned Windows or mobile assets belong to it.
+
+The separate local `BiWheel3D/` repository remains outside the root repository publication boundary.
 
 ## Windows application
 
@@ -32,9 +39,10 @@ Implemented 1.8.2 release features include:
 - concrete sensor fault reporting instead of an unexplained generic `CHECK` state;
 - contained versioned portable model bundles with compatibility/path validation;
 - installed-app update support through a verified GitHub Release manifest when a trusted signed release exists;
-- fail-closed Windows release signing that verifies packaged EXE/DLL/PYD/PowerShell components, the generated uninstaller and the installer.
+- fail-closed Windows release signing that verifies packaged EXE/DLL/PYD/PowerShell components, the generated uninstaller and the installer;
+- a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload.
 
-Fresh 2026-09-10 consolidation verification passed **195/195** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, and `git diff --check`. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
+Fresh 2026-09-10 consolidation verification passed **195/195** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
 
 ## Firmware and optional center sensor
 
@@ -50,7 +58,7 @@ The installed Windows default remains the frozen classical L/R XY+yaw model. Exp
 
 ## Release and trust status
 
-The current GitHub v1.8.2 page is source-only. Public Windows binaries and `latest.json` remain blocked until a trusted RSA Code Signing identity with Code Signing EKU, the exact expected publisher subject and an RFC3161 timestamp service are available. Local unsigned packages are development artifacts only and must not be presented as solving SmartScreen/Application Control trust.
+The GitHub v1.8.2 page is intentionally **source-only**. Public Windows binaries and `latest.json` remain blocked until a trusted RSA Code Signing identity with Code Signing EKU, the exact expected publisher subject and a timestamp service are available. Local unsigned packages are development artifacts only and must not be presented as solving SmartScreen/Application Control trust.
 
 The fresh unsigned-local packaging run generated a 63,571,038-byte installer (SHA-256 `BE5C2B8769E3DC87116A7CD491F54B780984BE2D12D03418A807635EE899F5C4`) and a 92,775,101-byte portable ZIP (SHA-256 `E662D1D9A43660966FB02121F1C4763AAAA8A20050B913820F4E2649B36497A7`). Its signing report is schema 2, covers 163 executable components, and correctly reports `public_release_ready=false` because no trusted signing identity is configured. These generated files remain ignored local evidence and must not be uploaded.
 
@@ -58,17 +66,13 @@ When signing is configured, the release build must return `public_release_ready=
 
 ## Publication boundary
 
-The current consolidation does **not** publish new mobile source changes or mobile binaries. Existing Flutter history/source is retained as maintenance material, but no APK/AAB/IPA or mobile update offer belongs to v1.8.2.
+This v1.8.2 consolidation publishes **no new mobile source changes and no mobile binaries**. Existing Flutter history/source is retained as maintenance material, but no APK/AAB/IPA or mobile update offer belongs to v1.8.2.
 
-Private recordings, generated packages, local evidence, signing material, absolute user paths and the separate `BiWheel3D/` repository must remain outside the source commit. Local evidence belongs under ignored `.project/local/`.
+Private recordings, generated packages, local evidence, signing material, absolute user paths and the separate `BiWheel3D/` repository remain outside the source commit. Local evidence belongs under ignored `.project/local/`.
 
-## Final gates for this consolidation
+## Source/repository acceptance
 
-1. Refresh EN/TH README, release documentation, current project-state documents and stale center/release references.
-2. Confirm repository hygiene and no accidental mobile/BiWheel3D/private-material diff.
-3. Run the full Windows test suite and release/package checks at the exact final commit.
-4. Run firmware host verification/build checks for maintained targets.
-5. Push `main`, create/push `release/main-v1.8.2`, retarget the source-only `v1.8.2` tag/release to the final tested commit, remove old visible GitHub Release entries, and remove obsolete remote branches.
+Repository-side v1.8.2 consolidation is complete when the final commit is visible through `main`, `release/main-v1.8.2`, and tag/Release `v1.8.2`. Old remote branches and old visible Release entries are intentionally absent; historical tags remain.
 
 ## Deferred external acceptance
 
