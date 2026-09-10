@@ -1,48 +1,53 @@
-# WheelAthlete release and automatic updates
+# WheelAthlete v1.8.2 Windows release
 
-WheelAthlete Mobile and WheelAthlete Windows consume one stable GitHub Releases manifest:
+Version 1.8.2 distributes the Windows Research Application only. Flutter mobile source and tests remain under maintenance, but the release workflow does not build, publish, or advertise Android/iOS downloads.
+
+The stable update manifest is:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-`latest.json` is generated only after the Android APK and Windows installer have been built. Each downloadable artifact records its exact byte size and SHA-256 digest. Both clients reject malformed manifests, non-HTTPS artifacts, downloads outside the official `NnopponS/WheelAthelse` GitHub Releases path, size mismatches, and hash mismatches.
+The v1.8.2 manifest contains only the Windows installer. The client accepts an installer only when its HTTPS URL belongs to this repository's GitHub Releases path and its exact byte size and SHA-256 match the manifest.
 
-## Platform behavior
+## Required signing configuration
 
-- **Android:** the app downloads the verified APK into its private cache and opens Android's system package installer. The user must approve the update. Direct GitHub distribution may require enabling **Install unknown apps** for WheelAthlete. Installation is never started while Live preview, countdown, or recording is active.
-- **iOS:** the app checks the same manifest, but installation is App Store/TestFlight managed. Set the GitHub repository variable `WHEELATHLETE_IOS_UPDATE_URL` to the production App Store or TestFlight URL when one is available.
-- **Windows:** only an Inno-installed PyInstaller build self-installs. It downloads the installer, verifies size + SHA-256, refuses installation during active acquisition, exits the GUI, runs Inno Setup with `/AUTOUPDATE=1`, and relaunches WheelAthlete. Source and portable builds may check releases manually but do not replace themselves.
-
-## Android release signing
-
-Android will only accept an in-place update when every release is signed by the same key and has a strictly increasing `versionCode`. The tag workflow therefore requires these GitHub Actions secrets and fails instead of silently producing an incompatible public APK:
+Public release jobs require a trusted Windows code-signing PFX and RFC3161 timestamp URL:
 
 ```text
-ANDROID_KEYSTORE_BASE64
-ANDROID_KEYSTORE_PASSWORD
-ANDROID_KEY_ALIAS
-ANDROID_KEY_PASSWORD
+GitHub secret: WHEELATHLETE_SIGN_PFX_BASE64
+GitHub secret: WHEELATHLETE_SIGN_PFX_PASSWORD
+GitHub variable: WHEELATHLETE_TIMESTAMP_URL
 ```
 
-`ANDROID_KEYSTORE_BASE64` is the persistent release keystore encoded as base64. Never commit the keystore or its passwords to this repository. Local `flutter build apk --release` can still fall back to the debug key for development, but that APK is **not** suitable for the public auto-update channel.
+The workflow imports the certificate into the current user's store, builds the package, and signs/verifies the GUI, acquisition daemon, and installer. Missing or invalid signing material fails the Windows job. Never commit the PFX, password, certificate thumbprint, or private key.
 
-If users already installed a debug-signed APK, a differently signed production APK cannot update it in place. Preserve/export important local research sessions before migrating those devices to the permanent production signing key.
+Microsoft download reputation warnings and Application Control error 4551 are separate trust decisions. Checksums protect integrity after download; they do not establish publisher trust. Do not publish or describe an unsigned build as fixing either warning.
 
-## Publishing a release
+## Release gates
 
-1. Update the application version/build as appropriate. The root `VERSION` and Flutter semantic version must match. Android's build number after `+` must increase.
-2. Commit the release-ready source on the non-`main` release branch used by the project.
-3. Create the release tag `v<version>`. Until GitHub Android signing secrets are configured, publish signed release artifacts from the protected local release key instead of triggering CI from a tag.
-4. When manually dispatched after signing secrets are configured, `.github/workflows/release.yml` runs the Flutter analyzer/tests, Android release build, Windows Python tests/compile checks, PyInstaller/Inno Setup packaging, and generates `latest.json` from the exact artifacts.
-5. The workflow publishes:
+Before creating `v1.8.2`:
+
+1. Run project and staged hygiene checks.
+2. Run the complete Windows suite and the retained mobile maintenance suite.
+3. Build changed firmware and complete the physical center and L/R/C acceptance recorded in `.project/STATUS.md`.
+4. Build a signed Windows package and confirm every entry in `signing-report.json` is `Valid`.
+5. Test download, install, GUI/daemon launch, upgrade, uninstall, and reinstall on Windows. Confirm installation-owned binaries, processes, shortcuts, and registration are removed while recordings and custom models survive.
+6. Import the synthetic portable model bundle in a clean installed app and confirm invalid bundles are rejected.
+7. Review the final diff and release contents for recordings, private paths, credentials, and generated research data.
+
+If signing or hardware acceptance is still open, keep the tag and GitHub Release unpublished and state the gate accurately.
+
+## Published assets
 
 ```text
-WheelAthlete-Android-<version>.apk
-WheelAthleteSetup-<version>.exe
+WheelAthleteSetup-1.8.2.exe
+WheelAthlete-1.8.2-portable.zip
+SHA256SUMS.txt
+signing-report.json
 latest.json
 ```
 
-## Bootstrap limitation
+The GitHub workflow tests source, imports signing material, builds the Windows outputs, verifies signatures, generates `latest.json`, and publishes the assets. The source branch is merged to `main` without force-pushing before the release tag is created.
 
-A build that predates the updater cannot discover or install its first update by itself. Install the first updater-enabled production release manually once. All later compatible releases can use the in-app update flow.
+See [RELEASE_NOTES_1.8.2.md](RELEASE_NOTES_1.8.2.md) for the prepared release notes and `applications/wheelathlete_windows/packaging/windows/README.md` for local build and uninstall details.

@@ -81,7 +81,7 @@ class ConnectionCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${side.label} wheel',
+                                  side.deviceLabel,
                                   style: theme.textTheme.titleMedium,
                                 ),
                                 Text(

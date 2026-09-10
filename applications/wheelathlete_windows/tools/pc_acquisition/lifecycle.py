@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from .clock_sync import ClockModel, ClockObservation, Uint32Unwrapper
-from .control import scheduled_start, stop, sync_ping
+from .control import scheduled_start, set_utc, stop, sync_ping
 from .engine import DualBoardEngine
 from .models import NotificationEnvelope, WheelSide
 from .sync_protocol import (
@@ -57,6 +57,7 @@ class StartResult:
     mapped_start_ns: dict[WheelSide, int]
     target_device_us: dict[WheelSide, int]
     start_skew_ns: int | None
+    utc_start_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +95,7 @@ class SyncLifecycleController:
         count: int = 10,
         timeout_s: float = 1.0,
         inter_ping_s: float = 0.01,
-        clock_ns: Callable[[], int] = time.monotonic_ns,
+        clock_ns: Callable[[], int] = time.perf_counter_ns,
     ) -> ClockModel:
         if count < 1:
             raise ValueError("count must be >= 1")
@@ -133,12 +134,13 @@ class SyncLifecycleController:
         pc_start_ns: int | None = None,
         lead_time_s: float = 3.0,
         ack_timeout_s: float = 1.0,
+        utc_start_ms: int | None = None,
     ) -> StartResult:
         selected = tuple(sides)
         if not selected:
             raise ValueError("at least one wheel is required")
         if pc_start_ns is None:
-            pc_start_ns = time.monotonic_ns() + round(lead_time_s * 1_000_000_000)
+            pc_start_ns = time.perf_counter_ns() + round(lead_time_s * 1_000_000_000)
 
         targets: dict[WheelSide, int] = {}
         waiters: dict[WheelSide, asyncio.Future[StartFiredEvent]] = {}
@@ -149,6 +151,19 @@ class SyncLifecycleController:
             waiter: asyncio.Future[StartFiredEvent] = loop.create_future()
             self._state[side].start_waiter = waiter
             waiters[side] = waiter
+
+        # Give every sensor the same absolute UTC value for T0 before START.
+        # This does not replace the monotonic affine clock model used for sample
+        # synchronization; it gives the recording/UI a wall-clock anchor that
+        # cannot drift with a GUI timer.
+        if utc_start_ms is not None:
+            for side in selected:
+                await self.transport.write(
+                    self._require_device(side),
+                    CONTROL_UUID,
+                    set_utc(utc_start_ms),
+                    response=True,
+                )
 
         # Commands may arrive at different host times; device-local scheduled
         # targets are derived from the same PC T0 so write ordering is not the
@@ -169,7 +184,7 @@ class SyncLifecycleController:
         # only prevents a local timer race; actual mapped start time still comes
         # from START_FIRED and therefore cannot make sync quality look better.
         remaining_to_start_s = max(
-            0.0, (pc_start_ns - time.monotonic_ns()) / 1_000_000_000
+            0.0, (pc_start_ns - time.perf_counter_ns()) / 1_000_000_000
         )
         start_wait_timeout_s = (
             remaining_to_start_s + ack_timeout_s + _HOST_TIMER_SLACK_S
@@ -192,6 +207,7 @@ class SyncLifecycleController:
             mapped_start_ns=mapped,
             target_device_us=targets,
             start_skew_ns=skew,
+            utc_start_ms=utc_start_ms,
         )
 
     async def stop_all(

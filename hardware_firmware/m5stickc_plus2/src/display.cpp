@@ -38,13 +38,17 @@ void StatusDisplay::begin(char wheel_id) {
     d.setRotation(3);
     d.setTextWrap(false);
     d.fillScreen(BLACK);
-    d.fillRect(0, 0, 10, d.height(), wheel_id == 'L' ? BLUE : RED);
+    const uint16_t identity_bar = wheel_id == 'L' ? BLUE : (wheel_id == 'C' ? YELLOW : RED);
+    const uint16_t identity_text = wheel_id == 'L' ? CYAN : (wheel_id == 'C' ? YELLOW : ORANGE);
+    d.fillRect(0, 0, 10, d.height(), identity_bar);
 
     // Static dashboard is painted exactly once, before Arduino loop().
-    d.setTextColor(wheel_id == 'L' ? CYAN : ORANGE);
+    d.setTextColor(identity_text);
     d.setTextSize(6);
     d.setCursor(22, 12);
     d.printf("%c", wheel_id);
+    last_identity_[0] = wheel_id;
+    last_identity_[1] = '\0';
 
     d.setTextColor(WHITE);
     d.setTextSize(1);
@@ -68,8 +72,24 @@ void StatusDisplay::refresh(char wheel_id,
                             bool transport_retry_active,
                             uint32_t transport_failures) {
     if (!initialized_) return;
-    (void)wheel_id;  // identity is static and was painted once by begin().
     const uint32_t now = millis();
+
+    // M5StickC Plus2 has no RGB status LED. Keep the center identity bar
+    // yellow, and blink only the large yellow C glyph so the display's
+    // anti-flicker rule (no background rectangle clears in refresh) remains
+    // intact. This runs outside the slower dashboard refresh cadence so a
+    // 150 ms recording heartbeat is actually visible.
+    if (wheel_id == 'C') {
+        const bool identity_on = running
+            ? ((now % 1000U) < 150U)
+            : (((now / 500U) % 2U) == 0U);
+        if (identity_on != last_center_identity_on_) {
+            drawChanged(last_identity_, sizeof(last_identity_),
+                        identity_on ? "C" : "", 22, 12, 6, YELLOW);
+            last_center_identity_on_ = identity_on;
+        }
+    }
+
     if (!countdown_active_ && now - last_draw_ < (running ? 1000U : 250U)) return;
     last_draw_ = now;
 

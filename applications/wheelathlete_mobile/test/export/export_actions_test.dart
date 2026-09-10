@@ -170,6 +170,64 @@ void main() {
       },
     );
 
+    test(
+      'session with center IMU adds center_raw without changing training artifact',
+      () async {
+        final centerMeta = SessionMeta(
+          sessionId: 'center',
+          topic: 'sprint',
+          trialNumber: 3,
+          sampleRateHz: 100,
+          startTime: DateTime.utc(2026, 6, 29),
+          durationMs: 1000,
+          sampleCount: 3,
+          markerCount: 0,
+          recordedSides: const ['L', 'R', 'C'],
+        );
+        final centerSamples = [
+          ..._samples(),
+          const BufferedSample(
+            reading: ImuReading(
+              seq: 0,
+              tDeviceUs: 0,
+              ax: 0,
+              ay: 0,
+              az: 1,
+              gx: 0,
+              gy: 0,
+              gz: 0,
+            ),
+            wheel: WheelSide.center,
+            timestampAppMs: 0,
+            timestampSyncedMs: 0,
+          ),
+        ];
+        await storage.saveSession('sprint', centerMeta, centerSamples);
+        final paths = <String>[];
+        final payloads = <String>[];
+        final written = await ExportActions(ops, storage).saveToDevice(
+          level: ExportLevel.session,
+          topic: 'sprint',
+          trialNumber: 3,
+          sessionId: 'center',
+          pickDirectory: () async => '/picked/dir',
+          writeFile: (path, bytes) async {
+            paths.add(path);
+            payloads.add(String.fromCharCodes(bytes));
+          },
+        );
+        expect(written, hasLength(5));
+        expect(paths.any((path) => path.endsWith('_center_raw.csv')), isTrue);
+        expect(paths.any((path) => path.endsWith('_training.csv')), isTrue);
+        final centerCsv =
+            payloads[paths.indexWhere(
+              (path) => path.endsWith('_center_raw.csv'),
+            )];
+        expect(centerCsv, startsWith(CsvExporter.rawHeader));
+        expect(centerCsv, contains('0,0,0,1,0,0,0'));
+      },
+    );
+
     test('trial level writes one file per session in the trial', () async {
       final actions = ExportActions(ops, storage);
       final writtenPaths = <String>[];

@@ -352,5 +352,76 @@ void main() {
       expect(lines[2].split(',')[1], '2');
       expect(lines[2].split(',')[7], '12');
     });
+    test('optional C section is emitted as C and follows L/R tables', () {
+      final samples = [
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.left),
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.right),
+        _sample(seq: 0, tDeviceUs: 0, syncedMs: 0, wheel: WheelSide.center),
+      ];
+      final csv = CsvExporter.toCsvString(samples);
+      final l = csv.indexOf('# Wheel: L');
+      final r = csv.indexOf('# Wheel: R');
+      final c = csv.indexOf('# Wheel: C');
+      expect(l, lessThan(r));
+      expect(r, lessThan(c));
+      expect(csv, contains('0,C,'));
+    });
+
+    test('adding center samples does not change frozen L/R training CSV', () {
+      final lr = [
+        _sample(
+          seq: 0,
+          tDeviceUs: 0,
+          syncedMs: 0,
+          wheel: WheelSide.left,
+          ax: 1,
+        ),
+        _sample(
+          seq: 1,
+          tDeviceUs: 20000,
+          syncedMs: 20,
+          wheel: WheelSide.left,
+          ax: 3,
+        ),
+        _sample(
+          seq: 0,
+          tDeviceUs: 0,
+          syncedMs: 0,
+          wheel: WheelSide.right,
+          ax: 10,
+        ),
+        _sample(
+          seq: 1,
+          tDeviceUs: 20000,
+          syncedMs: 20,
+          wheel: WheelSide.right,
+          ax: 14,
+        ),
+      ];
+      final withCenter = [
+        ...lr,
+        _sample(
+          seq: 0,
+          tDeviceUs: 0,
+          syncedMs: 0,
+          wheel: WheelSide.center,
+          ax: 9999,
+        ),
+        _sample(
+          seq: 1,
+          tDeviceUs: 20000,
+          syncedMs: 20,
+          wheel: WheelSide.center,
+          ax: -9999,
+        ),
+      ];
+      expect(
+        CsvExporter.toAlignedTrainingCsvString(
+          withCenter,
+          gridIntervalUs: 10000,
+        ),
+        CsvExporter.toAlignedTrainingCsvString(lr, gridIntervalUs: 10000),
+      );
+    });
   });
 }

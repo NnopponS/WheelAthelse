@@ -140,8 +140,8 @@ class PendingPing {
 class SyncEngineState {
   SyncEngineState({Map<WheelSide, WheelSyncState>? bySide})
     : bySide = {
-        WheelSide.left: bySide?[WheelSide.left] ?? const WheelSyncState(),
-        WheelSide.right: bySide?[WheelSide.right] ?? const WheelSyncState(),
+        for (final side in WheelSide.values)
+          side: bySide?[side] ?? const WheelSyncState(),
       };
 
   final Map<WheelSide, WheelSyncState> bySide;

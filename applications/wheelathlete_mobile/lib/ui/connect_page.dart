@@ -30,7 +30,7 @@ class ConnectPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connect Wheels'),
+        title: const Text('Connect Sensors'),
         actions: [
           IconButton(
             tooltip: 'Live IMU',
@@ -89,37 +89,29 @@ class _ConnectionPair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final left = state.bySide[WheelSide.left]!;
-    final right = state.bySide[WheelSide.right]!;
     return Column(
       children: [
-        ConnectionCard(
-          side: WheelSide.left,
-          status: left.status,
-          deviceName: left.deviceName,
-          batteryPercent: left.batteryPercent,
-          rssi: left.rssi,
-          onSettings: left.status == ConnectionStatus.connected
-              ? () => onSettings(WheelSide.left)
-              : null,
-          onDisconnect: left.status == ConnectionStatus.connected
-              ? () => onDisconnect(WheelSide.left)
-              : null,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        ConnectionCard(
-          side: WheelSide.right,
-          status: right.status,
-          deviceName: right.deviceName,
-          batteryPercent: right.batteryPercent,
-          rssi: right.rssi,
-          onSettings: right.status == ConnectionStatus.connected
-              ? () => onSettings(WheelSide.right)
-              : null,
-          onDisconnect: right.status == ConnectionStatus.connected
-              ? () => onDisconnect(WheelSide.right)
-              : null,
-        ),
+        for (var index = 0; index < WheelSide.values.length; index++) ...[
+          if (index > 0) const SizedBox(height: AppSpacing.sm),
+          ConnectionCard(
+            side: WheelSide.values[index],
+            status: state.bySide[WheelSide.values[index]]!.status,
+            deviceName: state.bySide[WheelSide.values[index]]!.deviceName,
+            batteryPercent:
+                state.bySide[WheelSide.values[index]]!.batteryPercent,
+            rssi: state.bySide[WheelSide.values[index]]!.rssi,
+            onSettings:
+                state.bySide[WheelSide.values[index]]!.status ==
+                    ConnectionStatus.connected
+                ? () => onSettings(WheelSide.values[index])
+                : null,
+            onDisconnect:
+                state.bySide[WheelSide.values[index]]!.status ==
+                    ConnectionStatus.connected
+                ? () => onDisconnect(WheelSide.values[index])
+                : null,
+          ),
+        ],
       ],
     );
   }

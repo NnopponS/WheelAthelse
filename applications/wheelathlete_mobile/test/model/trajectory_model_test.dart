@@ -59,7 +59,36 @@ void main() {
     expect(row[3], closeTo(math.pi, 1e-9));
     expect(row[6], closeTo(19.6133, 1e-6));
     expect(row[9], closeTo(math.pi / 2, 1e-9));
-    expect(result.warnings, isEmpty);
+    expect(
+      result.warnings.any((w) => w.contains('not independently validated')),
+      isTrue,
+    );
+  });
+
+  test('optional center IMU is not inserted into legacy L/R model tensor', () {
+    final lr = _dualWheel(count: 250);
+    final withCenter = <BufferedSample>[...lr];
+    for (var i = 0; i < 250; i++) {
+      final tMs = i * 10.0;
+      withCenter.add(
+        _sample(
+          side: WheelSide.center,
+          seq: i,
+          tMs: tMs,
+          ax: 9999,
+          ay: -8888,
+          az: 7777,
+          gx: 6666,
+          gy: -5555,
+          gz: 4444,
+        ),
+      );
+    }
+    final a = prepareTrajectoryInput(lr, sourceRateHz: 100);
+    final b = prepareTrajectoryInput(withCenter, sourceRateHz: 100);
+    expect(b.windows, equals(a.windows));
+    expect(b.timeSeconds, equals(a.timeSeconds));
+    expect(b.modelStepCount, a.modelStepCount);
   });
 
   test('non-100 Hz source is resampled and surfaced as warning', () {
@@ -69,7 +98,10 @@ void main() {
     );
 
     expect(result.modelStepCount, 50);
-    expect(result.warnings.single, contains('resampled to 100 Hz'));
+    expect(
+      result.warnings.any((w) => w.contains('resampled to 100 Hz')),
+      isTrue,
+    );
   });
 
   test('requires both wheels', () {
@@ -121,7 +153,9 @@ void main() {
   test('BiWheel3D feature extractor matches Python reference fixture', () {
     final fixture =
         jsonDecode(
-              File('test/fixtures/biwheel3d_features.json').readAsStringSync(),
+              File(
+                '../../docs/model_analysis/fixtures/features_v1.json',
+              ).readAsStringSync(),
             )
             as Map<String, dynamic>;
     final windows = (fixture['windows'] as List)

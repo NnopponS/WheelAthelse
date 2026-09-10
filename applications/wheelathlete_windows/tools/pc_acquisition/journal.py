@@ -19,6 +19,8 @@ from .models import AcquisitionFault, ImuSample, ReceivedSample, WheelSide
 
 MAGIC = b"WATHJNL1"
 JOURNAL_VERSION = 1
+CENTER_JOURNAL_VERSION = 2
+SUPPORTED_JOURNAL_VERSIONS = frozenset({JOURNAL_VERSION, CENTER_JOURNAL_VERSION})
 _HEADER = struct.Struct("<8sH6x")
 _FRAME_HEADER = struct.Struct("<BI")
 _CRC = struct.Struct("<I")
@@ -34,6 +36,9 @@ _SEQUENCE_TO_CODE = {
     "out_of_order": 4,
 }
 _CODE_TO_SEQUENCE = {value: key for key, value in _SEQUENCE_TO_CODE.items()}
+
+_SIDE_TO_CODE = {WheelSide.LEFT: 0, WheelSide.RIGHT: 1, WheelSide.CENTER: 2}
+_CODE_TO_SIDE = {value: key for key, value in _SIDE_TO_CODE.items()}
 
 
 class RecordKind(IntEnum):
@@ -98,11 +103,15 @@ class JournalRecorder:
         queue_capacity: int = 4096,
         fsync_every_records: int = 256,
         start_thread: bool = True,
+        journal_version: int = JOURNAL_VERSION,
     ) -> None:
         if queue_capacity < 1:
             raise ValueError("queue_capacity must be >= 1")
         if fsync_every_records < 1:
             raise ValueError("fsync_every_records must be >= 1")
+        if journal_version not in SUPPORTED_JOURNAL_VERSIONS:
+            raise ValueError(f"unsupported journal version {journal_version}")
+        self.journal_version = int(journal_version)
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.session_id = session_id or str(uuid.uuid4())
@@ -118,7 +127,7 @@ class JournalRecorder:
         self._records_since_sync = 0
         self._lock = threading.Lock()
         self._handle = self.open_path.open("xb", buffering=0)
-        self._handle.write(_HEADER.pack(MAGIC, JOURNAL_VERSION))
+        self._handle.write(_HEADER.pack(MAGIC, self.journal_version))
         self._handle.flush()
         os.fsync(self._handle.fileno())
         self._thread: threading.Thread | None = None
@@ -207,12 +216,12 @@ class JournalRecorder:
                 if item is _STOP:
                     return
                 assert isinstance(item, ReceivedSample)
-                started = time.monotonic_ns()
+                started = time.perf_counter_ns()
                 self._append_record(RecordKind.SAMPLE, self._pack_sample(item))
                 self.metrics.samples_written += 1
                 self.metrics.max_write_latency_ns = max(
                     self.metrics.max_write_latency_ns,
-                    time.monotonic_ns() - started,
+                    time.perf_counter_ns() - started,
                 )
             except Exception as exc:
                 if self.fatal_fault is None:
@@ -223,7 +232,12 @@ class JournalRecorder:
                 self._queue.task_done()
 
     def _pack_sample(self, received: ReceivedSample) -> bytes:
-        side = 0 if received.side is WheelSide.LEFT else 1
+        try:
+            side = _SIDE_TO_CODE[received.side]
+        except KeyError as exc:
+            raise ValueError(f"unsupported sample side {received.side!r}") from exc
+        if side == 2 and self.journal_version < CENTER_JOURNAL_VERSION:
+            raise ValueError("center samples require WheelAthlete journal v2")
         sequence_code = _SEQUENCE_TO_CODE.get(received.sequence_class, 255)
         sample = received.sample
         return _SAMPLE.pack(
@@ -273,6 +287,12 @@ class JournalRecorder:
 class JournalReader:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
+        self._version: int | None = None
+
+    @property
+    def journal_version(self) -> int | None:
+        """Header version after the journal has been validated or read."""
+        return self._version
 
     def validate(self) -> JournalValidation:
         valid_records = 0
@@ -287,8 +307,9 @@ class JournalReader:
             magic, version = _HEADER.unpack(header)
             if magic != MAGIC:
                 raise JournalFormatError("journal magic mismatch")
-            if version != JOURNAL_VERSION:
+            if version not in SUPPORTED_JOURNAL_VERSIONS:
                 raise JournalFormatError(f"unsupported journal version {version}")
+            self._version = int(version)
 
             while True:
                 frame_start = handle.tell()
@@ -348,12 +369,14 @@ class JournalReader:
                 payload = handle.read(payload_len)
                 handle.read(_CRC.size)
                 kind = RecordKind(kind_raw)
-                yield self._decode_record(kind, payload)
+                yield self._decode_record(kind, payload, version=self._version or JOURNAL_VERSION)
 
     def read_all(self) -> list[JournalRecord]:
         return list(self.iter_records())
 
-    def _decode_record(self, kind: RecordKind, payload: bytes) -> JournalRecord:
+    def _decode_record(
+        self, kind: RecordKind, payload: bytes, *, version: int
+    ) -> JournalRecord:
         if kind is RecordKind.SAMPLE:
             if len(payload) != _SAMPLE.size:
                 raise JournalFormatError("sample record has invalid size")
@@ -373,7 +396,12 @@ class JournalReader:
                 sequence_code,
                 missing_before,
             ) = _SAMPLE.unpack(payload)
-            side = WheelSide.LEFT if side_raw == 0 else WheelSide.RIGHT
+            if side_raw == 2 and version < CENTER_JOURNAL_VERSION:
+                raise JournalFormatError("center side code is invalid in journal v1")
+            try:
+                side = _CODE_TO_SIDE[side_raw]
+            except KeyError as exc:
+                raise JournalFormatError(f"invalid sample side code {side_raw}") from exc
             sample = ReceivedSample(
                 side=side,
                 sample=ImuSample(

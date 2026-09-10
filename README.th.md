@@ -4,12 +4,18 @@
 
 WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายและขวาเพื่อเก็บข้อมูล accelerometer และ gyroscope แบบซิงโครไนซ์ พร้อมแอปสำหรับมือถือและ Windows เพื่อใช้เก็บข้อมูลภาคสนาม ดูสถานะ ตรวจคุณภาพ จัดการ session ส่งออกข้อมูล และวิเคราะห์ trajectory แบบเสริม
 
-> **Release ปัจจุบัน:** `v1.8.0`
-> **Mobile application:** `1.8.0+10`
-> **Firmware:** `1.8.0`
+> **Release ปัจจุบัน:** `v1.8.2` (Windows-first)
+> **Mobile application:** source `1.8.2+12` อยู่ระหว่างบำรุงรักษาและยังไม่เปิดให้ใช้งาน
+> **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.0`
+> **Windows package:** `1.8.2`
 > **ภาษา:** [English](README.md) | ไทย
+
+## WheelAthlete 1.8.2 สำหรับ Windows
+
+รุ่น 1.8.2 เผยแพร่เฉพาะ Windows ส่วน source และ tests ของ Flutter iOS/Android ยังคงอยู่ใน repository เพื่อบำรุงรักษา แต่ไม่มีไฟล์ติดตั้ง ลิงก์ดาวน์โหลด หรือ mobile update ใน release นี้ แพ็กเกจ Windows สำหรับเผยแพร่ต้องมีลายเซ็น Authenticode ที่เชื่อถือได้; checksum หรือแพ็กเกจที่ไม่ได้เซ็นไม่สามารถแก้ download reputation warning หรือ Application Control error 4551 ได้
+
+สถานะปัจจุบันอยู่ใน `.project/STATUS.md` และงานต่อเนื่องอยู่ใน `.project/HANDOFF.md` ข้อมูลวิจัย log และเอกสารเก่าถูกเก็บใน `.project/local/` ซึ่งไม่นำขึ้น Git ตรวจโครงสร้างก่อน commit ด้วย `python scripts/verify_project.py` การผ่าน source tests ไม่ใช่การรับรองความแม่นยำจากข้อมูลจริง
 
 ## สถาปัตยกรรมของผลิตภัณฑ์
 
@@ -182,15 +188,19 @@ run_wheelathlete_windows.bat --demo
 
 เอกสาร Windows แบบละเอียด: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
 
-### MODEL แบบเสริม
+### MODEL แบบ Offline
 
-PyTorch และ dependency ของ model แยกจาก runtime หลักของระบบเก็บข้อมูล เพื่อไม่ให้การใช้งานปกติต้องติดตั้ง ML runtime ขนาดใหญ่
+หน้า `MODEL` ของแอป Windows ใช้ **BiWheel3D XY + Yaw current_best** ที่ฝังอยู่ในตัวแอปแล้ว ไม่ต้องใช้ PyTorch, ไฟล์ checkpoint `.pt/.pth`, model server หรือโฟลเดอร์ `BiWheel3D` ภายนอกในตอนใช้งานจริง
+
+สำหรับการรันจาก source ให้ติดตั้ง NumPy ผ่านไฟล์ dependency นี้:
 
 ```bat
 python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
 ```
 
-MODEL เป็น workflow แบบ offline และเป็น optional feature ต่อให้ไม่ได้ติดตั้ง PyTorch หรือไม่มี compatible model ก็ยังใช้ Recording, Results, Export และ Diagnostics ได้ตามปกติ
+ตัว Windows package จะรวม NumPy, calibration ของ current_best, runtime ที่จำเป็น และ MIT license ไว้ให้แล้ว การวิเคราะห์ทำแบบ offline และแยกจาก acquisition daemon โดยไฟล์ `.waj` ยังคงเป็นข้อมูลวิจัยต้นฉบับที่เชื่อถือได้
+
+MODEL ใช้ข้อมูล Left/Right ที่บันทึกไว้ที่ 100 Hz แปลงหน่วยเป็น SI, รวม 5 samples ต่อหนึ่ง trajectory step ที่ 20 Hz แล้วคำนวณ XY และ net yaw ด้วยสูตร current_best ของ BiWheel3D รวมถึง yaw delay 27 frames ตาม recipe ปัจจุบัน
 
 ## Hardware & Firmware
 
@@ -243,8 +253,8 @@ Output จะอยู่ที่:
 
 ```text
 applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.0-portable.zip
-└── WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.2-portable.zip
+└── WheelAthleteSetup-1.8.2.exe
 ```
 
 ทั้ง portable package และ installer จะ bundle `WheelAthleteDaemon.exe` ไปด้วย
@@ -338,11 +348,11 @@ Automated test ไม่สามารถแทน physical acceptance test ท
 
 | Component | Version |
 |---|---:|
-| Product release | `1.8.0` |
-| WheelAthlete Mobile Application | `1.8.0+10` |
-| WheelAthlete Windows Research Application | `1.8.0` |
-| M5StickC Plus2 firmware | `1.8.0` |
-| XIAO nRF52840 Sense firmware | `1.8.0` |
+| Product release | `1.8.2` |
+| WheelAthlete Mobile Application source | `1.8.2+12` (อยู่ระหว่างบำรุงรักษา; ยังไม่เปิดให้ใช้งาน) |
+| WheelAthlete Windows Research Application | `1.8.2` |
+| M5StickC Plus2 firmware | `1.8.2` |
+| XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |
 
 ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation

@@ -1,7 +1,7 @@
 // main.cpp — Seeed Xiao BLE Sense firmware entry point
 //
 // Runs BLE stack, config store, and IMU acquisition task.
-// Uses Red and Blue LEDs for connection, countdown, and recording status.
+// Uses the RGB status LED; the chair-center role blinks green.
 
 #include <Arduino.h>
 #include "imu_reader.h"
@@ -34,6 +34,16 @@ void setup() {
 
     // Initialize configuration store (NVS equivalent using LittleFS on nRF52)
     configStore().begin(WHEEL);
+
+    // Ensure the role and name match this build
+    const char* expected_name = (WHEEL == 'C') ? "WheelAthlete-XIAO-C" :
+                                (WHEEL == 'R') ? "WheelAthlete-XIAO-R" :
+                                                 "WheelAthlete-XIAO-L";
+    if (configStore().wheelChar() != WHEEL || strcmp(configStore().name(), expected_name) != 0) {
+        configStore().setWheel(static_cast<uint8_t>(WHEEL));
+        configStore().setName(expected_name);
+        configStore().save();
+    }
 
     // Initialize IMU reader (LSM6DS3)
     if (!imu().begin(configStore().rateHz())) {

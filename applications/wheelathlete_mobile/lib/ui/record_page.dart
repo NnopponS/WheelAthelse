@@ -174,7 +174,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
           ),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'Syncing time with both wheels…',
+            'Syncing time with connected sensors…',
             style: theme.textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
@@ -643,7 +643,7 @@ class _RecordPageState extends ConsumerState<RecordPage> {
         )
         .toList();
     if (connected.length != 1) return true;
-    final side = connected.single == WheelSide.left ? 'LEFT' : 'RIGHT';
+    final side = connected.single.shortLabel;
     return await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
@@ -754,6 +754,8 @@ class _RecordingPreview extends StatelessWidget {
         _RecordingWheelPreview(side: WheelSide.left),
         SizedBox(height: AppSpacing.md),
         _RecordingWheelPreview(side: WheelSide.right),
+        SizedBox(height: AppSpacing.md),
+        _RecordingWheelPreview(side: WheelSide.center),
       ],
     );
   }
@@ -793,14 +795,16 @@ class _RecordingWheelPreview extends ConsumerWidget {
             Row(
               children: [
                 StatusBadge(
-                  label: side == WheelSide.left ? 'L' : 'R',
-                  tone: side == WheelSide.left
-                      ? BadgeTone.left
-                      : BadgeTone.right,
+                  label: side.shortLabel,
+                  tone: switch (side) {
+                    WheelSide.left => BadgeTone.left,
+                    WheelSide.right => BadgeTone.right,
+                    WheelSide.center => BadgeTone.center,
+                  },
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
-                  side == WheelSide.left ? 'Left wheel' : 'Right wheel',
+                  side.deviceLabel,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: role.onContainer,
                     fontWeight: FontWeight.bold,

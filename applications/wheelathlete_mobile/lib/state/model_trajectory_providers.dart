@@ -1,9 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wheelathlete/model/on_device_trajectory_model.dart';
 import 'package:wheelathlete/model/trajectory_model.dart';
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/state/preview_providers.dart';
+
+/// Injectable compute boundary. Production keeps preparation off the UI isolate;
+/// widget tests can await the same algorithm without a real isolate/fake-clock race.
+typedef TrajectoryInputPreparer =
+    Future<TrajectoryPreprocessResult> Function(
+      List<BufferedSample>,
+      SessionMeta,
+    );
+final trajectoryInputPreparerProvider = Provider<TrajectoryInputPreparer>(
+  (ref) =>
+      (samples, meta) => compute(_prepareOfflineInput, (samples, meta)),
+);
 
 final trajectoryModelClientProvider = Provider<TrajectoryModelClient>((ref) {
   final client = OnDeviceTrajectoryModelClient();
@@ -55,14 +68,15 @@ class ModelTrajectoryNotifier extends Notifier<ModelTrajectoryState> {
   Future<void> generate(SessionMeta meta) async {
     if (state.isRunning) return;
     final generation = ++_generation;
-    state = state.copyWith(isRunning: true, error: null);
+    state = const ModelTrajectoryState(isRunning: true);
     try {
       final samples = await _loadAllSamples();
       if (!ref.mounted || generation != _generation) return;
-      final input = prepareTrajectoryInput(
+      final input = await ref.read(trajectoryInputPreparerProvider)(
         samples,
-        sourceRateHz: meta.sampleRateHz,
+        meta,
       );
+      if (!ref.mounted || generation != _generation) return;
       final result = await ref
           .read(trajectoryModelClientProvider)
           .infer(meta: meta, input: input);
@@ -101,3 +115,11 @@ final modelTrajectoryProvider =
       ModelTrajectoryState,
       PreviewSource
     >(ModelTrajectoryNotifier.new);
+
+TrajectoryPreprocessResult _prepareOfflineInput(
+  (List<BufferedSample>, SessionMeta) payload,
+) => prepareTrajectoryInput(
+  payload.$1,
+  sourceRateHz: payload.$2.sampleRateHz,
+  meta: payload.$2,
+);

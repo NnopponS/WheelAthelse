@@ -4,12 +4,22 @@
 
 WheelAthlete synchronizes left- and right-wheel inertial sensors, records research-grade motion data, and provides dedicated mobile and Windows applications for field collection, monitoring, quality control, export, and optional trajectory analysis.
 
-> **Current release line:** `v1.8.0`
-> **Mobile application:** `1.8.0+10`
-> **Firmware:** `1.8.0`
+> **Current release line:** `v1.8.2` (Windows-first)
+> **Mobile application:** source `1.8.2+12`, under maintenance and not currently available
+> **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.0`
+> **Windows package:** `1.8.2`
 > **Language:** English | [ไทย](README.th.md)
+
+## WheelAthlete 1.8.2 for Windows
+
+Version 1.8.2 is a Windows release. Install with `WheelAthleteSetup-1.8.2.exe`, or extract `WheelAthlete-1.8.2-portable.zip`. The installer and all installed executables must have a valid trusted Authenticode signature for public distribution. An unsigned local package does not resolve Microsoft Defender download reputation warnings or Application Control error 4551.
+
+The Flutter iOS/Android source and tests remain in this repository for maintenance. No mobile binary, download link, or mobile update is offered in v1.8.2.
+
+On upgrade or uninstall, setup asks the installation's acquisition daemon to finish any active journal and exit before replacing files. If safe shutdown fails, setup stops and shows an actionable message. Recordings and custom models under `Documents/WheelAthlete` are preserved. See [Windows packaging and trust](applications/wheelathlete_windows/packaging/windows/README.md) for signature checks and complete uninstall verification.
+
+Project status and next actions are maintained in [`.project/STATUS.md`](.project/STATUS.md) and [`.project/HANDOFF.md`](.project/HANDOFF.md). The [analysis contract](docs/model_analysis/CONTRACT.md) defines the portable fields and exports. Run `python scripts/verify_project.py` before committing; local evidence stays under ignored `.project/local/`.
 
 ## Product architecture
 
@@ -18,12 +28,12 @@ WheelAthlete is organized into two top-level product domains:
 1. **Applications** — operator-facing software.
 2. **Hardware & Firmware** — embedded sensor firmware.
 
-There are two maintained operator applications. Use only one operator application with a given left/right sensor pair at a time.
+The Windows application is the available v1.8.2 operator application. The mobile source is retained under maintenance. Use only one operator application with a given sensor set at a time.
 
 | Component | Official name | Platform / hardware | Technology | Primary role |
 |---|---|---|---|---|
-| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | Portable BLE acquisition, live monitoring, session management, export |
 | Windows | **WheelAthlete Windows Research Application** | Windows 10/11 | Python / PySide6 | Reliability-first acquisition, QC, recovery, research workflow, optional model analysis |
+| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | Under maintenance; source/tests retained, no v1.8.2 distribution |
 | Firmware | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 | PlatformIO | Dual-wheel IMU sensing and BLE transport |
 | Firmware | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense | PlatformIO | Dual-wheel IMU sensing and BLE transport |
 
@@ -102,7 +112,9 @@ Both firmware targets implement the same BLE contract. The canonical protocol sp
 
 Location: [`applications/wheelathlete_mobile/`](applications/wheelathlete_mobile/)
 
-Primary capabilities:
+**Maintenance status:** not currently available. The source and tests remain for repair and future validation, but v1.8.2 does not publish mobile downloads or offer mobile updates.
+
+Retained capabilities:
 
 - connect left and right BLE sensor boards;
 - display real-time accelerometer and gyroscope data;
@@ -130,7 +142,7 @@ flutter test
 flutter analyze
 ```
 
-Release builds:
+Local maintenance builds:
 
 ```bash
 # Android
@@ -182,15 +194,15 @@ Default Windows data locations:
 
 Detailed Windows documentation: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
 
-### Optional MODEL dependencies
+### Offline MODEL analysis
 
-PyTorch/model dependencies are separate from the core acquisition runtime.
+The Windows `MODEL` page bundles the **Classical v1** planar runtime. Model menus use concise names; version, adapter, preprocessing, required sensors, outputs, and experimental status appear in the model details. Source development needs NumPy:
 
 ```bat
 python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
 ```
 
-The MODEL workflow is optional and offline. Recording, Results, export, and diagnostics remain available without PyTorch or a compatible model checkout.
+The packaged Windows GUI includes NumPy, the current-best calibration metadata, the minimal BiWheel3D runtime snapshot, and its MIT license. Analysis remains offline and isolated from acquisition; `.waj` remains the authoritative research record. New portable models should use the versioned [model bundle contract](docs/model_analysis/MODEL_BUNDLES.md); legacy recipe, ONNX, and PyTorch file imports remain available.
 
 ## Hardware & firmware
 
@@ -243,15 +255,15 @@ Generated output:
 
 ```text
 applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.0-portable.zip
-└── WheelAthleteSetup-1.8.0.exe
+├── WheelAthlete-1.8.2-portable.zip
+└── WheelAthleteSetup-1.8.2.exe
 ```
 
 The installer and portable package bundle `WheelAthleteDaemon.exe`. Packaging details are documented in [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md).
 
-## Automatic application updates
+## Windows updates
 
-The Flutter Mobile and Python Windows applications use one stable GitHub Releases manifest:
+The installed Python Windows application uses the stable GitHub Releases manifest:
 
 ```text
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
@@ -259,12 +271,10 @@ https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 
 Every downloadable artifact is pinned by exact byte size and SHA-256 in `latest.json`.
 
-- **Android:** the release app checks automatically after startup and every six hours, downloads only the repository's HTTPS release APK, verifies size + SHA-256, then opens Android's system package installer. The user still approves installation. Direct APK updating requires a persistent release signing key; GitHub release builds intentionally fail if the Android signing secrets are missing.
-- **iOS:** update discovery uses the same manifest, while installation is handed to App Store/TestFlight. iOS does not permit an app to replace itself with an arbitrary downloaded binary.
 - **Windows:** the installed PyInstaller build checks automatically after startup and every six hours, downloads and verifies the Inno Setup installer, then can silently update the existing AppId and relaunch WheelAthlete.
-- **Acquisition safety:** neither app will install an update while Live preview, countdown, or recording is active.
+- **Acquisition safety:** the Windows app will not install an update while Live preview, countdown, or recording is active.
 
-Release automation lives in `.github/workflows/release.yml`. A `v<version>` tag builds/tests both applications, produces the APK and Windows installer, generates `latest.json`, and publishes all three to one GitHub Release. See [`release/README.md`](release/README.md).
+Release automation lives in `.github/workflows/release.yml`. A `v<version>` tag builds/tests Windows, requires trusted signing, produces the installer and portable archive, generates a Windows-only `latest.json`, and publishes checksums plus a signing report. See [`release/README.md`](release/README.md).
 
 > Bootstrap note: an already-installed build that predates this updater cannot self-update. Install the first updater-enabled release once manually; subsequent releases can use the in-app updater.
 
@@ -334,11 +344,11 @@ Automated tests do not replace physical two-board acceptance testing under reali
 
 | Component | Version |
 |---|---:|
-| Product release | `1.8.0` |
-| WheelAthlete Mobile Application | `1.8.0+10` |
-| WheelAthlete Windows Research Application | `1.8.0` |
-| M5StickC Plus2 firmware | `1.8.0` |
-| XIAO nRF52840 Sense firmware | `1.8.0` |
+| Product release | `1.8.2` |
+| WheelAthlete Mobile Application source | `1.8.2+12` (under maintenance; unavailable) |
+| WheelAthlete Windows Research Application | `1.8.2` |
+| M5StickC Plus2 firmware | `1.8.2` |
+| XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |
 
 The root [`VERSION`](VERSION) file is the coordinated product version used by Windows packaging and release validation.
@@ -351,17 +361,3 @@ The root [`VERSION`](VERSION) file is the coordinated product version used by Wi
 ## License
 
 Proprietary. Use, redistribution, and modification require permission from the project maintainers.
-
-## Automatic software updates
-
-WheelAthlete Mobile and WheelAthlete Windows use one verified stable manifest published with GitHub Releases:
-
-```text
-https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
-```
-
-- **Android:** checks automatically in release builds, downloads the APK, verifies exact size + SHA-256, and opens Android's system installer. Android still requires user approval and every public APK must use the same permanent signing key with an increasing `versionCode`.
-- **iOS:** checks the same manifest, then opens the configured App Store/TestFlight page; iOS installation remains store-managed.
-- **Windows:** an installed PyInstaller/Inno build checks shortly after launch and every six hours, downloads and verifies the installer, refuses to interrupt active acquisition, closes safely, installs silently, and relaunches WheelAthlete. Source and portable builds never replace themselves.
-
-Release artifacts and `latest.json` are generated by `.github/workflows/release.yml`. The first updater-enabled production build must be installed manually once on devices running an older build that did not contain the updater. Full release/signing instructions are in `release/README.md`.

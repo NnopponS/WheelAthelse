@@ -118,7 +118,7 @@ class BleakTransport:
         client = self._client(device_id)
 
         def native_callback(_sender, data: bytearray) -> None:
-            callback(bytes(data), time.monotonic_ns())
+            callback(bytes(data), time.perf_counter_ns())
 
         self._callbacks[(device_id, characteristic_uuid)] = native_callback
         await client.start_notify(characteristic_uuid, native_callback)
@@ -215,7 +215,7 @@ class FakeBleTransport:
         arrival_ns: int | None = None,
     ) -> None:
         callback = self.callbacks[(device_id, characteristic_uuid)]
-        callback(bytes(payload), time.monotonic_ns() if arrival_ns is None else arrival_ns)
+        callback(bytes(payload), time.perf_counter_ns() if arrival_ns is None else arrival_ns)
 
     def emit_imu(
         self, device_id: str, payload: bytes, *, arrival_ns: int | None = None

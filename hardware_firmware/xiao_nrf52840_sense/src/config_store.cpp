@@ -35,9 +35,11 @@ void ConfigStore::begin(char default_wheel) {
         config_.wheel_id = default_wheel_id;
         config_.rate_hz  = 100;
         if (config_.wheel_id == 0x52) {
-            config_.setName("WheelAthlete-R");
+            config_.setName("WheelAthlete-XIAO-R");
+        } else if (config_.wheel_id == 0x43) {
+            config_.setName("WheelAthlete-XIAO-C");
         } else {
-            config_.setName("WheelAthlete-L");
+            config_.setName("WheelAthlete-XIAO-L");
         }
     }
 

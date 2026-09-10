@@ -1,36 +1,42 @@
-# WheelAthlete Project State
+# WheelAthlete engineering workspace
 
-This directory is intentionally small. Git history is the source of truth for old implementation details; `.project` stores only the current architecture, decisions, status, and a compact milestone history.
+Updated: 2026-09-08.
 
-## Current product surfaces
+Start with **STATUS.md**, then **HANDOFF.md**. Those two files are the current source of truth for project state and continuation. Read **decisions.md** before changing architecture, model defaults, firmware roles, release behavior, or publication scope.
 
-WheelAthlete has exactly two user-facing applications:
+## Canonical layout
 
-1. **Flutter Mobile App** â€” iOS and Android (`applications/wheelathlete_mobile/`)
-2. **Python Windows App** â€” PySide6 GUI + Python acquisition daemon (`applications/wheelathlete_windows/tools/pc_gui/`, `applications/wheelathlete_windows/tools/pc_acquisition/`)
+```text
+.project/
+  README.md                         navigation and housekeeping policy
+  STATUS.md                         current measured state and open gates
+  HANDOFF.md                        exact continuation instructions
+  architecture.md                   runtime/data/model boundaries
+  decisions.md                      active durable decisions
+  plans/motion-analysis-roadmap.md  maintained roadmap
+  phases/P0-P1.md ... P7.md         one detailed conclusion per phase
+  history/                          chronological milestones and durable lessons
+  reports/                          small sanitized verification snapshots
+  local/                            ignored raw logs, snapshots, scripts and private evidence
+```
 
-There is no Flutter Windows application, Flutter Web application, or legacy Tkinter desktop application in the current product.
+The active root branch is `feature/dual-imu-coaching-analysis`. At this update the root HEAD and remote feature ref are both `be2e4725576775249796d376ef0e64cceb7aa04e`, but the current Slalom-v3 and optional-center-IMU work is still **uncommitted working-tree work**. Do not describe it as published until a later explicit commit/push is verified.
 
-## Current branch
+`BiWheel3D/` is a separate local research repository, not a root submodule and not an application dependency. Preserve its index/worktree exactly unless a task explicitly owns research changes. Raw athlete data, generated models, private paths and research evidence stay local.
 
-- Active development branch: `codex/pc-version`
-- Remote: `origin` â†’ `NnopponS/WheelAthelse`
-- Do not merge or push this branch into `main` unless explicitly requested.
+## Current technical direction
 
-## Current release line
+The validated product baseline remains the two wheel-hub sensors `L` and `R`. Source firmware and both apps now additionally support optional chair-center role `C` (`0x43`) for future experiments. The center mounting contract is `+Z` down toward the floor; X/Y remain physical board axes until forward/lateral orientation is measured. Existing trajectory models deliberately ignore C.
 
-- Product/application release: `v1.8.0`
-- Mobile app: `1.8.0+10`
-- Firmware: `1.8.0`
-- BLE protocol: `1.8.0`
-- Python Windows installer: `1.8.0`
+Windows keeps the frozen classical recipe first/default and exposes experimental PyTorch/Slalom choices only for research review. Mobile keeps the existing M4 XY-only ONNX default. P3 model promotion remains blocked by independent synchronized moving optical reference and a locked final group.
 
-## Files
+## Documentation rules
 
-- `architecture.md` â€” current runtime architecture and data ownership
-- `context.md` â€” active design decisions and constraints
-- `progress.md` â€” current implementation/verification status
-- `history.md` â€” concise milestone history derived from Git
-- `lessons.md` â€” durable engineering lessons only
+- Keep one current STATUS, one current HANDOFF and one maintained roadmap. Do not create `FINAL`, `FINAL_v2`, duplicate trackers or alternate current-state documents.
+- Phase files are conclusions. Historical measured values remain historical even when later work supersedes the old next-step wording.
+- `reports/branch-validation.json` is the latest sanitized working-tree verification snapshot. `reports/scheduled-agent-validation.json` is a historical scheduler-maintenance snapshot and is intentionally not rewritten to imitate current results.
+- Put raw command logs, screenshots, hashes, build outputs, participant-sensitive evidence, machine-specific receipts and ad-hoc patch scripts under `local/`.
+- Do not execute archived scripts in `local/legacy/` blindly.
+- Public model semantics/fixtures live under `docs/model_analysis/`; BLE semantics live in `docs/ble-protocol.md`.
 
-Old phase plans, prompts, duplicate trackers, and retired desktop implementation notes were removed on 2026-09-05. They remain recoverable from Git history.
+The pre-organization state remains preserved under `local/legacy/` and prior verified archives. Current 3-IMU evidence is under `local/three-imu-2026-09-08/`; current document-refresh evidence is under `local/project-docs-refresh-2026-09-08/`.

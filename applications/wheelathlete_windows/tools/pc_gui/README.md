@@ -31,15 +31,15 @@ run_wheelathlete_windows.bat --demo
 
 Demo mode is clearly labeled and does not write synthetic research evidence.
 
-### Optional MODEL dependencies
+### MODEL runtime dependency
 
-The experimental `MODEL` page uses optional ML dependencies and does **not**
-change the normal launcher or acquisition runtime. Install them only on a
-research machine that will run BiWheel3D/PyTorch inference:
+The `MODEL` page supports two local model types: the lightweight **BiWheel3D XY + Yaw current_best** recipe and compatible BiWheel3D **ONNX** learned models. PyTorch, a model server, and the friend `BiWheel3D` checkout are not required by the installed app. Source development installs NumPy plus ONNX Runtime:
 
 ```bat
 python -m pip install -r tools\pc_gui\requirements-model.txt
 ```
+
+The Windows installer seeds a user-editable model library at `~/Documents/WheelAthlete/Model/` with the current recipe, the validated M4 ONNX model, and its license. **Browse model…** can also run a compatible `.onnx` file from any location. `.pt` / `.pth` files should be exported to ONNX before use in the lean Windows app. The acquisition daemon remains independent of model code.
 
 ## Current five-section workflow
 
@@ -120,31 +120,37 @@ The MODEL page performs offline analysis only:
 
 ```text
 Finalized Results session
-        ↓
-Select checkpoint
-        ↓
-Dual-wheel preprocessing
-        ↓
-PyTorch / BiWheel3D inference
-        ↓
-2D XY trajectory
+        ->
+Saved per-board sensor scales
+        ->
+100 Hz dual-wheel SI preprocessing
+        ->
+5-sample windows / 20 Hz trajectory cadence
+        ->
+selected local model
+  ├─ XY + Yaw recipe
+  └─ BiWheel3D ONNX (90-feature protocol v10b)
+        ->
+2D trajectory (+ net yaw when the selected model exposes it)
 ```
 
 Current capabilities:
 
-- choose a discovered compatible checkpoint;
-- use **Browse model…** to select a `.pt` / `.pth` checkpoint from Windows File Explorer;
-- validate checkpoint compatibility before inference rather than silently forcing a mismatched model;
-- prepare synchronized Left/Right data at the current BiWheel3D 100 Hz input contract;
-- convert stored GUI units from g / deg/s to m/s² / rad/s;
-- group five raw samples per model step for the current 20 Hz inference contract;
-- run inference in a background worker so the GUI remains responsive;
-- display predicted path, start/end points, path length, endpoint distance and model-point count;
-- render the 2D chart with true equal physical X/Y scale: `1 m` on X equals `1 m` on Y.
+- discovers supported models in `~/Documents/WheelAthlete/Model/`;
+- exposes **Browse model…** for compatible `.onnx` and XY + Yaw recipe `.json` files;
+- seeds the validated `wheelathlete_biwheel3d_m4.onnx` model automatically in Setup EXE installs;
+- does not depend on the external friend `BiWheel3D` working tree at runtime;
+- converts stored GUI units from g / deg/s to m/s^2 / rad/s using the **scales saved with the recording**;
+- prepares synchronized Left/Right data at 100 Hz and groups five raw samples per 20 Hz trajectory step;
+- reproduces the BiWheel3D v10b 90-feature extractor for M4 ONNX inference;
+- keeps the current-best recipe with calibrated wheel-speed/chassis-yaw scaling and 27-frame pause-aware yaw delay;
+- runs analysis in a background worker so acquisition UI remains responsive;
+- displays estimated path, start/end points, path length, endpoint distance, point count, and net yaw when available;
+- renders the 2D chart with equal physical X/Y scale: `1 m` on X equals `1 m` on Y.
 
-The existing TCN + BiLSTM model is buffered/offline rather than a zero-latency
-causal streaming estimator. MODEL analysis never joins the BLE or journal write
-path and must not be treated as authoritative research evidence.
+The upstream snapshot currently references `biwheel3d.pause_segments` but does not contain that module. WheelAthlete therefore bundles the minimal documented >=1 s pause helper required by `yaw_ab.shift_heading_bursts()`. Provenance is recorded in `tools/pc_gui/biwheel3d_runtime/SOURCE.json`, and the upstream MIT license is included beside it. The large per-trial evaluation summary is intentionally not packaged because only the compact runtime recipe values are required.
+
+MODEL output is derived preview data. It never joins the BLE/journal write path and must not be treated as the authoritative raw research record.
 
 ### Diagnostics
 
@@ -182,7 +188,7 @@ XIAO Right ┘
                  ▼
         PySide6 + QtCharts UI
                  │
-                 └─ optional offline PyTorch MODEL worker
+                 └─ optional offline BiWheel3D XY + Yaw worker
 ```
 
 - If the GUI starts the daemon and the GUI closes while **idle**, it terminates
@@ -221,8 +227,7 @@ It creates the portable package and installer under ignored `applications/wheela
 normal Windows distribution bundles `WheelAthleteDaemon.exe`; users do not need
 to start a separate acquisition daemon manually.
 
-The experimental PyTorch MODEL runtime is intentionally optional and should be
-validated separately when preparing an ML-enabled research workstation/package.
+The lightweight BiWheel3D XY + Yaw MODEL runtime is bundled with the packaged GUI; source runs require NumPy. It remains isolated from the acquisition daemon and raw-data write path.
 
 ## Verification
 
@@ -242,3 +247,10 @@ Results → MODEL navigation, and equal-scale trajectory rendering.
 Physical BLE throughput, RF behavior, real L/R start skew, real-world model
 accuracy, and hardware behavior at distance remain physical/validation
 measurements. Do not infer those results from demo or automated tests.
+
+
+## Optional local research registry
+
+A source checkout may discover additional research-only models from `BiWheel3D/registry/models.json`. This bridge is optional: installed/clean application builds do not require the separate research checkout. The current registry can expose residual v1 and the Slalom course-constrained wrapper. The latter uses the same v1 checkpoint plus `course.json`; it applies only to sessions explicitly labeled SL/slalom and reports course-constraint provenance in the analysis result.
+
+The Slalom wrapper never reads C3D at inference. Start/end closure is a declared protocol assumption, so a near-zero constrained endpoint is not independent odometry evidence.

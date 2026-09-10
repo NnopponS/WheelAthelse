@@ -25,6 +25,8 @@ public:
 
 private:
     bool initialized_ = false;
+    bool last_center_identity_on_ = true;
+    char last_identity_[2] = {};
     uint32_t last_draw_ = 0;
     bool countdown_active_ = false;
     int8_t countdown_num_ = 0;

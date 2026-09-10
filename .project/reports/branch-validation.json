@@ -1,0 +1,163 @@
+﻿{
+    "schema_version":  2,
+    "generated_at_local":  "2026-09-08T20:35:53.5532168+07:00",
+    "scope":  "current_uncommitted_working_tree",
+    "branch":  "feature/dual-imu-coaching-analysis",
+    "head":  "be2e4725576775249796d376ef0e64cceb7aa04e",
+    "remote_feature_ref":  "be2e4725576775249796d376ef0e64cceb7aa04e",
+    "remote_matches_head":  true,
+    "working_tree_uncommitted":  true,
+    "project_dirty_entries_at_snapshot":  18,
+    "root_dirty_entries_at_snapshot":  103,
+    "published_state_note":  "The remote feature ref matches HEAD, but Slalom-v3, optional-center-IMU and documentation changes described here are uncommitted working-tree work and are not yet published by that ref.",
+    "protected_scope":  {
+                            "main_modified_or_pushed_by_latest_pass":  false,
+                            "release_main_v1_8_0_modified_or_pushed_by_latest_pass":  false,
+                            "release_workflow_preexisting_dirty_preserved":  true,
+                            "latest_pass_commit":  false,
+                            "latest_pass_push":  false,
+                            "latest_pass_flash":  false,
+                            "latest_pass_install":  false
+                        },
+    "project_audit":  {
+                          "candidate_files":  446,
+                          "errors":  0,
+                          "passed":  true
+                      },
+    "windows":  {
+                    "normal_full_gui_acquisition":  {
+                                                        "passed":  false,
+                                                        "passed_tests":  171,
+                                                        "failed_tests":  1,
+                                                        "failure":  "tools/pc_gui/tests/test_slalom_course_v3.py resolves repository root incorrectly and searches applications/BiWheel3D/configs/slalom_calibrated_course_v3.json instead of root-level BiWheel3D/configs/...",
+                                                        "three_imu_regression":  false,
+                                                        "log":  ".project/local/verification/20260908T130302_554093Z_windows/windows_tests.txt"
+                                                    },
+                    "bounded_three_imu_scope":  {
+                                                    "passed":  true,
+                                                    "passed_tests":  167,
+                                                    "excluded_file":  "tools/pc_gui/tests/test_slalom_course_v3.py",
+                                                    "reason":  "The excluded file belongs to the separate uncommitted Slalom-v3 research path and contains the known repo-root path defect."
+                                                },
+                    "center_journal_sequence_stress_focused":  {
+                                                                   "passed":  true,
+                                                                   "passed_tests":  13
+                                                               },
+                    "ruff_changed_scope":  {
+                                               "passed":  true
+                                           }
+                },
+    "mobile":  {
+                   "flutter_analyze":  {
+                                           "passed":  true,
+                                           "issues":  0,
+                                           "log":  ".project/local/verification/20260908T125922_594911Z_mobile/flutter_analyze.txt"
+                                       },
+                   "flutter_test":  {
+                                        "passed":  true,
+                                        "passed_tests":  715,
+                                        "log":  ".project/local/verification/20260908T125922_594911Z_mobile/flutter_tests.txt"
+                                    },
+                   "center_contract":  {
+                                           "role":  "C",
+                                           "role_byte_hex":  "0x43",
+                                           "mounting_z_axis":  "down_toward_floor",
+                                           "legacy_lr_model_input_invariant_to_center":  true,
+                                           "center_raw_csv_conditional":  true
+                                       }
+               },
+    "firmware":  {
+                     "m5stickc_plus2":  {
+                                            "host_tests":  {
+                                                               "passed":  true,
+                                                               "passed_tests":  147
+                                                           },
+                                            "center_build":  {
+                                                                 "passed":  true,
+                                                                 "flashed":  false,
+                                                                 "ram_percent":  15.4,
+                                                                 "flash_percent":  62.3,
+                                                                 "artifact":  "hardware_firmware/m5stickc_plus2/.pio/build/center/firmware.bin",
+                                                                 "bytes":  823136,
+                                                                 "sha256":  "58aa7750538949847e70a281603cfea39921267d3c42f474f7d72c2050210bf2",
+                                                                 "identity_behavior":  "static yellow identity bar plus large yellow C glyph blink; recording heartbeat; no refresh-loop rectangle clearing"
+                                                             }
+                                        },
+                     "xiao_nrf52840_sense":  {
+                                                 "host_tests":  {
+                                                                    "passed":  true,
+                                                                    "passed_tests":  18
+                                                                },
+                                                 "center_build":  {
+                                                                      "passed":  true,
+                                                                      "flashed":  false,
+                                                                      "ram_percent":  10.8,
+                                                                      "flash_percent":  18.2,
+                                                                      "artifact":  "hardware_firmware/xiao_nrf52840_sense/.pio/build/center/firmware.zip",
+                                                                      "bytes":  148108,
+                                                                      "sha256":  "08069e5e104b9db41dc09ad346883aa34d1d3632728a22e8cfd3cadd600296d5",
+                                                                      "identity_behavior":  "yellow RGB from red+green with blue off; identity blink and 150 ms/1 s recording heartbeat; error/retry priority"
+                                                                  }
+                                             }
+                 },
+    "biwheel3d_preservation":  {
+                                   "separate_repository":  true,
+                                   "status_matches_pre_three_imu_snapshot_exactly":  true,
+                                   "reset_or_clean_performed":  false,
+                                   "staged_by_three_imu_pass":  false,
+                                   "published_by_latest_pass":  false
+                               },
+    "models":  {
+                   "production_default_changed":  false,
+                   "model_promoted":  false,
+                   "center_aware_model_exists":  false,
+                   "windows_default":  "frozen classical XY+yaw recipe",
+                   "mobile_default":  "M4 XY-only ONNX",
+                   "pytorch_residual_v1":  {
+                                               "status":  "experimental_research_review",
+                                               "checkpoint_sha256":  "d838e98e94d5db2e490bf64816e78a35b367ab2d079a54c9d192848973138a45"
+                                           },
+                   "slalom_course_v2":  {
+                                            "status":  "rejected_numerically_unstable_app_mismatch",
+                                            "accuracy_claim_allowed":  false
+                                        },
+                   "slalom_calibrated_course_v3":  {
+                                                       "status":  "experimental_validation_selected_not_promoted",
+                                                       "config":  "BiWheel3D/configs/slalom_calibrated_course_v3.json",
+                                                       "config_sha256":  "30d75e3afad8328e2433c563823a70640586ad98447f8d675f76cdf42de06478",
+                                                       "historical_test_evaluated":  false,
+                                                       "never_use_c3d_at_inference":  true,
+                                                       "non_sl_validation_exact_no_op":  true,
+                                                       "sl_04":  {
+                                                                     "raw_pytorch_v1":  {
+                                                                                            "ate_rmse_m":  0.7903683185577393,
+                                                                                            "heading_rmse_deg":  21.66889190673828
+                                                                                        },
+                                                                     "course_v1":  {
+                                                                                       "ate_rmse_m":  0.21872803568840027,
+                                                                                       "heading_rmse_deg":  4.533896446228027
+                                                                                   },
+                                                                     "v3":  {
+                                                                                "ate_rmse_m":  0.1792156994342804,
+                                                                                "heading_rmse_deg":  3.578815221786499
+                                                                            }
+                                                                 },
+                                                       "interpretation":  "Near-zero final endpoint is partly imposed by the declared fixed-course closure and is not independent odometry evidence."
+                                                   }
+               },
+    "acceptance_gates":  {
+                             "p3":  "blocked_by_reference_data",
+                             "independent_moving_optical_reference":  false,
+                             "locked_independent_final_group":  false,
+                             "physical_center_orientation_acceptance":  false,
+                             "physical_three_board_clock_loss_acceptance":  false,
+                             "physical_android_ios_acceptance":  false,
+                             "coach_signoff":  false
+                         },
+    "evidence":  {
+                     "three_imu":  ".project/local/three-imu-2026-09-08/",
+                     "docs_refresh":  ".project/local/project-docs-refresh-2026-09-08/",
+                     "verification":  ".project/local/verification/",
+                     "historical_scheduler_report":  ".project/reports/scheduled-agent-validation.json"
+                 }
+}

@@ -12,6 +12,7 @@ import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/widgets/imu_chart.dart';
 import 'package:wheelathlete/widgets/status_badge.dart';
 import 'package:wheelathlete/widgets/trajectory_chart.dart';
+import 'package:wheelathlete/widgets/analysis_review.dart';
 
 /// Session preview/playback page.
 ///
@@ -264,9 +265,9 @@ class _TrajectoryModelCard extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'BiWheel3D M4 runs locally on this phone. No server, internet, '
-              'or PC connection is required. Analysis uses the same dual-wheel '
-              '100 Hz SI-unit input contract as the Windows research app.',
+              'Legacy experimental M4: XY-only output, not the Windows XY+yaw recipe. '
+              'Runs locally without a server. Chair yaw and signed longitudinal '
+              'acceleration are unavailable; shared input features do not imply model parity.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -323,7 +324,14 @@ class _TrajectoryModelCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              TrajectoryChart(points: result.points),
+              if (result.analysis case final analysis?)
+                AnalysisReview(
+                  key: ValueKey(analysis),
+                  analysis: analysis,
+                  points: result.points,
+                )
+              else
+                TrajectoryChart(points: result.points),
               const SizedBox(height: AppSpacing.sm),
               Wrap(
                 spacing: AppSpacing.xs,
@@ -589,6 +597,7 @@ class _WheelSelector extends ConsumerWidget {
       PreviewWheelSelection.both => 'Both',
       PreviewWheelSelection.left => 'Left',
       PreviewWheelSelection.right => 'Right',
+      PreviewWheelSelection.center => 'Center',
     };
   }
 }
@@ -650,6 +659,18 @@ class _ChartSection extends StatelessWidget {
                     label: 'R',
                     color: wc.right.solid,
                   ),
+                  if (state.meta.recordedSides.contains('C')) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    _WheelChart(
+                      readings: toReadings(
+                        filterByWheel(chunk, PreviewWheelSelection.center),
+                      ),
+                      isAccel: isAccel,
+                      axisColors: axisColors,
+                      label: 'C (+Z down)',
+                      color: wc.center.solid,
+                    ),
+                  ],
                 ],
               )
             else
@@ -657,14 +678,18 @@ class _ChartSection extends StatelessWidget {
                 readings: toReadings(filterByWheel(chunk, selection)),
                 isAccel: isAccel,
                 axisColors: axisColors,
-                label: selection == PreviewWheelSelection.left ? 'L' : 'R',
-                color: wc
-                    .forWheel(
-                      selection == PreviewWheelSelection.left
-                          ? WheelSide.left
-                          : WheelSide.right,
-                    )
-                    .solid,
+                label: switch (selection) {
+                  PreviewWheelSelection.left => 'L',
+                  PreviewWheelSelection.right => 'R',
+                  PreviewWheelSelection.center => 'C (+Z down)',
+                  PreviewWheelSelection.both => 'All',
+                },
+                color: wc.forWheel(switch (selection) {
+                  PreviewWheelSelection.left => WheelSide.left,
+                  PreviewWheelSelection.right => WheelSide.right,
+                  PreviewWheelSelection.center => WheelSide.center,
+                  PreviewWheelSelection.both => WheelSide.left,
+                }).solid,
               ),
           ],
         ),

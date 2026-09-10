@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:wheelathlete/model/analysis_contract.dart';
+import 'package:wheelathlete/model/analysis_timing.dart';
 
 import 'package:wheelathlete/records/session_model.dart';
 import 'package:wheelathlete/theme/theme.dart';
@@ -29,12 +31,14 @@ class TrajectoryResult {
     required this.points,
     this.modelLabel = 'Trajectory model',
     this.warnings = const [],
+    this.analysis,
     double? pathLengthM,
     double? endpointM,
   }) : _pathLengthM = pathLengthM,
        _endpointM = endpointM;
 
   final List<TrajectoryPoint> points;
+  final KinematicAnalysis? analysis;
   final String modelLabel;
   final List<String> warnings;
   final double? _pathLengthM;
@@ -66,8 +70,40 @@ class TrajectoryResult {
       }
       points.add(TrajectoryPoint(x, y));
     }
+    KinematicAnalysis? analysis;
+    final rawAnalysis = json['analysis'];
+    if (rawAnalysis != null) {
+      if (rawAnalysis is! Map) {
+        throw const TrajectoryModelException('Invalid analysis envelope.');
+      }
+      try {
+        analysis = KinematicAnalysis.fromJson(
+          Map<String, dynamic>.from(rawAnalysis),
+        );
+      } on FormatException catch (e) {
+        throw TrajectoryModelException(e.message);
+      }
+      if (analysis.samples.length != points.length) {
+        throw const TrajectoryModelException('Analysis and XY lengths differ.');
+      }
+      for (var i = 0; i < points.length; i++) {
+        if ((analysis.samples[i].xM - points[i].x).abs() > 1e-6 ||
+            (analysis.samples[i].yM - points[i].y).abs() > 1e-6) {
+          throw const TrajectoryModelException(
+            'Analysis and display XY coordinates disagree.',
+          );
+        }
+      }
+    }
+    for (final key in ['path_length_m', 'endpoint_m']) {
+      final v = json[key];
+      if (v != null && (v is! num || !v.isFinite || v < 0)) {
+        throw TrajectoryModelException('Invalid $key.');
+      }
+    }
     return TrajectoryResult(
       points: List.unmodifiable(points),
+      analysis: analysis,
       modelLabel: (json['model_label'] as String?)?.trim().isNotEmpty == true
           ? (json['model_label'] as String).trim()
           : 'Trajectory model',
@@ -108,6 +144,9 @@ class TrajectoryPreprocessResult {
     required this.windows,
     required this.rawAlignedSampleCount,
     required this.durationSeconds,
+    this.timeSeconds = const [],
+    this.qualityFlags = const [],
+    this.metadata = const {},
     this.warnings = const [],
   });
 
@@ -118,33 +157,58 @@ class TrajectoryPreprocessResult {
   final List<List<List<double>>> windows;
   final int rawAlignedSampleCount;
   final double durationSeconds;
+  final List<double> timeSeconds;
+  final List<List<String>> qualityFlags;
+  final Map<String, dynamic> metadata;
   final List<String> warnings;
 
   int get modelStepCount => windows.length;
 }
 
-class _TimedReading {
-  const _TimedReading(this.tSeconds, this.sample);
-  final double tSeconds;
-  final BufferedSample sample;
-}
+typedef _TimedReading = TimedAnalysisReading;
 
 TrajectoryPreprocessResult prepareTrajectoryInput(
   List<BufferedSample> samples, {
   required int sourceRateHz,
+  SessionMeta? meta,
 }) {
-  if (sourceRateHz <= 0) {
+  if (sourceRateHz < 20 || sourceRateHz > 1000) {
     throw const TrajectoryModelException('Session sample rate is invalid.');
   }
-  final left = _timeline(samples, WheelSide.left, sourceRateHz);
-  final right = _timeline(samples, WheelSide.right, sourceRateHz);
+  final AnalysisWheelTimeline leftAudit, rightAudit;
+  try {
+    leftAudit = prepareAnalysisWheel(
+      samples,
+      WheelSide.left,
+      sourceRateHz,
+      utcStartMs: meta?.utcStartMs,
+    );
+    rightAudit = prepareAnalysisWheel(
+      samples,
+      WheelSide.right,
+      sourceRateHz,
+      utcStartMs: meta?.utcStartMs,
+    );
+  } on FormatException catch (e) {
+    throw TrajectoryModelException(e.message);
+  }
+  final left = leftAudit.readings, right = rightAudit.readings;
+  if (leftAudit.diagnostics['time_basis'] !=
+      rightAudit.diagnostics['time_basis']) {
+    throw const TrajectoryModelException(
+      'The two wheels have incompatible saved time bases.',
+    );
+  }
   if (left.length < 2 || right.length < 2) {
     throw const TrajectoryModelException(
       'Trajectory inference requires both left and right wheel recordings.',
     );
   }
 
-  final overlapStart = math.max(left.first.tSeconds, right.first.tSeconds);
+  final overlapStart = math.max(
+    0.0,
+    math.max(left.first.tSeconds, right.first.tSeconds),
+  );
   final overlapEnd = math.min(left.last.tSeconds, right.last.tSeconds);
   if (overlapEnd <= overlapStart) {
     throw const TrajectoryModelException(
@@ -153,7 +217,7 @@ TrajectoryPreprocessResult prepareTrajectoryInput(
   }
 
   const step = 1.0 / trajectoryTargetRawHz;
-  final rawCount = (((overlapEnd - overlapStart) / step).floor() + 1);
+  final rawCount = (((overlapEnd - overlapStart) / step + 1e-7).floor() + 1);
   final usableRawCount = rawCount - (rawCount % trajectoryGroupSize);
   final modelSteps = usableRawCount ~/ trajectoryGroupSize;
   if (modelSteps < trajectoryMinimumModelSteps) {
@@ -164,7 +228,15 @@ TrajectoryPreprocessResult prepareTrajectoryInput(
     );
   }
 
-  final warnings = <String>[];
+  final warnings = <String>[
+    'Offline experimental XY-only model; physical accuracy is not independently validated.',
+    'Saved START-relative timing is not a physical inter-hub synchronization certificate.',
+    'Recorded range/scale provenance is unavailable in this session schema.',
+  ];
+  if (leftAudit.diagnostics['time_basis'].toString().startsWith('legacy')) {
+    warnings.add('Legacy timestamp fallback is used and explicitly uncertain.');
+  }
+  if (meta?.degradationReason case final reason?) warnings.add(reason);
   if (sourceRateHz != trajectoryTargetRawHz) {
     warnings.add(
       'Session was recorded at $sourceRateHz Hz and resampled to '
@@ -173,6 +245,7 @@ TrajectoryPreprocessResult prepareTrajectoryInput(
   }
 
   final rows = <List<double>>[];
+  final gapRows = <bool>[];
   var li = 0;
   var ri = 0;
   for (var index = 0; index < usableRawCount; index++) {
@@ -181,7 +254,23 @@ TrajectoryPreprocessResult prepareTrajectoryInput(
     li = leftInterp.$2;
     final rightInterp = _interpolate(right, t, ri);
     ri = rightInterp.$2;
-    rows.add([...leftInterp.$1, ...rightInterp.$1]);
+    final siRow = [...leftInterp.$1, ...rightInterp.$1];
+    if (siRow.any((v) => !v.isFinite || v.abs() > 3.4028234663852886e38)) {
+      throw const TrajectoryModelException(
+        'SI conversion exceeds finite model input range.',
+      );
+    }
+    rows.add(siRow);
+    bool missingAt(List<_TimedReading> wheel, int hint) {
+      final a = wheel[hint], b = wheel[hint + 1];
+      if ((t - a.tSeconds).abs() <= 1e-8 || (t - b.tSeconds).abs() <= 1e-8) {
+        return false;
+      }
+      return b.tSeconds - a.tSeconds > 1.5 / sourceRateHz + 1e-9 ||
+          b.sequence - a.sequence > 1;
+    }
+
+    gapRows.add(missingAt(left, li) || missingAt(right, ri));
   }
 
   final windows = <List<List<double>>>[];
@@ -199,41 +288,44 @@ TrajectoryPreprocessResult prepareTrajectoryInput(
     windows: List.unmodifiable(windows),
     rawAlignedSampleCount: usableRawCount,
     durationSeconds: usableRawCount / trajectoryTargetRawHz,
+    timeSeconds: List.unmodifiable(
+      List.generate(modelSteps, (i) => overlapStart + i * .05 + .02),
+    ),
+    qualityFlags: List.unmodifiable(
+      List.generate(
+        modelSteps,
+        (i) => List<String>.unmodifiable(
+          gapRows.sublist(i * 5, i * 5 + 5).any((v) => v)
+              ? ['small_gap_interpolated']
+              : <String>[],
+        ),
+      ),
+    ),
+    metadata: Map.unmodifiable({
+      'time_basis': leftAudit.diagnostics['time_basis'],
+      'overlap_start_s': overlapStart,
+      'discarded_tail_samples': rawCount - usableRawCount,
+      'source_rate_hz': sourceRateHz,
+      'side_diagnostics': {
+        'L': leftAudit.diagnostics,
+        'R': rightAudit.diagnostics,
+      },
+      'physical_sync_verified': false,
+      'input_gap_policy': {
+        'maximum_bracket_s': .05,
+        'large_gap': 'reject',
+        'small_gap': 'interpolate_and_flag',
+      },
+      'clock_evidence': {
+        'schema_version': meta?.schemaVersion,
+        'offset_us_left': meta?.offsetUsLeft,
+        'offset_us_right': meta?.offsetUsRight,
+        'drift_residual_rms_ms_left': meta?.driftResidualRmsMsLeft,
+        'drift_residual_rms_ms_right': meta?.driftResidualRmsMsRight,
+      },
+    }),
     warnings: List.unmodifiable(warnings),
   );
-}
-
-List<_TimedReading> _timeline(
-  List<BufferedSample> samples,
-  WheelSide side,
-  int sourceRateHz,
-) {
-  final selected = samples.where((sample) => sample.wheel == side).toList()
-    ..sort((a, b) {
-      final synced = a.timestampSyncedMs.compareTo(b.timestampSyncedMs);
-      return synced != 0 ? synced : a.reading.seq.compareTo(b.reading.seq);
-    });
-  if (selected.isEmpty) return const [];
-
-  // The saved synchronized timestamp is the authoritative shared timeline.
-  // When legacy sessions have repeated/invalid synced times, fall back to the
-  // sequence cadence anchored at the first valid synchronized time.
-  final first = selected.first;
-  final originSeconds = first.timestampSyncedMs / 1000.0;
-  final firstSeq = first.reading.seq;
-  var lastT = double.negativeInfinity;
-  final result = <_TimedReading>[];
-  for (final sample in selected) {
-    var t = sample.timestampSyncedMs / 1000.0;
-    if (!t.isFinite || t <= lastT) {
-      final deltaSeq = (sample.reading.seq - firstSeq) & 0xFFFFFFFF;
-      t = originSeconds + deltaSeq / sourceRateHz;
-    }
-    if (t <= lastT) continue;
-    result.add(_TimedReading(t, sample));
-    lastT = t;
-  }
-  return result;
 }
 
 (List<double>, int) _interpolate(
@@ -386,6 +478,11 @@ Float32List extractBiwheel3dFeatures(TrajectoryPreprocessResult input) {
       t * biwheel3dFeatureDim,
       (t + 1) * biwheel3dFeatureDim,
       Float32List.fromList(features),
+    );
+  }
+  if (out.any((value) => !value.isFinite)) {
+    throw const TrajectoryModelException(
+      'Feature extraction produced non-finite input.',
     );
   }
   return out;

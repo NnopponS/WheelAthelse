@@ -1,6 +1,5 @@
-# Optional dependencies for the experimental MODEL page.
-# Kept separate so the reliable acquisition app does not auto-install PyTorch.
+# Optional local trajectory-model dependencies for the Windows MODEL page.
+# NumPy powers the bundled BiWheel3D XY + Yaw recipe; ONNX Runtime enables
+# user-browsed / installer-seeded BiWheel3D learned models without PyTorch.
 numpy>=1.24
-scipy>=1.10
-torch>=2.0
-pyyaml>=6.0
+onnxruntime>=1.18

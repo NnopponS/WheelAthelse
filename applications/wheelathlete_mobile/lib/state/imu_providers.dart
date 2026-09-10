@@ -61,8 +61,8 @@ class WheelImuState {
 class ImuStreamState {
   ImuStreamState({Map<WheelSide, WheelImuState>? bySide})
     : bySide = {
-        WheelSide.left: bySide?[WheelSide.left] ?? const WheelImuState(),
-        WheelSide.right: bySide?[WheelSide.right] ?? const WheelImuState(),
+        for (final side in WheelSide.values)
+          side: bySide?[side] ?? const WheelImuState(),
       };
 
   final Map<WheelSide, WheelImuState> bySide;

@@ -394,9 +394,7 @@ void BleService::handleStop() {
     state_ = BleState::Connected;
     stop_finalization_pending_ = true;
     stop_empty_since_ms_ = 0;
-    flushBatch();
     last_battery_ms_ = 0;
-    updateBatteryLevel();
     Serial.println("[BLE] STOP - idle");
 }
 
@@ -447,12 +445,19 @@ void BleService::handleSetRange(uint8_t accel_range, uint8_t gyro_range) {
 }
 
 void BleService::handleBeep(uint8_t count, uint16_t period_ms) {
-    // Beep maps to Red/Blue LED flash
+    // The chair-center sensor uses a green identity blink (active LOW).
     for (uint8_t i = 0; i < count; ++i) {
-        active_blink_led_ = 2; // both
+        active_blink_led_ = 2;
         blink_until_ms_ = millis() + 150;
-        digitalWrite(LED_RED, LOW);
-        digitalWrite(LED_BLUE, LOW);
+        if (wheel_id_ == 0x43) {
+            digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, LOW);
+            digitalWrite(LED_BLUE, HIGH);
+        } else {
+            digitalWrite(LED_RED, LOW);
+            digitalWrite(LED_GREEN, HIGH);
+            digitalWrite(LED_BLUE, LOW);
+        }
         delay(period_ms);
     }
 }
@@ -491,6 +496,8 @@ void BleService::handleSetWheel(uint8_t wheel_id) {
     if (std::strncmp(configStore().name(), "WheelAthlete-XIAO-", 18) == 0) {
         if (wheel_id == 0x52) {
             configStore().setName("WheelAthlete-XIAO-R");
+        } else if (wheel_id == 0x43) {
+            configStore().setName("WheelAthlete-XIAO-C");
         } else {
             configStore().setName("WheelAthlete-XIAO-L");
         }
@@ -535,10 +542,16 @@ void BleService::sendStartFired() {
     s_char_sync.notify(buf, 13);
 }
 
-void BleService::sendStopFired(uint32_t stop_device_us) {
+bool BleService::sendStopFired(uint32_t stop_device_us) {
     uint8_t buf[9];
     packStopFired(stop_device_us, imu().sampleCount(), buf);
-    s_char_sync.notify(buf, 9);
+    for (uint8_t retry = 0; retry < 5; ++retry) {
+        if (s_char_sync.notify(buf, 9)) {
+            return true;
+        }
+        delay(5);
+    }
+    return false;
 }
 
 void BleService::sendCountdownCue(uint8_t index, uint8_t total,
@@ -562,7 +575,7 @@ void BleService::sendAcqHealth() {
     AcqState acq_state = AcqState::Ready;
     if (state_ == BleState::Countdown) acq_state = AcqState::Sync;
     if (state_ == BleState::Recording) acq_state = AcqState::Recording;
-    if (transport_failures_ > 0) acq_state = AcqState::Retry;
+    if (consecutive_transport_failures_ > 0) acq_state = AcqState::Retry;
     if (imu().dropCount() > 0) acq_state = AcqState::Error;
     uint8_t buf[ACQ_HEALTH_SIZE];
     const uint32_t produced_samples = imu().sampleCount() + imu().queueDropCount();
@@ -585,58 +598,74 @@ void BleService::restoreLeds() {
         return;
     }
 
-    // Non-blocking acquisition health patterns. ERROR is a rapid red pulse;
-    // RETRY alternates red/blue while the pending batch is retained.
+    // Non-blocking acquisition health patterns have priority over identity.
+    // ERROR is red; RETRY alternates red/blue. Green is explicitly cleared so
+    // a previous center-green pulse can never contaminate an error state.
     if (imu().dropCount() > 0) {
         const bool on = (millis() % 500) < 250;
         digitalWrite(LED_RED, on ? LOW : HIGH);
+        digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_BLUE, HIGH);
         return;
     }
-    if (transport_failures_ > 0) {
+    if (consecutive_transport_failures_ > 0) {
         const bool red = (millis() / 125) % 2 == 0;
         digitalWrite(LED_RED, red ? LOW : HIGH);
+        digitalWrite(LED_GREEN, HIGH);
         digitalWrite(LED_BLUE, red ? HIGH : LOW);
         return;
     }
 
-    const bool is_right = (wheel_id_ == 0x52); // 0x52 = 'R' (Right wheel)
+    const bool is_right = wheel_id_ == 0x52;
+    const bool is_center = wheel_id_ == 0x43;
+    auto set_identity = [&](bool on) {
+        if (is_center) {
+            // Green on the XIAO RGB LED.
+            digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, on ? LOW : HIGH);
+            digitalWrite(LED_BLUE, HIGH);
+        } else if (is_right) {
+            digitalWrite(LED_RED, on ? LOW : HIGH);
+            digitalWrite(LED_GREEN, HIGH);
+            digitalWrite(LED_BLUE, HIGH);
+        } else {
+            digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, HIGH);
+            digitalWrite(LED_BLUE, on ? LOW : HIGH);
+        }
+    };
 
     if (state_ == BleState::Advertising) {
-        bool flash_on = (millis() / 500) % 2 == 0;
-        if (is_right) {
-            digitalWrite(LED_RED, flash_on ? LOW : HIGH);
-            digitalWrite(LED_BLUE, HIGH);
-        } else {
-            digitalWrite(LED_BLUE, flash_on ? LOW : HIGH);
-            digitalWrite(LED_RED, HIGH);
-        }
+        set_identity((millis() / 500) % 2 == 0);
     }
     else if (state_ == BleState::Connected || state_ == BleState::Countdown) {
-        if (is_right) {
-            digitalWrite(LED_RED, LOW);
-            digitalWrite(LED_BLUE, HIGH);
-        } else {
-            digitalWrite(LED_BLUE, LOW);
-            digitalWrite(LED_RED, HIGH);
-        }
+        set_identity(true);
     }
     else if (state_ == BleState::Recording) {
-        if (is_right) {
+        if (is_center) {
+            digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_BLUE, HIGH);
+            const bool green_on = (millis() % 1000) >= 100;
+            digitalWrite(LED_GREEN, green_on ? LOW : HIGH);
+        } else if (is_right) {
             digitalWrite(LED_RED, LOW);
-            bool blue_on = (millis() % 1000) < 100;
+            digitalWrite(LED_GREEN, HIGH);
+            const bool blue_on = (millis() % 1000) < 100;
             digitalWrite(LED_BLUE, blue_on ? LOW : HIGH);
         } else {
             digitalWrite(LED_BLUE, LOW);
-            bool red_on = (millis() % 1000) < 100;
+            digitalWrite(LED_GREEN, HIGH);
+            const bool red_on = (millis() % 1000) < 100;
             digitalWrite(LED_RED, red_on ? LOW : HIGH);
         }
     }
     else {
-        digitalWrite(LED_BLUE, HIGH);
         digitalWrite(LED_RED, HIGH);
+        digitalWrite(LED_GREEN, HIGH);
+        digitalWrite(LED_BLUE, HIGH);
     }
 }
+
 
 void BleService::tick() {
     restoreLeds();
@@ -658,18 +687,25 @@ void BleService::tick() {
     if (pending_start_) {
         const uint32_t now = micros();
 
-        // Check for blink
+        // Check for blink. Center identity always emits a green visual cue.
         const int8_t blink_idx = checkBlinkSchedule(target_start_us_, now, last_blink_fired_);
         if (blink_idx >= 0) {
             const BlinkEvent& bp = BLINK_SCHEDULE[blink_idx];
             active_blink_led_ = bp.led_type;
             blink_until_ms_ = millis() + bp.duration_ms;
 
-            if (active_blink_led_ == 0 || active_blink_led_ == 2) {
-                digitalWrite(LED_RED, LOW);
-            }
-            if (active_blink_led_ == 1 || active_blink_led_ == 2) {
-                digitalWrite(LED_BLUE, LOW);
+            if (wheel_id_ == 0x43) {
+                digitalWrite(LED_RED, HIGH);
+                digitalWrite(LED_GREEN, LOW);
+                digitalWrite(LED_BLUE, HIGH);
+            } else {
+                digitalWrite(LED_GREEN, HIGH);
+                if (active_blink_led_ == 0 || active_blink_led_ == 2) {
+                    digitalWrite(LED_RED, LOW);
+                }
+                if (active_blink_led_ == 1 || active_blink_led_ == 2) {
+                    digitalWrite(LED_BLUE, LOW);
+                }
             }
 
             if (configStore().beepEnabled()) {
@@ -683,9 +719,10 @@ void BleService::tick() {
                           bp.offset_us / 1000000);
         }
 
-        // Turn off blink when duration ends
+        // Turn off blink when duration ends.
         if (blink_until_ms_ > 0 && millis() >= blink_until_ms_) {
             digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, HIGH);
             digitalWrite(LED_BLUE, HIGH);
             blink_until_ms_ = 0;
         }
@@ -693,6 +730,7 @@ void BleService::tick() {
         // Check if it's time to start
         if (shouldStartNow(target_start_us_, now)) {
             digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, HIGH);
             digitalWrite(LED_BLUE, HIGH);
             blink_until_ms_ = 0;
 
@@ -705,6 +743,7 @@ void BleService::tick() {
     } else {
         if (blink_until_ms_ > 0 && millis() >= blink_until_ms_) {
             digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, HIGH);
             digitalWrite(LED_BLUE, HIGH);
             blink_until_ms_ = 0;
         }
@@ -811,7 +850,9 @@ void BleService::finalizeStopIfDrained() {
     if (now_ms - stop_empty_since_ms_ < STOP_DRAIN_QUIET_MS) return;
 
     sendAcqHealth();
-    sendStopFired(stop_device_us_);
+    if (!sendStopFired(stop_device_us_)) {
+        return;
+    }
     stop_finalization_pending_ = false;
     stop_empty_since_ms_ = 0;
 }

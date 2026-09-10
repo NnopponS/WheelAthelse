@@ -232,7 +232,7 @@ def test_start_record_persists_physical_acceptance_metadata(tmp_path: Path):
         service = AcquisitionService(transport, journal_root=tmp_path)
         await service.handle_command("connect", {"device_id": "left"})
 
-        now_ns = time.monotonic_ns()
+        now_ns = time.perf_counter_ns()
         model = ClockModel.nominal(
             device_us=1_000_000,
             pc_ns=now_ns,

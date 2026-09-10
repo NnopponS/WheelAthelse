@@ -9,7 +9,7 @@ import 'package:wheelathlete/state/ble_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
 /// Identifies which wheel(s) the preview chart should display.
-enum PreviewWheelSelection { left, right, both }
+enum PreviewWheelSelection { left, right, center, both }
 
 /// Sealed source for the preview page. Either a session on disk (Browse tap)
 /// or an in-memory session (stopped view, samples still in RecordingNotifier).
@@ -306,6 +306,8 @@ List<BufferedSample> filterByWheel(
       samples.where((s) => s.wheel == WheelSide.left).toList(growable: false),
     PreviewWheelSelection.right =>
       samples.where((s) => s.wheel == WheelSide.right).toList(growable: false),
+    PreviewWheelSelection.center =>
+      samples.where((s) => s.wheel == WheelSide.center).toList(growable: false),
   };
 }
 

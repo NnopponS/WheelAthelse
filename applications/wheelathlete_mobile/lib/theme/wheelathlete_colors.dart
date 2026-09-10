@@ -44,6 +44,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
   const WheelAthleteColors({
     required this.left,
     required this.right,
+    required this.center,
     required this.success,
     required this.warning,
     required this.danger,
@@ -52,6 +53,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
 
   final ColorRole left;
   final ColorRole right;
+  final ColorRole center;
   final ColorRole success;
   final ColorRole warning;
   final ColorRole danger;
@@ -60,7 +62,11 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
   final Color chartGrid;
 
   /// Returns the color role for a given wheel.
-  ColorRole forWheel(WheelSide side) => side == WheelSide.left ? left : right;
+  ColorRole forWheel(WheelSide side) => switch (side) {
+    WheelSide.left => left,
+    WheelSide.right => right,
+    WheelSide.center => center,
+  };
 
   static const WheelAthleteColors light = WheelAthleteColors(
     left: ColorRole(
@@ -74,6 +80,12 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
       on: AppPalette.white,
       container: Color(0xFFFFEDD5),
       onContainer: Color(0xFF9A3412),
+    ),
+    center: ColorRole(
+      solid: Color(0xFFCA8A04),
+      on: AppPalette.slate950,
+      container: Color(0xFFFEF9C3),
+      onContainer: Color(0xFF713F12),
     ),
     success: ColorRole(
       solid: AppPalette.success,
@@ -109,6 +121,12 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
       container: Color(0xFF431407),
       onContainer: Color(0xFFFED7AA),
     ),
+    center: ColorRole(
+      solid: Color(0xFFFACC15),
+      on: AppPalette.slate950,
+      container: Color(0xFF422006),
+      onContainer: Color(0xFFFEF08A),
+    ),
     success: ColorRole(
       solid: AppPalette.successBright,
       on: AppPalette.slate950,
@@ -134,6 +152,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
   WheelAthleteColors copyWith({
     ColorRole? left,
     ColorRole? right,
+    ColorRole? center,
     ColorRole? success,
     ColorRole? warning,
     ColorRole? danger,
@@ -142,6 +161,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
     return WheelAthleteColors(
       left: left ?? this.left,
       right: right ?? this.right,
+      center: center ?? this.center,
       success: success ?? this.success,
       warning: warning ?? this.warning,
       danger: danger ?? this.danger,
@@ -155,6 +175,7 @@ class WheelAthleteColors extends ThemeExtension<WheelAthleteColors> {
     return WheelAthleteColors(
       left: left.lerp(other.left, t),
       right: right.lerp(other.right, t),
+      center: center.lerp(other.center, t),
       success: success.lerp(other.success, t),
       warning: warning.lerp(other.warning, t),
       danger: danger.lerp(other.danger, t),

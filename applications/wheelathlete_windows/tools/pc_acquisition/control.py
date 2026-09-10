@@ -15,6 +15,10 @@ def sync_ping(token: int) -> bytes:
     return struct.pack("<BI", CMD_SYNC_PING, token & 0xFFFFFFFF)
 
 
+def set_utc(utc_epoch_ms: int) -> bytes:
+    return struct.pack("<BQ", CMD_SET_UTC, utc_epoch_ms & 0xFFFFFFFFFFFFFFFF)
+
+
 def scheduled_start(target_device_us: int) -> bytes:
     return struct.pack("<BI", CMD_START, target_device_us & 0xFFFFFFFF)
 

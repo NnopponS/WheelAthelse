@@ -212,7 +212,16 @@ void main() {
     await pumpPage(
       tester,
       ProviderScope(
-        overrides: [trajectoryModelClientProvider.overrideWithValue(client)],
+        overrides: [
+          trajectoryModelClientProvider.overrideWithValue(client),
+          trajectoryInputPreparerProvider.overrideWithValue(
+            (samples, meta) async => prepareTrajectoryInput(
+              samples,
+              sourceRateHz: meta.sampleRateHz,
+              meta: meta,
+            ),
+          ),
+        ],
         child: SessionPreviewPage(source: source),
       ),
     );

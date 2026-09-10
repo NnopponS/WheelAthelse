@@ -19,7 +19,7 @@ async def _run(args: argparse.Namespace) -> None:
         flush=True,
     )
     try:
-        await asyncio.Event().wait()
+        await server.shutdown_requested.wait()
     finally:
         await server.close()
 

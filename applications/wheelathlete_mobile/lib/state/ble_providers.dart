@@ -103,8 +103,8 @@ class ConnectionManagerState {
     Map<WheelSide, WheelConnection>? bySide,
     this.error,
   }) : bySide = {
-         WheelSide.left: bySide?[WheelSide.left] ?? const WheelConnection(),
-         WheelSide.right: bySide?[WheelSide.right] ?? const WheelConnection(),
+         for (final side in WheelSide.values)
+           side: bySide?[side] ?? const WheelConnection(),
        };
 
   final bool isScanning;

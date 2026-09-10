@@ -9,7 +9,7 @@ from .service import AcquisitionService
 
 
 PROTOCOL_VERSION = 1
-MAX_MESSAGE_BYTES = 64 * 1024
+MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 MAX_PREVIEW_WRITE_BUFFER_BYTES = 256 * 1024
 
 
@@ -74,6 +74,7 @@ class AcquisitionIpcServer:
         self._server: asyncio.AbstractServer | None = None
         self._clients: set[_Client] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self.shutdown_requested = asyncio.Event()
         self._preview_events_sent = 0
         self._preview_events_dropped = 0
         self._max_preview_write_buffer_bytes = 0
@@ -88,7 +89,9 @@ class AcquisitionIpcServer:
     async def start(self) -> None:
         await self.service.start()
         self._loop = asyncio.get_running_loop()
-        self._server = await asyncio.start_server(self._handle_client, self.host, self.port)
+        self._server = await asyncio.start_server(
+            self._handle_client, self.host, self.port, limit=MAX_MESSAGE_BYTES
+        )
 
     async def close(self) -> None:
         server = self._server
@@ -167,7 +170,10 @@ class AcquisitionIpcServer:
         client = _Client(writer=writer)
         self._clients.add(client)
         try:
-            first = await self._read_message(reader)
+            try:
+                first = await self._read_message(reader)
+            except EOFError:
+                return
             if first["type"] != "hello":
                 raise IpcProtocolError("first message must be hello")
             client.ready = True
@@ -195,18 +201,23 @@ class AcquisitionIpcServer:
                         # owns socket/UI-isolation counters. Inject a trusted
                         # internal snapshot so exported diagnostics contain both.
                         command_payload["_ipc_status"] = self.ipc_status()
-                    result = await self.service.handle_command(
-                        message["type"], command_payload
+                    shutdown = message["type"] == "shutdown"
+                    result = (
+                        await self.service.prepare_shutdown()
+                        if shutdown
+                        else await self.service.handle_command(message["type"], command_payload)
                     )
                     if message["type"] == "status":
                         result = {**result, "ipc": self.ipc_status()}
+                    writer.write(encode_message("response", {"ok": True, "result": result}, request_id=request_id))
+                    await writer.drain()
+                    if shutdown:
+                        self.shutdown_requested.set()
+                        break
                 except Exception as exc:
                     await self._send_error(
                         writer, request_id, "command_failed", str(exc)
                     )
-                else:
-                    writer.write(encode_message("response", {"ok": True, "result": result}, request_id=request_id))
-                    await writer.drain()
         except IpcProtocolError as exc:
             await self._send_error(writer, None, "protocol_error", str(exc))
         finally:

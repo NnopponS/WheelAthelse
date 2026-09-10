@@ -19,6 +19,7 @@ NVS_NAMESPACE = "wacfg"
 
 WHEEL_LEFT = 0x4C   # 'L'
 WHEEL_RIGHT = 0x52  # 'R'
+WHEEL_CENTER = 0x43 # 'C' chair center
 
 VALID_RATES = (50, 100, 200)
 
@@ -49,8 +50,8 @@ def parse_config(buf):
 
 
 def is_valid_wheel(wheel_id):
-    """Check if wheel_id is valid (0x4C='L' or 0x52='R')."""
-    return wheel_id == WHEEL_LEFT or wheel_id == WHEEL_RIGHT
+    """Check L/R wheel hubs and optional C chair-center role."""
+    return wheel_id in (WHEEL_LEFT, WHEEL_RIGHT, WHEEL_CENTER)
 
 
 def is_valid_rate(rate_hz):
@@ -145,6 +146,9 @@ class TestWheelValidation(unittest.TestCase):
 
     def test_valid_right(self):
         self.assertTrue(is_valid_wheel(WHEEL_RIGHT))
+
+    def test_valid_center(self):
+        self.assertTrue(is_valid_wheel(WHEEL_CENTER))
 
     def test_invalid_other(self):
         self.assertFalse(is_valid_wheel(0x41))  # 'A'

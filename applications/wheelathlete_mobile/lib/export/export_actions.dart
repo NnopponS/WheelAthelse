@@ -122,6 +122,7 @@ class ExportActions {
       final safeTopic = _safeFilePart(topic);
       final stem =
           '${safeTopic}_trial_${trial.toString().padLeft(2, '0')}_$date';
+      final hasCenter = samples.any((s) => s.wheel == WheelSide.center);
       final outputs = <String, String>{
         '${stem}_left_raw.csv': CsvExporter.toRawCsvString(
           samples,
@@ -131,6 +132,11 @@ class ExportActions {
           samples,
           WheelSide.right,
         ),
+        if (hasCenter)
+          '${stem}_center_raw.csv': CsvExporter.toRawCsvString(
+            samples,
+            WheelSide.center,
+          ),
         '${stem}_training.csv': CsvExporter.toAlignedTrainingCsvString(
           samples,
           gridIntervalUs: 1000000 ~/ metas.first.sampleRateHz,
@@ -211,6 +217,8 @@ class ExportActions {
             '${safeTopic}_trial_${trial.toString().padLeft(2, '0')}_$date';
         final leftPath = '$temporary/${stem}_left_raw.csv';
         final rightPath = '$temporary/${stem}_right_raw.csv';
+        final centerPath = '$temporary/${stem}_center_raw.csv';
+        final hasCenter = samples.any((s) => s.wheel == WheelSide.center);
         final trainingPath = '$temporary/${stem}_training.csv';
         final metadataPath = '$temporary/$stem.metadata.json';
         await writeFile(
@@ -221,6 +229,12 @@ class ExportActions {
           rightPath,
           utf8.encode(CsvExporter.toRawCsvString(samples, WheelSide.right)),
         );
+        if (hasCenter) {
+          await writeFile(
+            centerPath,
+            utf8.encode(CsvExporter.toRawCsvString(samples, WheelSide.center)),
+          );
+        }
         await writeFile(
           trainingPath,
           utf8.encode(
@@ -242,6 +256,7 @@ class ExportActions {
         files.addAll([
           '$destination/${stem}_left_raw.csv',
           '$destination/${stem}_right_raw.csv',
+          if (hasCenter) '$destination/${stem}_center_raw.csv',
           '$destination/${stem}_training.csv',
           '$destination/$stem.metadata.json',
         ]);
@@ -254,9 +269,9 @@ class ExportActions {
             'product': 'WheelAthlete',
             'topic': topic,
             'app_version': '$wheelAthleteAppVersion+$wheelAthleteAppBuild',
-            'firmware_version': '1.8.0',
+            'firmware_version': '1.8.2',
             'protocol_version': '1.8.0',
-            'session_schema_version': 4,
+            'session_schema_version': 5,
             'export_schema_version': 2,
             'trial_count': trials.length,
             'exported_at': DateTime.now().toUtc().toIso8601String(),
@@ -303,6 +318,10 @@ class ExportActions {
         final right = utf8.encode(
           CsvExporter.toRawCsvString(samples, WheelSide.right),
         );
+        final hasCenter = samples.any((s) => s.wheel == WheelSide.center);
+        final center = hasCenter
+            ? utf8.encode(CsvExporter.toRawCsvString(samples, WheelSide.center))
+            : null;
         final training = utf8.encode(
           CsvExporter.toAlignedTrainingCsvString(
             samples,
@@ -313,6 +332,11 @@ class ExportActions {
         archive.addFile(
           ArchiveFile('$base/right_raw.csv', right.length, right),
         );
+        if (center != null) {
+          archive.addFile(
+            ArchiveFile('$base/center_raw.csv', center.length, center),
+          );
+        }
         archive.addFile(
           ArchiveFile('$base/training.csv', training.length, training),
         );
@@ -329,9 +353,9 @@ class ExportActions {
       jsonEncode({
         'product': 'WheelAthlete',
         'app_version': '$wheelAthleteAppVersion+$wheelAthleteAppBuild',
-        'firmware_version': '1.8.0',
+        'firmware_version': '1.8.2',
         'protocol_version': '1.8.0',
-        'session_schema_version': 4,
+        'session_schema_version': 5,
         'export_schema_version': 2,
         'topic_count': topics.length,
         'trial_count': trialCount,

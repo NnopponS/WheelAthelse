@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wheelathlete/theme/theme.dart';
 
 /// Semantic tone for a [StatusBadge]. Maps to design-system color roles.
-enum BadgeTone { neutral, info, success, warning, danger, left, right }
+enum BadgeTone { neutral, info, success, warning, danger, left, right, center }
 
 /// A compact pill that communicates state at a glance — connection status,
 /// sync quality, wheel identity, recording state, etc.
@@ -46,6 +46,7 @@ class StatusBadge extends StatelessWidget {
       BadgeTone.danger => (fg: wc.danger.onContainer, bg: wc.danger.container),
       BadgeTone.left => (fg: wc.left.onContainer, bg: wc.left.container),
       BadgeTone.right => (fg: wc.right.onContainer, bg: wc.right.container),
+      BadgeTone.center => (fg: wc.center.onContainer, bg: wc.center.container),
     };
   }
 

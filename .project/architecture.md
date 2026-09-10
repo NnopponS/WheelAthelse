@@ -1,148 +1,124 @@
-﻿# WheelAthlete â€” Current Architecture
+# WheelAthlete runtime architecture
 
-Updated: 2026-09-06
+Updated: 2026-09-08.
 
-## Repository topology
+WheelAthlete maintains two operator applications and two firmware targets. The stable sensing baseline is two wheel-hub IMUs (`L`, `R`); source code now also supports an optional chair-center IMU (`C`) for future controlled experiments.
 
-WheelAthlete is organized into two explicit product domains: operator applications and embedded hardware firmware.
-
-```text
-WheelAthelse/
-â”œâ”€â”€ applications/
-â”‚   â”œâ”€â”€ wheelathlete_mobile/          # WheelAthlete Mobile Application
-â”‚   â””â”€â”€ wheelathlete_windows/         # WheelAthlete Windows Research Application
-â”œâ”€â”€ hardware_firmware/
-â”‚   â”œâ”€â”€ m5stickc_plus2/               # WheelAthlete M5StickC Plus2 Firmware
-â”‚   â””â”€â”€ xiao_nrf52840_sense/          # WheelAthlete XIAO nRF52840 Sense Firmware
-â”œâ”€â”€ assets/
-â”œâ”€â”€ docs/
-â”œâ”€â”€ .project/
-â”œâ”€â”€ VERSION
-â”œâ”€â”€ README.md
-â””â”€â”€ README.th.md
-```
-
-Generated build output, caches, PlatformIO `.pio/`, and collected research data are excluded from Git.
-
-## Product topology
-
-Both operator applications use the same WheelAthlete BLE contract. Only one operator application should own a given left/right sensor pair at a time.
+## Product and repository boundaries
 
 ```text
-Left wheel sensor â”€â”
-                   â”œâ”€â”€ BLE GATT â”€â”€ WheelAthlete Mobile Application
-Right wheel sensor â”˜                  Flutter / iOS / Android
-
-Left wheel sensor â”€â”
-                   â”œâ”€â”€ BLE GATT â”€â”€ Acquisition daemon â”€â”€ localhost IPC â”€â”€ PySide6 GUI
-Right wheel sensor â”˜                  WheelAthlete Windows Research Application
+applications/wheelathlete_mobile/        Flutter Android/iOS; direct BLE ownership
+applications/wheelathlete_windows/       Python/PySide6 GUI + acquisition daemon
+hardware_firmware/m5stickc_plus2/        ESP32/M5StickC Plus2 sensor firmware
+hardware_firmware/xiao_nrf52840_sense/   nRF52840/LSM6DS3 sensor firmware
+docs/                                    BLE/model contracts and public fixtures
+.project/                                project truth + ignored local evidence
+scripts/                                 verification/hygiene tooling
+BiWheel3D/                                separate local research repository
 ```
 
-## WheelAthlete Mobile Application
+`BiWheel3D/` is not a root submodule and must not become a required runtime dependency. The Windows source app may discover its registry for explicit local research review. Installed/clean applications must continue to operate without the research checkout.
 
-Location: `applications/wheelathlete_mobile/`
+## Sensor roles
 
-Supported product platforms:
+| Role | Identity | Physical meaning | Current model use |
+|---|---|---|---|
+| L | `0x4C` | left wheel-hub IMU | legacy/current L/R model input |
+| R | `0x52` | right wheel-hub IMU | legacy/current L/R model input |
+| C | `0x43` | optional chair-center/frame IMU | acquisition/storage only; ignored by current trajectory models |
 
-- Android
-- iOS
+Center mounting contract: **+Z points down toward the floor**. Center X/Y remain physical board axes until forward/lateral orientation is measured and documented. The code must not silently map C to R or reinterpret its axes.
 
-The mobile application owns BLE directly through `flutter_blue_plus`. It handles dual-wheel connection, synchronization, realtime preview, recording, session organization, QC presentation, and CSV/Excel/ZIP export.
-
-Flutter Windows and Web targets are retired and are not part of the maintained mobile source tree.
-
-## WheelAthlete Windows Research Application
-
-Location: `applications/wheelathlete_windows/`
-
-Main components:
-
-- `tools/pc_acquisition/` â€” authoritative BLE acquisition daemon
-- `tools/pc_gui/` â€” PySide6 operator interface and optional offline MODEL adapter
-- `run_wheelathlete_windows.bat` â€” source launcher
-- `packaging/windows/` â€” PyInstaller and Inno Setup packaging
-
-Reliability boundary:
+## Acquisition ownership
 
 ```text
-BLE notification
-  -> acquisition daemon
-  -> strict parsing and sequence accounting
-  -> synchronization
-  -> append-only .waj journal
-  -> final QC / recovery
-  -> bounded localhost preview/status IPC
-  -> PySide6 GUI
+L/R[/C] -> BLE -> Flutter mobile -> mobile-native session storage
+
+or
+
+L/R[/C] -> BLE -> Windows acquisition daemon -> append-only .waj
+                                            -> bounded localhost IPC -> Qt GUI
 ```
 
-The GUI is not the authoritative raw-data path. UI rendering, optional model inference, or GUI restart must not become the BLE storage bottleneck.
+Only one operator client owns a sensor set at a time. Preview traffic may be bounded; authoritative raw capture may not silently drop data to preserve UI smoothness.
 
-Default Windows data locations:
+Windows `tools/pc_acquisition` owns BLE parsing, per-role sequence classification, synchronization, lifecycle, journal writes, QC and recovery. `tools/pc_gui` owns operator controls, preview, result browsing and optional offline analysis. The GUI must never become authoritative raw storage.
 
-- Sessions: `~/Documents/WheelAthlete/PC Sessions`
-- GUI log: `~/Documents/WheelAthlete/Logs/wheelathlete-windows.log`
-- Experiment presets: `~/Documents/WheelAthlete/experiments.json`
+Flutter continues to own BLE directly; it does not depend on the Windows daemon or an HTTP inference service.
 
-## Hardware & firmware
+## Storage/version compatibility
 
-Maintained targets:
+The BLE 20-byte IMU sample payload remains unchanged. Role vocabulary is extended with C.
 
-- `hardware_firmware/m5stickc_plus2/` â€” M5StickC Plus2 / ESP32
-- `hardware_firmware/xiao_nrf52840_sense/` â€” Seeed Studio XIAO nRF52840 Sense
+Windows:
+- L/R-only journals retain journal v1 semantics.
+- A recording containing C uses journal v2.
+- v2 side codes are `L=0`, `R=1`, `C=2`.
+- v1 fallback summaries must not fabricate `C:0` into historical session metadata.
 
-Both implement the same left/right BLE protocol and support configured wheel identity, 50/100/200 Hz sampling, synchronized lifecycle control, sensor ranges, battery reporting, sequence/loss accounting, replay/recovery, and acquisition-health telemetry.
+Mobile:
+- current metadata schema supports optional center fields and old-session parsing.
+- `center_raw.csv` is emitted only for a recording that actually contains C.
+- historical L/R training CSV/schema stays unchanged.
 
-Canonical protocol: `docs/ble-protocol.md`.
+## Clock/timing architecture
 
-## Optional trajectory MODEL
+Raw packet data retains device `uint32` microsecond timestamp, sequence, arrival timestamp and sequence classification. Saved pre-start clock models and START evidence establish the application's chosen device-to-client mapping. They do not independently prove physical synchronization.
 
-The Windows MODEL workflow is offline/optional and does not participate in authoritative acquisition. Compatible local BiWheel3D checkpoints may be discovered from the repository root when available. The existing TCN + BiLSTM model is buffered/offline research analysis rather than a zero-latency causal estimator.
+Offline analysis uses recording-relative source time, explicit rollover/reset/gap handling and one whole-session result. BLE arrival time or independently zeroed device epochs must not be mislabeled as shared synchronized acquisition time.
 
-## Application update architecture
+For a future L/R/C model, C needs the same explicit clock provenance as both hubs. A third stream cannot be aligned by separately setting all starts to zero.
 
-Both user-facing applications consume one stable GitHub Releases manifest:
+## Offline analysis/model boundary
 
-```text
-https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
-```
+### Windows default
 
-The release manifest is generated only from final build artifacts and carries schema/channel/version metadata plus exact byte size and SHA-256 for Android and Windows downloads.
+The default remains the frozen classical XY+yaw recipe. It produces signed speed/yaw-rate and integrated pose under its documented frame assumptions.
 
-- Mobile release/profile builds perform a lightweight check after startup and every six hours. Android downloads a verified APK and delegates installation to the Android system package installer. iOS delegates installation to App Store/TestFlight.
-- Installed Windows PyInstaller/Inno builds check after startup and every six hours, verify the installer, then may relaunch through the stable Inno AppId.
-- Source/demo/portable Windows execution is never self-replacing.
-- Neither application starts installation while acquisition is active.
-- Firmware update is deliberately outside this application updater; BLE firmware/protocol remain independently versioned.
+### Experimental PyTorch residual v1
 
-Release automation is under `.github/workflows/release.yml`; shared manifest tooling is under `release/`.
+The Windows source app may explicitly load the residual BiGRU research model. Residual v1 predicts signed-speed/yaw-rate corrections over an L/R physics baseline. It remains research-only.
 
-## Packaging
+### Slalom constrained analysis
 
-Windows packaging is self-contained under `applications/wheelathlete_windows/`:
+Course adapters operate **after** the L/R estimator and only for explicitly labeled Slalom conditions.
 
-- build sources: `applications/wheelathlete_windows/packaging/windows/`
-- generated work directory: `applications/wheelathlete_windows/build/`
-- generated packages: `applications/wheelathlete_windows/release/`
+- v1: deterministic course heading/position closure under guards.
+- v2: rejected for accuracy claims because exploratory finite-difference optimization was numerically unstable and did not reproduce in app runtime.
+- v3: residual-v1 weights frozen; train-derived small linear yaw/speed calibration + sign-aware turn detection + guarded closure. C3D is never an inference input.
 
-Generated directories are ignored by Git.
+Near-zero final pose from a closure constraint is not evidence that unconstrained inertial odometry returned to zero. UI/export metadata must expose raw and constrained states/corrections.
 
-## Versioning
+### Mobile
 
-Current application release:
+Mobile keeps the existing M4 XY-only ONNX model. Chair yaw/rate, signed forward speed and signed longitudinal acceleration remain unavailable unless a future accepted model provides them. XY tangent is not chair heading.
 
-- product/application release: `1.8.0`
-- WheelAthlete Mobile Application: `1.8.0+10`
-- WheelAthlete Windows Research Application package: `1.8.0`
-- M5StickC Plus2 firmware: `1.8.0`
-- XIAO nRF52840 Sense firmware: `1.8.0`
-- BLE protocol: `1.8.0`
+### Center isolation
 
-The root `VERSION` tracks the user-facing application/product release. Firmware and BLE protocol are intentionally not bumped when an application-only release does not change the wire contract.
+Current model preprocessing explicitly selects L/R. Tests require exact legacy input equality when arbitrary C samples are added. C must never enter the existing `(T,5,12)` input by enum iteration, implicit concatenation or fallback.
 
-## Retired implementations
+A future center-aware model is a new estimator contract, likely with a different input dimension/feature identity. It requires new L/R/C training data, grouped validation and final acceptance; it is not a schema-only upgrade.
 
-Retired code remains available through Git history where applicable:
+## UI/result architecture
 
-- Flutter Windows desktop implementation
-- Flutter Web scaffold
-- legacy Tkinter/Matplotlib desktop GUI
+Windows and mobile hold one full-session analysis result. Cursor/window selection references original samples and never restarts the estimator. Rendering may decimate visually, but statistics/export use full source arrays.
+
+Missing quantities are null/unavailable, not zero. Derivative support/gaps must remain explicit. Exports are create-only and must not mutate original recordings.
+
+Center capture is visible independently of model analysis: live/saved preview and raw export may show C even though the trajectory model ignores it.
+
+## Firmware identity behavior
+
+XIAO center: yellow RGB identity (`red + green`, blue off), with visible identity blink and recording heartbeat. Error/retry states have priority.
+
+M5 center: yellow identity bar plus large yellow `C`; the glyph blinks/heartbeats without clearing large LCD rectangles, preserving the anti-flicker display rule.
+
+Successful compile is source/build evidence only. Physical orientation, sensor ranges, RF behavior, timing and data loss require hardware acceptance.
+
+## Updates, packaging and publication
+
+Stable product/version identity remains unchanged. Feature work may not be called a release merely because firmware or apps compile.
+
+Root feature branch publication is independent of the dirty working tree. The separate research repository, raw data, generated research models, local evidence and firmware binaries/ZIPs are not to be published by default.
+
+Use STATUS for measured current state, HANDOFF for continuation, decisions for durable policy and phase files for conclusions.

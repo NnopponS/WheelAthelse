@@ -77,6 +77,12 @@ class DaemonProcessManager(QObject):
         self.process.setWorkingDirectory(str(self.repo_root))
         environment = QProcessEnvironment.systemEnvironment()
         environment.insert("PYTHONUNBUFFERED", "1")
+        existing_pythonpath = environment.value("PYTHONPATH")
+        repo_str = str(self.repo_root)
+        if existing_pythonpath:
+            environment.insert("PYTHONPATH", f"{repo_str};{existing_pythonpath}")
+        else:
+            environment.insert("PYTHONPATH", repo_str)
         self.process.setProcessEnvironment(environment)
         self.process.start(program, args)
         self._owns_process = True

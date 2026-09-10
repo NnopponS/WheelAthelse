@@ -44,7 +44,7 @@ enum class Cmd : uint8_t {
     SetRange   = 0x05,
     Beep       = 0x06,
     SetName    = 0x07,   // board name
-    SetWheel   = 0x08,   // 0x4C='L' / 0x52='R'
+    SetWheel   = 0x08,   // 0x4C='L' / 0x52='R' / 0x43='C'
     SetUtc     = 0x09,   // uint64 LE epoch ms
     ReplayRange= 0x0A,
     SetBeepEnabled = 0x0B,

@@ -51,6 +51,9 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     _APP.processEvents()
     assert window.acquisition.current["L"].values["ax"].value.text() != "—"
     assert window.acquisition.current["R"].values["gz"].value.text() != "—"
+    assert window.acquisition.current["C"].values["az"].value.text() != "—"
+    assert "C" in window.dashboard.board_cards
+    assert window.acquisition.accel_chart_c.side == "C"
     assert window.acquisition.trial.text() == "1"
     assert window.acquisition.accel_chart_l.view.frameShape() == QFrame.Shape.NoFrame
     assert (
@@ -130,10 +133,10 @@ def test_results_page_batch_export_and_session_folder():
             p = Path(path_str)
             assert p.exists()
             assert p.suffix == ".csv"
-            # Must be placed in a topic folder
-            assert p.parent.name == "Sprint"
+            # "Select all recordings" is system-wide even while Sprint is filtered.
+            assert p.parent.name in {"Sprint", "Endurance"}
             # Must follow Topic_Trial#_Athlete naming
-            assert p.stem.startswith("Sprint_Trial")
+            assert p.stem.startswith(f"{p.parent.name}_Trial")
             assert "Athlete" in p.stem or "Sprint" in p.stem
 
     # Test Deselect All
@@ -153,8 +156,9 @@ def test_results_page_batch_export_and_session_folder():
     # Test changing session folder
     with tempfile.TemporaryDirectory() as custom_folder:
         controller.set_session_folder(custom_folder)
-        assert controller.state.journal_root == custom_folder
-        assert results.folder_label.text() == custom_folder
+        # Hosted Windows can expose this same directory through an 8.3 alias.
+        assert Path(controller.state.journal_root).samefile(custom_folder)
+        assert Path(results.folder_label.text()).samefile(custom_folder)
 
     controller.close()
     window.close()
@@ -211,6 +215,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     assert not results.preview_drawer.isHidden()
     assert "Lossless" in results.preview_drawer.integrity_badge.text()
     assert results.preview_drawer.accel_series["L_X"].count() > 0
+    assert results.preview_drawer.accel_series["C_Z"].count() > 0
 
     # Regression: clicking the active preview again must not hide the drawer or
     # replace/delete the cell action widget that emitted the click.

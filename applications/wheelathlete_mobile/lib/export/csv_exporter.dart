@@ -188,10 +188,16 @@ class CsvExporter {
       ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
     final right = samples.where((s) => s.wheel == WheelSide.right).toList()
       ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
+    final center = samples.where((s) => s.wheel == WheelSide.center).toList()
+      ..sort((a, b) => a.timestampSyncedMs.compareTo(b.timestampSyncedMs));
 
     _writeWheelSection(sink, 'L', left);
-    sink.writeln(); // blank line separator between tables
+    sink.writeln(); // preserve the historical L/R table separator
     _writeWheelSection(sink, 'R', right);
+    if (center.isNotEmpty) {
+      sink.writeln();
+      _writeWheelSection(sink, 'C', center);
+    }
   }
 
   static void _writeWheelSection(
@@ -207,7 +213,7 @@ class CsvExporter {
   }
 
   static String _formatRow(BufferedSample s) {
-    final wheel = s.wheel == WheelSide.left ? 'L' : 'R';
+    final wheel = s.wheel.shortLabel;
     final marker = s.marker ? '1' : '0';
     return [
       s.reading.seq.toString(),

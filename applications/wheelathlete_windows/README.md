@@ -1,8 +1,8 @@
-﻿# WheelAthlete Windows Research Application
+# WheelAthlete Windows Research Application
 
 The **WheelAthlete Windows Research Application** is the reliability-first Windows acquisition and research client. It uses a PySide6 operator interface and a separate Python acquisition daemon so BLE capture and authoritative raw-data recording remain isolated from UI rendering and optional analysis workloads.
 
-Current package version: `1.8.0`
+Current package version: `1.8.2`
 
 ## Architecture
 
@@ -11,6 +11,14 @@ Current package version: `1.8.0`
 - `packaging/windows/` â€” PyInstaller and Inno Setup packaging sources.
 - `run_wheelathlete_windows.bat` â€” source launcher.
 - `build/` and `release/` â€” generated artifacts; excluded from Git.
+
+## Experimental PyTorch research review
+
+The source MODEL page keeps the frozen BiWheel3D XY+yaw recipe first/default. If local PyTorch is available, a `torch_residual_v1` `.pt/.pth` checkpoint in `Documents/WheelAthlete/Model` can be selected explicitly as an experimental model. This does not change production `current_best` or the package requirements.
+
+Use `Research trial…` to inspect a trusted processed `.npz` under this checkout's `BiWheel3D/data` tree. If the trial contains real C3D hub ground truth, the chart overlays it as a gray dashed path and labels the displayed errors as full-cache diagnostics. These are visual research diagnostics; model-selection claims still require the support-masked evaluator and frozen split protocol. IMU-only trials never receive fabricated GT.
+
+When the optional local `BiWheel3D/registry/models.json` exists, the source app also discovers **Experimental PyTorch v1 + Slalom Course Constraint**. It keeps the exact residual-v1 weights and applies a fixed-course adapter only to sessions explicitly labeled `SL`/`slalom`; other maneuvers are exact no-ops. The UI reports whether heading/position closure was applied. This is research-only and does not replace the first/default classical model.
 
 ## Run from source
 
@@ -41,6 +49,12 @@ packaging\windows\build_installer.bat
 ```
 
 Generated packages are written to `release/`.
+
+Public packages require a trusted Authenticode certificate and RFC3161 timestamp URL. The build signs and verifies the GUI, daemon, and installer and writes `signing-report.json` plus `SHA256SUMS.txt`. An unsigned local build is suitable for development only and does not resolve download reputation warnings or Application Control error 4551.
+
+Upgrade and uninstall run the installation-specific daemon shutdown helper first. It finishes an active journal before exit and blocks file removal if the daemon cannot stop. Recordings and custom models in the user's `Documents/WheelAthlete` tree are preserved.
+
+Portable model bundles use a `wheelathlete-model.json` manifest and are documented in [`../../docs/model_analysis/MODEL_BUNDLES.md`](../../docs/model_analysis/MODEL_BUNDLES.md).
 
 ## Automatic updates
 

@@ -101,6 +101,17 @@ const _rightInfo = DeviceInfo(
   gyroScale: 1 / 16.4,
 );
 
+const _centerInfo = DeviceInfo(
+  wheelId: WheelId.center,
+  fwMajor: 1,
+  fwMinor: 8,
+  fwPatch: 0,
+  accelRange: 0,
+  gyroRange: 3,
+  accelScale: 1 / 16384,
+  gyroScale: 1 / 16.4,
+);
+
 class _ImmediateFirstPacketBleRepository extends FakeBleRepository {
   _ImmediateFirstPacketBleRepository({
     required super.devices,
@@ -593,6 +604,107 @@ void main() {
         expect(
           buffered.where((sample) => sample.wheel == WheelSide.right),
           hasLength(samplesPerSide),
+        );
+      },
+    );
+
+    test(
+      'three-sensor recording preserves C role and +Z-down metadata',
+      () async {
+        storage = InMemoryStorageRepository();
+        ble = FakeBleRepository(
+          devices: const [
+            FakeDevice(id: 'L1', name: 'WheelAthlete-L', rssi: -42),
+            FakeDevice(id: 'R1', name: 'WheelAthlete-R', rssi: -55),
+            FakeDevice(id: 'C1', name: 'WheelAthlete-C', rssi: -47),
+          ],
+          infoFor: const {'L1': _leftInfo, 'R1': _rightInfo, 'C1': _centerInfo},
+        );
+        container = ProviderContainer(
+          overrides: [
+            bleRepositoryProvider.overrideWith((ref) => ble),
+            imuBatchProcessorFactoryProvider.overrideWithValue(
+              SyncImuBatchProcessor.new,
+            ),
+            storageRepositoryProvider.overrideWith((ref) => storage),
+            rssiPollIntervalProvider.overrideWith((ref) => null),
+            interConnectSettleDelayProvider.overrideWith(
+              (ref) => Duration.zero,
+            ),
+            recordingEmitIntervalProvider.overrideWith((ref) => Duration.zero),
+            recordingStopAckTimeoutProvider.overrideWith(
+              (ref) => const Duration(milliseconds: 10),
+            ),
+            stopCommandRetryDelayProvider.overrideWith((ref) => Duration.zero),
+          ],
+        );
+        addTearDown(container.dispose);
+        final connections = container.read(connectionManagerProvider.notifier);
+        await connections.connect('L1');
+        await connections.connect('R1');
+        await connections.connect('C1');
+        await storage.createTopic('three_imu');
+
+        final notifier = container.read(recordingProvider.notifier);
+        await notifier.startRecording(
+          const SessionConfig(
+            topic: 'three_imu',
+            trialNumber: 1,
+            sampleRateHz: 100,
+          ),
+        );
+        for (final entry in {'L1': 1000, 'R1': 1500, 'C1': 2000}.entries) {
+          ble
+              .imuController(entry.key)!
+              .add(
+                _batch([
+                  _sample(
+                    seq: 0,
+                    tDeviceUs: entry.value,
+                    az: entry.key == 'C1' ? 16384 : 0,
+                  ),
+                ]),
+              );
+        }
+        await Future<void>.delayed(Duration.zero);
+        expect(notifier.bufferedSamples.map((sample) => sample.wheel).toSet(), {
+          WheelSide.left,
+          WheelSide.right,
+          WheelSide.center,
+        });
+
+        await notifier.stopRecording();
+        final state = container.read(recordingProvider);
+        expect(state.status, RecordingStatus.stopped);
+        final meta = await storage.readSessionMeta(
+          'three_imu',
+          1,
+          state.savedSessionId!,
+        );
+        expect(meta, isNotNull);
+        expect(meta!.recordedSides, containsAll(['L', 'R', 'C']));
+        expect(meta.schemaVersion, 5);
+        expect(meta.sensorAxisConventions['C']?['sensor_role'], 'chair_center');
+        expect(meta.sensorAxisConventions['C']?['z_axis'], 'down_toward_floor');
+        expect(
+          meta.sensorAxisConventions['C']?['x_y_axes'],
+          'board_axes_unmapped',
+        );
+        final saved = await storage.readSamples(
+          'three_imu',
+          1,
+          state.savedSessionId!,
+        );
+        expect(
+          saved.where((sample) => sample.wheel == WheelSide.center),
+          hasLength(1),
+        );
+        expect(
+          saved
+              .singleWhere((sample) => sample.wheel == WheelSide.center)
+              .reading
+              .az,
+          1.0,
         );
       },
     );

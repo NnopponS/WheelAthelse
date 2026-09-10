@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import math
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,35 @@ def sanitize_name(name: Any) -> str:
     text = str(name).strip() if name is not None else ""
     cleaned = "".join("_" if ord(ch) < 32 or ch in '<>:"/\\|?*' else ch for ch in text).strip(" .")
     return cleaned or "Untitled"
+
+
+def _recorded_board_scale(
+    meta: dict[str, Any],
+    side: str,
+    key: str,
+    *,
+    live_value: float,
+    fallback: float,
+) -> float:
+    """Prefer immutable recording metadata over the currently connected board state."""
+    boards = meta.get("boards")
+    if isinstance(boards, dict):
+        board = boards.get(side)
+        if isinstance(board, dict):
+            try:
+                saved = float(board.get(key))
+            except (TypeError, ValueError):
+                saved = 0.0
+            if math.isfinite(saved) and saved > 0.0:
+                return saved
+
+    try:
+        live = float(live_value)
+    except (TypeError, ValueError):
+        live = 0.0
+    if math.isfinite(live) and live > 0.0 and live != 1.0:
+        return live
+    return float(fallback)
 
 
 def resolve_session_files(root: Path | str, session_id: str) -> tuple[Path, Path, Path]:
@@ -99,7 +130,7 @@ class BaseController(QObject):
         self.state = AppViewState()
         self.scan_results: list[dict[str, Any]] = []
         self.sessions: list[dict[str, Any]] = []
-        self._preview = {"L": PreviewBuffer(), "R": PreviewBuffer()}
+        self._preview = {side: PreviewBuffer() for side in ("L", "R", "C")}
 
     def preview_buffer(self, side: str) -> PreviewBuffer:
         return self._preview[side]
@@ -149,20 +180,29 @@ class AcquisitionController(BaseController):
     ) -> None:
         super().__init__(parent)
         self.client = DaemonClient(port=port, parent=self)
+        self.daemon_logger = logging.getLogger("wheelathlete.daemon")
+        self.gui_logger = logging.getLogger("wheelathlete.gui")
         self.process_manager = DaemonProcessManager(repo_root=repo_root, port=port, parent=self)
+        self.daemon_log.connect(self.daemon_logger.info)
         self.process_manager.log_line.connect(self.daemon_log)
         self.client.ready_changed.connect(self._on_ready)
         self.client.connection_changed.connect(self._on_connection)
         self.client.event_received.connect(self._on_event)
         self.client.command_failed.connect(self.command_error)
+        self.client.command_failed.connect(
+            lambda cmd, err: self.gui_logger.warning("Daemon command '%s' failed: %s", cmd, err)
+        )
         self.client.protocol_error.connect(lambda text: self.command_error.emit("protocol", text))
+        self.client.protocol_error.connect(
+            lambda err: self.gui_logger.error("Daemon protocol error: %s", err)
+        )
         self._poll = QTimer(self)
         self._poll.setInterval(1000)
         self._poll.timeout.connect(self.refresh_status)
         self._started = False
         settings = load_gui_settings()
         saved_folder = settings.get("session_folder")
-        if saved_folder:
+        if saved_folder and Path(saved_folder).is_dir():
             self.state.journal_root = str(saved_folder)
 
     def start(self) -> None:
@@ -349,6 +389,7 @@ class AcquisitionController(BaseController):
 
     def refresh_status(self) -> None:
         if not self.client.ready:
+            self.process_manager.ensure_running()
             self.client.connect_to_daemon()
             return
         self._command("status", {}, self._apply_status, quiet=True)
@@ -410,139 +451,16 @@ class AcquisitionController(BaseController):
         return exported_paths
 
     def load_session_data(self, session_id: str) -> dict[str, Any]:
+        from .analysis_loader import read_recording
         root = Path(self.state.journal_root or (Path.home() / "Documents" / "WheelAthlete" / "PC Sessions"))
-        journal_path, manifest_path, csv_path = resolve_session_files(root, session_id)
-        meta: dict[str, Any] = {}
-        if manifest_path.exists():
-            try:
-                meta = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        manifest_meta = dict(meta)
-
-        samples_l: list[dict[str, float]] = []
-        samples_r: list[dict[str, float]] = []
-        gap_events: list[dict[str, Any]] = []
-
-        accel_scale_l = self.state.boards["L"].accel_scale if self.state.boards["L"].accel_scale not in (1.0, 0.0) else (16.0 / 32768.0)
-        gyro_scale_l = self.state.boards["L"].gyro_scale if self.state.boards["L"].gyro_scale not in (1.0, 0.0) else (2000.0 / 32768.0)
-        accel_scale_r = self.state.boards["R"].accel_scale if self.state.boards["R"].accel_scale not in (1.0, 0.0) else (16.0 / 32768.0)
-        gyro_scale_r = self.state.boards["R"].gyro_scale if self.state.boards["R"].gyro_scale not in (1.0, 0.0) else (2000.0 / 32768.0)
-
-        if journal_path.exists():
-            try:
-                from tools.pc_acquisition.journal import JournalReader, RecordKind
-                records = JournalReader(journal_path).read_all()
-                first_t_ns = None
-                for record in records:
-                    if record.kind is RecordKind.SESSION_META and record.json_value:
-                        # The append-only journal preserves original capture metadata.
-                        # Mutable user-facing names live in the summary sidecar, so only
-                        # fill keys that are absent instead of overwriting renamed values.
-                        for key, value in record.json_value.items():
-                            meta.setdefault(key, value)
-                        if "accel_scale" in record.json_value:
-                            accel_scale_l = accel_scale_r = float(record.json_value["accel_scale"])
-                        if "gyro_scale" in record.json_value:
-                            gyro_scale_l = gyro_scale_r = float(record.json_value["gyro_scale"])
-                    elif record.kind is RecordKind.SAMPLE and record.sample is not None:
-                        rec = record.sample
-                        if first_t_ns is None:
-                            first_t_ns = rec.arrival_ns
-                        t_sec = max(0.0, (rec.arrival_ns - first_t_ns) / 1_000_000_000.0)
-                        side_str = rec.side.value
-                        accel_scale = accel_scale_l if side_str == "L" else accel_scale_r
-                        gyro_scale = gyro_scale_l if side_str == "L" else gyro_scale_r
-                        entry = {
-                            "t": t_sec,
-                            "seq": rec.sample.seq,
-                            "ax": rec.sample.ax * accel_scale,
-                            "ay": rec.sample.ay * accel_scale,
-                            "az": rec.sample.az * accel_scale,
-                            "gx": rec.sample.gx * gyro_scale,
-                            "gy": rec.sample.gy * gyro_scale,
-                            "gz": rec.sample.gz * gyro_scale,
-                        }
-                        if side_str == "L":
-                            samples_l.append(entry)
-                        else:
-                            samples_r.append(entry)
-                        if rec.missing_before > 0 or rec.sequence_class in ("gap", "out_of_order"):
-                            gap_events.append({
-                                "side": side_str,
-                                "time_s": t_sec,
-                                "seq": rec.sample.seq,
-                                "missing": rec.missing_before,
-                                "reason": rec.sequence_class,
-                            })
-            except Exception as exc:
-                self.daemon_log.emit(f"Failed to read journal {journal_path}: {exc}")
-
-        # The binary journal keeps immutable acquisition-time metadata. The finalized
-        # summary sidecar is intentionally the editable user-facing metadata layer.
-        # Re-apply it after reading SESSION_META so rename operations are reflected in
-        # Results, Preview and MODEL without mutating raw research evidence.
-        meta.update(manifest_meta)
-
-        if not samples_l and not samples_r and csv_path.exists():
-            try:
-                with csv_path.open("r", encoding="utf-8") as handle:
-                    reader = csv.DictReader(handle)
-                    first_ns = None
-                    for row in reader:
-                        arr_ns = int(row.get("timestamp_pc_monotonic_ns", 0) or 0)
-                        if first_ns is None:
-                            first_ns = arr_ns
-                        t_sec = max(0.0, (arr_ns - first_ns) / 1_000_000_000.0)
-                        side_str = row.get("wheel", "L")
-                        accel_scale = accel_scale_l if side_str == "L" else accel_scale_r
-                        gyro_scale = gyro_scale_l if side_str == "L" else gyro_scale_r
-                        seq = int(row.get("seq", 0) or 0)
-                        missing = int(row.get("missing_before", 0) or 0)
-                        seq_class = row.get("sequence_class", "contiguous")
-                        entry = {
-                            "t": t_sec,
-                            "seq": seq,
-                            "ax": float(row.get("ax_raw", 0) or 0) * accel_scale,
-                            "ay": float(row.get("ay_raw", 0) or 0) * accel_scale,
-                            "az": float(row.get("az_raw", 0) or 0) * accel_scale,
-                            "gx": float(row.get("gx_raw", 0) or 0) * gyro_scale,
-                            "gy": float(row.get("gy_raw", 0) or 0) * gyro_scale,
-                            "gz": float(row.get("gz_raw", 0) or 0) * gyro_scale,
-                        }
-                        if side_str == "L":
-                            samples_l.append(entry)
-                        else:
-                            samples_r.append(entry)
-                        if missing > 0 or seq_class in ("gap", "out_of_order"):
-                            gap_events.append({
-                                "side": side_str,
-                                "time_s": t_sec,
-                                "seq": seq,
-                                "missing": missing,
-                                "reason": seq_class,
-                            })
-            except Exception as exc:
-                self.daemon_log.emit(f"Failed to read CSV {csv_path}: {exc}")
-
-        duration_s = meta.get("duration_s")
-        if duration_s is None:
-            max_tl = samples_l[-1]["t"] if samples_l else 0.0
-            max_tr = samples_r[-1]["t"] if samples_r else 0.0
-            duration_s = max(max_tl, max_tr)
-
-        return {
-            "session_id": session_id,
-            "topic": meta.get("topic", ""),
-            "trial_number": meta.get("trial_number", ""),
-            "athlete": meta.get("athlete", ""),
-            "quality": meta.get("quality", "GOOD"),
-            "sample_rate_hz": meta.get("sample_rate_hz", 100),
-            "duration_s": duration_s,
-            "samples": {"L": samples_l, "R": samples_r},
-            "gaps": gap_events,
-            "total_missing_samples": sum(g.get("missing", 1) for g in gap_events),
-        }
+        journal, manifest, csv_path = resolve_session_files(root, session_id)
+        try:
+            return read_recording(journal, manifest, csv_path, session_id)
+        except Exception as exc:
+            self.daemon_log.emit(f"Recording read failed: {exc}")
+            return {"session_id": session_id, "samples": {"L": [], "R": [], "C": []},
+                    "gaps": [], "total_missing_samples": 0, "duration_s": 0.,
+                    "quality": "UNKNOWN", "analysis_errors": [str(exc)]}
 
     def delete_session(self, session_id: str) -> None:
         self._command(
@@ -802,6 +720,12 @@ class AcquisitionController(BaseController):
         self.state.recording = True
         self.state.recording_starting = False
         self.state.countdown = None
+        pc_start_ns = result.get("pc_start_ns")
+        if pc_start_ns is not None and self.state.recording_target_pc_ns is None:
+            self.state.recording_target_pc_ns = int(pc_start_ns)
+        utc_start = result.get("utc_start_ms")
+        if utc_start is not None:
+            self.state.recording_started_utc_ms = int(utc_start)
         self.state.session_id = str(result.get("session_id")) if result.get("session_id") else None
         self.state_changed.emit(self.state)
         self.message.emit("Recording started with synchronized device clocks")
@@ -811,6 +735,8 @@ class AcquisitionController(BaseController):
         self.state.recording = False
         self.state.recording_starting = False
         self.state.countdown = None
+        self.state.recording_started_utc_ms = None
+        self.state.recording_target_pc_ns = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
         self.recording_finished.emit(result)
@@ -820,6 +746,8 @@ class AcquisitionController(BaseController):
     def _record_failed(self, _message: str) -> None:
         self.state.recording_starting = False
         self.state.countdown = None
+        self.state.recording_started_utc_ms = None
+        self.state.recording_target_pc_ns = None
         self.state.live_busy = False
         self.state_changed.emit(self.state)
         self.refresh_status()
@@ -859,14 +787,26 @@ class AcquisitionController(BaseController):
             if state == "countdown":
                 self.state.recording_starting = True
                 self.state.countdown = max(1, int(payload.get("seconds", 5)))
+                pc_start_ns = payload.get("pc_start_ns")
+                self.state.recording_target_pc_ns = (
+                    int(pc_start_ns) if pc_start_ns is not None else None
+                )
+                utc_start = payload.get("utc_start_ms")
+                if utc_start is not None:
+                    self.state.recording_started_utc_ms = int(utc_start)
             elif state in {"started", "recording"}:
                 self.state.recording = True
                 self.state.recording_starting = False
                 self.state.countdown = None
+                utc_start = payload.get("utc_start_ms")
+                if utc_start is not None:
+                    self.state.recording_started_utc_ms = int(utc_start)
             elif state in {"stopped", "finalized"}:
                 self.state.recording = False
                 self.state.recording_starting = False
                 self.state.countdown = None
+                self.state.recording_started_utc_ms = None
+                self.state.recording_target_pc_ns = None
             self.state_changed.emit(self.state)
         elif event_type == "live_state":
             self.state.live = bool(payload.get("live"))
@@ -887,14 +827,14 @@ class DemoController(BaseController):
         self.state.daemon_connected = True
         self.state.daemon_name = "DEMO — synthetic preview only"
         self.state.journal_root = str(Path.home() / "Documents" / "WheelAthlete" / "PC Sessions")
-        for side, rssi in (("L", -46), ("R", -49)):
+        for side, rssi in (("L", -46), ("R", -49), ("C", -47)):
             self.state.boards[side] = BoardView(
                 side=side,
                 connected=True,
                 device_id=f"DEMO-{side}",
                 name=f"WheelAthlete-{side}",
-                firmware="1.8.0",
-                battery_percent=92 if side == "L" else 88,
+                firmware="1.8.2",
+                battery_percent={"L": 92, "R": 88, "C": 90}[side],
                 rssi=rssi,
                 mtu=247,
                 configured_rate_hz=100,
@@ -902,9 +842,9 @@ class DemoController(BaseController):
                 gyro_range=3,
                 samples_hz=100.0,
                 notifications_hz=10.0,
-                best_rtt_ms=1.8 if side == "L" else 2.1,
+                best_rtt_ms={"L": 1.8, "R": 2.1, "C": 1.9}[side],
                 median_rtt_ms=2.4,
-                drift_ppm=3.2 if side == "L" else -2.6,
+                drift_ppm={"L": 3.2, "R": -2.6, "C": 1.1}[side],
                 accel_scale=4 / 32768,
                 gyro_scale=2000 / 32768,
             )
@@ -912,7 +852,10 @@ class DemoController(BaseController):
         self._timer.setInterval(100)
         self._timer.timeout.connect(self._tick)
         self._seq = 0
-        self._started_ns = time.monotonic_ns()
+        self._started_ns = time.perf_counter_ns()
+        demo_day = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+        demo_today_utc_ms = int(demo_day.timestamp() * 1000)
+        demo_yesterday_utc_ms = int((demo_day - timedelta(days=1)).timestamp() * 1000)
         self.sessions = [
             {
                 "session_id": "demo_sprint_01",
@@ -926,6 +869,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1520, "R": 1520},
                 "tags": ["100m", "accel"],
                 "notes": "Fast sprint demo",
+                "started_utc_ms": demo_today_utc_ms,
+                "recorded_utc_ms": demo_today_utc_ms,
             },
             {
                 "session_id": "demo_sprint_02",
@@ -939,6 +884,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 1480, "R": 1480},
                 "tags": ["100m", "accel"],
                 "notes": "Second sprint demo",
+                "started_utc_ms": demo_today_utc_ms - 3_600_000,
+                "recorded_utc_ms": demo_today_utc_ms - 3_600_000,
             },
             {
                 "session_id": "demo_endurance_01",
@@ -952,6 +899,8 @@ class DemoController(BaseController):
                 "sample_counts": {"L": 3000, "R": 3000},
                 "tags": ["aerobic"],
                 "notes": "Steady pace demo",
+                "started_utc_ms": demo_yesterday_utc_ms,
+                "recorded_utc_ms": demo_yesterday_utc_ms,
             },
         ]
 
@@ -961,6 +910,7 @@ class DemoController(BaseController):
         self.scan_results = [
             {"device_id": "DEMO-L", "name": "WheelAthlete-L", "rssi": -46},
             {"device_id": "DEMO-R", "name": "WheelAthlete-R", "rssi": -49},
+            {"device_id": "DEMO-C", "name": "WheelAthlete-C", "rssi": -47},
         ]
         self.scan_results_changed.emit(list(self.scan_results))
         self.sessions_changed.emit(list(self.sessions))
@@ -979,7 +929,7 @@ class DemoController(BaseController):
 
 
     def disconnect_side(self, side: str) -> None:
-        self.message.emit("Demo mode keeps both synthetic wheels connected")
+        self.message.emit("Demo mode keeps all synthetic sensors connected")
 
     def configure_board(
         self, side: str, *, sample_rate_hz: int, accel_range: int, gyro_range: int
@@ -1038,7 +988,7 @@ class DemoController(BaseController):
             for i in range(20):
                 writer.writerow([
                     session_id, "L" if i % 2 == 0 else "R", i, i * 10000,
-                    time.monotonic_ns(), 100, 200, 16000, 10, 20, 30
+                    time.perf_counter_ns(), 100, 200, 16000, 10, 20, 30
                 ])
         self.message.emit(f"CSV exported: {output_path}")
 
@@ -1081,6 +1031,7 @@ class DemoController(BaseController):
 
         samples_l: list[dict[str, float]] = []
         samples_r: list[dict[str, float]] = []
+        samples_c: list[dict[str, float]] = []
         gaps: list[dict[str, Any]] = []
 
         has_demo_gap = "02" in session_id or "gap" in session_id.lower()
@@ -1120,6 +1071,17 @@ class DemoController(BaseController):
                 "gy": math.cos(phase * 2 + 0.3) * 44.0,
                 "gz": math.sin(phase + 0.3) * 118.0,
             })
+            samples_c.append({
+                "t": t,
+                "seq": i,
+                "ax": math.sin(phase * 0.8 + 0.15) * 0.18,
+                "ay": math.cos(phase * 0.7 + 0.1) * 0.16,
+                # Demo mounting contract: +Z points down toward the floor.
+                "az": 1.0 + math.sin(phase * 0.4) * 0.05,
+                "gx": math.sin(phase * 1.4) * 18.0,
+                "gy": math.cos(phase * 1.3) * 16.0,
+                "gz": math.sin(phase) * 42.0,
+            })
 
         return {
             "session_id": session_id,
@@ -1129,7 +1091,7 @@ class DemoController(BaseController):
             "quality": "DEGRADED" if gaps else quality,
             "sample_rate_hz": rate_hz,
             "duration_s": duration_s,
-            "samples": {"L": samples_l, "R": samples_r},
+            "samples": {"L": samples_l, "R": samples_r, "C": samples_c},
             "gaps": gaps,
             "total_missing_samples": sum(g.get("missing", 1) for g in gaps),
         }
@@ -1180,13 +1142,15 @@ class DemoController(BaseController):
 
     def start_record(self, metadata: dict[str, Any]) -> None:
         self.state.recording = True
+        self.state.recording_started_utc_ms = int(time.time() * 1000)
+        self._started_ns = time.perf_counter_ns()
         self.state.session_id = f"DEMO-{uuid.uuid4().hex[:8]}"
         self.state_changed.emit(self.state)
         self.message.emit("DEMO recording started — no research data is being written")
 
     def stop_record(self) -> None:
         self.state.recording = False
-        duration = max(0.1, (time.monotonic_ns() - self._started_ns) / 1e9)
+        duration = max(0.1, (time.perf_counter_ns() - self._started_ns) / 1e9)
         new_session = {
             "session_id": self.state.session_id or f"DEMO-{uuid.uuid4().hex[:8]}",
             "athlete": "Athlete",
@@ -1195,9 +1159,16 @@ class DemoController(BaseController):
             "sample_rate_hz": 100,
             "duration_s": duration,
             "quality": "GOOD",
-            "sample_counts": {"L": int(duration * 100), "R": int(duration * 100)},
+            "sample_counts": {
+                "L": int(duration * 100),
+                "R": int(duration * 100),
+                "C": int(duration * 100),
+            },
+            "started_utc_ms": self.state.recording_started_utc_ms,
+            "recorded_utc_ms": self.state.recording_started_utc_ms,
         }
         self.sessions.insert(0, new_session)
+        self.state.recording_started_utc_ms = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
         self.recording_finished.emit(
@@ -1211,8 +1182,8 @@ class DemoController(BaseController):
         self.refresh_sessions()
 
     def _tick(self) -> None:
-        t = (time.monotonic_ns() - self._started_ns) / 1e9
-        for index, side in enumerate(("L", "R")):
+        t = (time.perf_counter_ns() - self._started_ns) / 1e9
+        for index, side in enumerate(("L", "R", "C")):
             phase = t + index * 0.45
             accel_scale = self.state.boards[side].accel_scale
             gyro_scale = self.state.boards[side].gyro_scale
@@ -1220,7 +1191,7 @@ class DemoController(BaseController):
                 side=side,
                 seq=self._seq,
                 device_us=int(t * 1_000_000) & 0xFFFFFFFF,
-                pc_ns=time.monotonic_ns(),
+                pc_ns=time.perf_counter_ns(),
                 ax=int((0.35 * math.sin(phase * 2.3)) / accel_scale),
                 ay=int((0.22 * math.sin(phase * 1.7 + 1.0)) / accel_scale),
                 az=int((1.0 + 0.08 * math.sin(phase * 2.0)) / accel_scale),

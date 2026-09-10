@@ -136,5 +136,19 @@ void main() {
         greaterThan(parsed[0].reading.tDeviceUs),
       );
     });
+    test('round-trips center role without collapsing it into right', () {
+      final samples = [
+        _sample(seq: 0, syncedMs: 10, wheel: WheelSide.right),
+        _sample(seq: 0, syncedMs: 10, wheel: WheelSide.center, ax: 30),
+        _sample(seq: 0, syncedMs: 10, wheel: WheelSide.left),
+      ];
+      final parsed = CsvSampleParser.parse(CsvExporter.toCsvString(samples));
+      expect(parsed.map((s) => s.wheel).toList(), [
+        WheelSide.left,
+        WheelSide.right,
+        WheelSide.center,
+      ]);
+      expect(parsed.last.reading.ax, 30);
+    });
   });
 }

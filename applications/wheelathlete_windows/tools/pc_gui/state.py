@@ -40,7 +40,7 @@ class PreviewSample:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "PreviewSample":
         side = str(payload.get("side", ""))
-        if side not in {"L", "R"}:
+        if side not in {"L", "R", "C"}:
             raise ValueError(f"invalid preview side: {side!r}")
         return cls(
             side=side,
@@ -105,6 +105,7 @@ class BoardView:
     queue_overflow_faults: int = 0
     produced: int | None = None
     notified: int | None = None
+    acquisition_state: int | None = None
     firmware_queue_drops: int | None = None
     transport_failures: int | None = None
     firmware_queue_depth: int | None = None
@@ -155,6 +156,7 @@ class BoardView:
             queue_overflow_faults=int(data.get("queue_overflow_faults", 0) or 0),
             produced=_as_int(health.get("produced")),
             notified=_as_int(health.get("notified")),
+            acquisition_state=_as_int(health.get("state")),
             firmware_queue_drops=_as_int(health.get("queue_drops")),
             transport_failures=_as_int(health.get("transport_failures")),
             firmware_queue_depth=_as_int(health.get("queue_depth")),
@@ -193,7 +195,33 @@ class BoardView:
 
     @property
     def healthy(self) -> bool:
-        return self.connected and self.loss_count == 0 and self.fatal_fault is None
+        return (
+            self.connected
+            and self.loss_count == 0
+            and self.fatal_fault is None
+            and self.acquisition_state not in {3, 4}
+        )
+
+    @property
+    def fault_summary(self) -> str | None:
+        if self.fatal_fault:
+            return str(self.fatal_fault.get("message") or self.fatal_fault.get("code") or "Host acquisition fault")
+        faults = [
+            (self.sequence_gaps, "host sequence gap"),
+            (self.queue_overflow_faults, "host notification queue overflow"),
+            (self.firmware_queue_drops or 0, "firmware sample queue drop"),
+            (self.fifo_dropped_samples or 0, "firmware FIFO sample loss"),
+            (self.fifo_faults or 0, "firmware FIFO fault"),
+            (self.malformed_packets, "malformed BLE packet"),
+        ]
+        for count, label in faults:
+            if count:
+                return f"{label}: {count}"
+        if self.acquisition_state == 3:
+            return f"BLE notification retry active; cumulative failures: {self.transport_failures or 0}"
+        if self.acquisition_state == 4:
+            return "Firmware reported an acquisition error"
+        return None
 
 
 @dataclass(slots=True)
@@ -203,6 +231,8 @@ class AppViewState:
     recording: bool = False
     recording_starting: bool = False
     countdown: int | None = None
+    recording_started_utc_ms: int | None = None
+    recording_target_pc_ns: int | None = None
     live: bool = False
     live_sides: tuple[str, ...] = ()
     live_busy: bool = False
@@ -214,21 +244,25 @@ class AppViewState:
     journal: dict[str, Any] | None = None
     ipc: dict[str, Any] = field(default_factory=dict)
     boards: dict[str, BoardView] = field(
-        default_factory=lambda: {"L": BoardView("L"), "R": BoardView("R")}
+        default_factory=lambda: {
+            "L": BoardView("L"), "R": BoardView("R"), "C": BoardView("C")
+        }
     )
 
     def apply_status(self, payload: dict[str, Any]) -> None:
         boards = payload.get("boards") if isinstance(payload.get("boards"), dict) else {}
         self.boards = {
-            "L": BoardView.from_status("L", boards.get("L")),
-            "R": BoardView.from_status("R", boards.get("R")),
+            side: BoardView.from_status(side, boards.get(side))
+            for side in ("L", "R", "C")
         }
         self.recording = bool(payload.get("recording"))
         self.recording_starting = bool(payload.get("recording_starting"))
+        started_utc = payload.get("recording_started_utc_ms")
+        self.recording_started_utc_ms = int(started_utc) if started_utc is not None else None
         self.live = bool(payload.get("live"))
         live_sides = payload.get("live_sides", [])
         self.live_sides = tuple(
-            str(side) for side in live_sides if side in {"L", "R"}
+            str(side) for side in live_sides if side in {"L", "R", "C"}
         )
         self.session_id = str(payload["session_id"]) if payload.get("session_id") else None
         self.journal_root = str(payload.get("journal_root", ""))
@@ -238,4 +272,6 @@ class AppViewState:
         self.ipc = payload.get("ipc") if isinstance(payload.get("ipc"), dict) else {}
 
     def connected_sides(self) -> tuple[str, ...]:
-        return tuple(side for side in ("L", "R") if self.boards[side].connected)
+        return tuple(
+            side for side in ("L", "R", "C") if self.boards[side].connected
+        )

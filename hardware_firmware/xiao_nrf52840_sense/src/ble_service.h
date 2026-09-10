@@ -64,7 +64,7 @@ public:
     void sendEvent(SyncEvent event, const uint8_t* payload, size_t len);
     void sendStartFired();
     void sendCountdownCue(uint8_t index, uint8_t total, uint16_t duration_ms);
-    void sendStopFired(uint32_t stop_device_us);
+    bool       sendStopFired(uint32_t stop_device_us);
     void sendDropCountEvent();
     void sendAcqHealth();
     void sendCmdNack(uint8_t cmd);

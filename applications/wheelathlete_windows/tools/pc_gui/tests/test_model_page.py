@@ -6,6 +6,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault(
+    "WHEELATHLETE_MODEL_DIR",
+    str(Path(__file__).resolve().parent / "_empty_model_library"),
+)
 
 from tools.pc_gui.controller import DemoController
 from tools.pc_gui.main_window import MainWindow
@@ -31,16 +35,20 @@ def _close(controller: DemoController, window: MainWindow) -> None:
     _APP.processEvents()
 
 
-def _sample_result() -> dict:
+def _sample_result(*, net_yaw_deg: float | None = 12.5) -> dict:
     return {
         "session_id": "demo_sprint_01",
         "topic": "Sprint",
         "trial_number": 1,
-        "model_label": "TCN + BiLSTM M4 — validated",
+        "recording_label": "Sprint Â· Trial 1 Â· Test Athlete Â· GOOD",
+        "model_label": "BiWheel3D test model",
         "xy": [(0.0, 0.0), (0.5, 0.1), (1.0, 0.4), (1.4, 0.8)],
         "point_count": 4,
         "path_length_m": 1.72,
         "endpoint_m": 1.61,
+        "net_yaw_deg": net_yaw_deg,
+        "yaw_source": "chassis" if net_yaw_deg is not None else "XY output only",
+        "yaw_delay_frames": 27 if net_yaw_deg is not None else 0,
         "preprocess": {
             "aligned_samples": 20,
             "model_steps": 4,
@@ -69,13 +77,12 @@ def test_results_selection_can_be_opened_in_model_page():
     assert window.nav.currentRow() == 3
     assert window.stack.currentWidget() is window.model
     assert str(window.model.session_combo.currentData()) == session_id
-    repo_root = Path(__file__).resolve().parents[5]
-    if (repo_root / 'BiWheel3D').exists():
-        assert window.model.model_combo.count() >= 1
-    else:
-        assert window.model.model_combo.count() == 0
+    assert window.model.model_combo.count() >= 1
     assert window.model.chart_view.accessibleName() == "trajectoryChart"
-    assert window.model.browse_model_button.accessibleName() == "browseModelCheckpointButton"
+    assert window.model.browse_model_button.isVisible()
+    assert window.model.browse_model_button.isEnabled()
+    assert window.model.browse_research_button.isVisible()
+    assert window.model.browse_research_button.isEnabled()
 
     _close(controller, window)
 
@@ -96,8 +103,11 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert model.metric_points.text() == "4"
     assert model.metric_path.text() == "1.72 m"
     assert model.metric_endpoint.text() == "1.61 m"
+    assert model.metric_yaw.text() == "12.5 deg"
+    assert model.metric_session.text() == "Sprint Â· Trial 1 Â· Test Athlete Â· GOOD"
     assert "Sprint" in model.chart.title()
     assert "native 100 Hz" in model.status_label.text()
+    assert "Yaw: chassis, delay 27 frame(s)." in model.status_label.text()
 
     plot = model.chart.plotArea()
     assert plot.width() > 0
@@ -110,27 +120,65 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     y_units_per_px = y_span / plot.height()
     assert x_units_per_px == pytest.approx(y_units_per_px, rel=0.01)
 
+    model._on_analysis_ready(_sample_result(net_yaw_deg=None))
+    assert model.metric_yaw.text() == "\u2014"
+
     _close(controller, window)
 
 
-def test_model_page_browse_can_select_checkpoint_from_file_explorer(monkeypatch, tmp_path: Path):
+def test_model_page_uses_current_best_and_exposes_model_browser():
     controller, window = _window()
     model = window.model
-    checkpoint = tmp_path / "my_experiment.pt"
-    checkpoint.write_bytes(b"not-loaded-during-browse")
-
-    monkeypatch.setattr(
-        "tools.pc_gui.main_window.QFileDialog.getOpenFileName",
-        lambda *args, **kwargs: (str(checkpoint), "PyTorch checkpoints (*.pt *.pth)"),
-    )
-
-    model.browse_model()
     _APP.processEvents()
 
-    selected = model.model_combo.currentData()
-    assert selected is not None
-    assert selected.checkpoint == checkpoint.resolve()
-    assert "my_experiment" in model.model_combo.currentText()
-    assert str(checkpoint.resolve()) in model.model_detail.text()
+    assert model.model_combo.count() >= 1
+    assert model.model_combo.itemText(0) == "Classical v1"
+    assert model.model_combo.currentIndex() == 0
+    assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
+    assert "recipe ready" in model.runtime_label.text()
+    assert "biwheel3d_dual_hub_v1" in model.model_detail.text()
+    assert not model.model_detail.isHidden()
+    assert not model.runtime_label.isHidden()
+    assert not model.browse_model_button.isHidden()
+    assert "ONNX" in model.browse_model_button.toolTip()
 
+    _close(controller, window)
+
+
+def test_model_page_renders_c3d_overlay_for_research_trial():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["ground_truth_xy"] = [(0.0, 0.0), (0.45, 0.08), (0.95, 0.35), (1.35, 0.75)]
+    result["gt_diagnostic"] = {
+        "scope": "full_processed_cache_not_support_masked",
+        "ate_rmse_m": 0.082,
+        "endpoint_error_m": 0.071,
+        "heading_unwrapped_rmse_deg": 4.2,
+    }
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+    assert model.ground_truth_series.count() == 4
+    assert model.chart.legend().isVisible()
+    assert "C3D full-cache diagnostic ATE 0.082 m" in model.status_label.text()
+    assert "full-cache diagnostic ATE 0.082 m" in model.status_label.toolTip()
+    _close(controller, window)
+
+
+def test_model_page_surfaces_slalom_course_constraint_state():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["course_constraint"] = {
+        "applied": True,
+        "heading_closure": True,
+        "position_closure": True,
+        "turn_count": 10,
+        "removed_net_heading_deg": -28.2,
+    }
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+    assert "Slalom course constraint v1: 10 turn event(s)" in model.status_label.text()
+    assert "10 turn event(s)" in model.status_label.toolTip()
+    assert "position closure=yes" in model.status_label.toolTip()
     _close(controller, window)

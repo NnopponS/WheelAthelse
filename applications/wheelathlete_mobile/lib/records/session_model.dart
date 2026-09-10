@@ -101,14 +101,17 @@ class SessionMeta {
     this.athleteName,
     this.offsetUsLeft,
     this.offsetUsRight,
+    this.offsetUsCenter,
     this.driftResidualRmsMsLeft,
     this.driftResidualRmsMsRight,
+    this.driftResidualRmsMsCenter,
     this.notes,
     this.videoFileName,
     this.utcStartMs,
     this.tags = const [],
     this.protocolTemplateId,
     this.recordedSides = const [],
+    this.sensorAxisConventions = const {},
     this.boardModels = const {},
     this.firmwareVersions = const {},
     this.sequenceGaps = const {},
@@ -126,7 +129,7 @@ class SessionMeta {
     this.firmwareNotifiedSamples = const {},
     this.queueDepth = const {},
     this.degradationReason,
-    this.schemaVersion = 4,
+    this.schemaVersion = 5,
     this.protocolVersion = '1.8.0',
   });
 
@@ -141,8 +144,10 @@ class SessionMeta {
   final int markerCount;
   final int? offsetUsLeft;
   final int? offsetUsRight;
+  final int? offsetUsCenter;
   final double? driftResidualRmsMsLeft;
   final double? driftResidualRmsMsRight;
+  final double? driftResidualRmsMsCenter;
   final String? notes;
   final String? videoFileName;
 
@@ -161,6 +166,7 @@ class SessionMeta {
   /// and old sessions.
   final String? protocolTemplateId;
   final List<String> recordedSides;
+  final Map<String, Map<String, String>> sensorAxisConventions;
   final Map<String, String> boardModels;
   final Map<String, String> firmwareVersions;
   final Map<String, int> sequenceGaps;
@@ -193,14 +199,17 @@ class SessionMeta {
     'marker_count': markerCount,
     'offset_us_left': offsetUsLeft,
     'offset_us_right': offsetUsRight,
+    'offset_us_center': offsetUsCenter,
     'drift_residual_rms_ms_left': driftResidualRmsMsLeft,
     'drift_residual_rms_ms_right': driftResidualRmsMsRight,
+    'drift_residual_rms_ms_center': driftResidualRmsMsCenter,
     'notes': notes,
     'video_file_name': videoFileName,
     'utc_start_ms': utcStartMs,
     'tags': tags,
     'protocol_template_id': protocolTemplateId,
     'recorded_sides': recordedSides,
+    'sensor_axis_conventions': sensorAxisConventions,
     'board_models': boardModels,
     'firmware_versions': firmwareVersions,
     'sequence_gaps': sequenceGaps,
@@ -234,9 +243,12 @@ class SessionMeta {
     markerCount: json['marker_count'] as int,
     offsetUsLeft: json['offset_us_left'] as int?,
     offsetUsRight: json['offset_us_right'] as int?,
+    offsetUsCenter: json['offset_us_center'] as int?,
     driftResidualRmsMsLeft: (json['drift_residual_rms_ms_left'] as num?)
         ?.toDouble(),
     driftResidualRmsMsRight: (json['drift_residual_rms_ms_right'] as num?)
+        ?.toDouble(),
+    driftResidualRmsMsCenter: (json['drift_residual_rms_ms_center'] as num?)
         ?.toDouble(),
     notes: json['notes'] as String?,
     videoFileName: json['video_file_name'] as String?,
@@ -249,6 +261,12 @@ class SessionMeta {
     protocolTemplateId: json['protocol_template_id'] as String?,
     recordedSides:
         (json['recorded_sides'] as List?)?.cast<String>() ?? const [],
+    sensorAxisConventions:
+        (json['sensor_axis_conventions'] as Map?)?.map(
+          (key, value) =>
+              MapEntry(key as String, (value as Map).cast<String, String>()),
+        ) ??
+        const {},
     boardModels:
         (json['board_models'] as Map?)?.cast<String, String>() ?? const {},
     firmwareVersions:

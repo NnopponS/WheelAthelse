@@ -1,0 +1,17 @@
+{
+  "source_repository": "BiWheel3D friend working tree",
+  "source_commit": "5fbf9eedc89465e9c86191a0309c6ae8d4112635",
+  "source_version": "0.3.0",
+  "snapshot_date": "2026-09-07",
+  "copied_files": [
+    "biwheel3d/imu_frame.py",
+    "biwheel3d/infer_eval.py",
+    "biwheel3d/schema.py",
+    "biwheel3d/yaw_ab.py",
+    "LICENSE"
+  ],
+  "derived_runtime_files": [
+    "BiWheel3D-XY-Yaw-current_best.json"
+  ],
+  "integration_note": "Imports were made package-relative. The compact current_best recipe retains only runtime calibration values from the original evaluation summary; per-trial evaluation data is intentionally not bundled. pause_segments.py is the documented >=1 s quiet-pause helper required by yaw_ab.shift_heading_bursts()."
+}

@@ -11,7 +11,14 @@ from typing import Any, Callable
 from .clock_sync import ClockModel
 from .control import CMD_SET_RANGE, CMD_SET_RATE
 from .engine import DualBoardEngine
-from .journal import JournalReader, JournalRecorder, RecordKind, recover_open_journal
+from .journal import (
+    CENTER_JOURNAL_VERSION,
+    JOURNAL_VERSION,
+    JournalReader,
+    JournalRecorder,
+    RecordKind,
+    recover_open_journal,
+)
 from .models import IngestionMetrics, ReceivedSample, WheelSide
 from .qc import BoardQcInput, SessionQcInput, evaluate_session_qc
 from .transport import BleTransport
@@ -27,7 +34,9 @@ def _side(value: Any) -> WheelSide:
         return WheelSide.LEFT
     if value in ("R", "right", "RIGHT"):
         return WheelSide.RIGHT
-    raise ValueError(f"invalid wheel side: {value!r}")
+    if value in ("C", "center", "CENTER", "centre", "CENTRE"):
+        return WheelSide.CENTER
+    raise ValueError(f"invalid sensor role: {value!r}")
 
 
 def _parse_config(payload: bytes) -> dict[str, Any]:
@@ -35,7 +44,7 @@ def _parse_config(payload: bytes) -> dict[str, Any]:
         raise ValueError(f"Config characteristic must be at least 27 bytes, got {len(payload)}")
     name = payload[:24].split(b"\x00", 1)[0].decode("ascii", errors="replace")
     wheel = payload[24]
-    if wheel not in (0x4C, 0x52):
+    if wheel not in (0x4C, 0x52, 0x43):
         raise ValueError(f"invalid config wheel id 0x{wheel:02X}")
     rate_hz = struct.unpack_from("<H", payload, 25)[0]
     return {"name": name, "wheel": chr(wheel), "sample_rate_hz": rate_hz}
@@ -47,7 +56,7 @@ def _parse_info(payload: bytes) -> dict[str, Any]:
     side_byte, major, minor, patch, accel_range, gyro_range = struct.unpack_from(
         "<BBBBBB", payload, 0
     )
-    if side_byte not in (0x4C, 0x52):
+    if side_byte not in (0x4C, 0x52, 0x43):
         raise ValueError(f"invalid wheel id 0x{side_byte:02X}")
     accel_scale, gyro_scale = struct.unpack_from("<ff", payload, 6)
     return {
@@ -144,6 +153,7 @@ class AcquisitionService:
         self._journal: JournalRecorder | None = None
         self._record_sides: tuple[WheelSide, ...] = ()
         self._record_started_ns: int | None = None
+        self._record_started_utc_ms: int | None = None
         self._start_result: StartResult | None = None
         self._metric_baseline: dict[WheelSide, IngestionMetrics] = {}
         self._device_info: dict[WheelSide, dict[str, Any]] = {}
@@ -173,9 +183,33 @@ class AcquisitionService:
         if self._journal is not None:
             self._journal.abort_without_finalize_for_test()
             self._journal = None
+        self._record_sides = ()
+        self._record_started_ns = None
+        self._record_started_utc_ms = None
+        self._start_result = None
+        self._record_metadata = None
         if self._started:
             await self.engine.stop()
             self._started = False
+
+    async def prepare_shutdown(self) -> dict[str, bool]:
+        """Stop acquisition cleanly before the installed binaries are replaced."""
+        finalized = False
+        if self._journal is not None:
+            if self._record_started_ns is None:
+                raise RuntimeError(
+                    "Recording startup is still in progress. Wait for it to start or cancel it before uninstalling."
+                )
+            await self._cmd_end_record({})
+            finalized = True
+        live_stopped = bool(self._live_sides)
+        if live_stopped:
+            await self._cmd_stop_live({})
+        return {
+            "ready": True,
+            "recording_finalized": finalized,
+            "live_stopped": live_stopped,
+        }
 
     def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._event_sink is not None:
@@ -252,7 +286,7 @@ class AcquisitionService:
         for _attempt in range(attempts):
             for device in await self.transport.scan(timeout_s / attempts):
                 found[device.device_id] = device
-            if len(found) >= 2:
+            if len(found) >= len(WheelSide):
                 break
         devices = list(found.values())
         result = [dataclasses.asdict(device) for device in devices]
@@ -283,6 +317,12 @@ class AcquisitionService:
             except Exception:
                 config = {}
             info.update(config)
+            info["sensor_role"] = "chair_center" if side is WheelSide.CENTER else "wheel_hub"
+            if side is WheelSide.CENTER:
+                info["axis_convention"] = {
+                    "z_axis": "down_toward_floor",
+                    "x_y_axes": "board_axes_unmapped",
+                }
             try:
                 battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
                 info["battery_percent"] = int(battery[0]) if battery else None
@@ -462,7 +502,13 @@ class AcquisitionService:
         if not sides:
             raise RuntimeError("no wheels are connected")
         session_id = payload.get("session_id")
-        journal = JournalRecorder(self.journal_root, session_id=session_id)
+        journal = JournalRecorder(
+            self.journal_root,
+            session_id=session_id,
+            journal_version=(
+                CENTER_JOURNAL_VERSION if WheelSide.CENTER in sides else JOURNAL_VERSION
+            ),
+        )
         self._journal = journal
         self._record_sides = sides
         self._metric_baseline = {
@@ -481,6 +527,18 @@ class AcquisitionService:
             "tags": [str(item) for item in payload.get("tags", [])],
             "acceptance": dict(acceptance) if acceptance is not None else None,
             "boards": {side.value: self._device_info.get(side, {}) for side in sides},
+            "sensor_axis_conventions": (
+                {
+                    "C": {
+                        "sensor_role": "chair_center",
+                        "z_axis": "down_toward_floor",
+                        "x_y_axes": "board_axes_unmapped",
+                    }
+                }
+                if WheelSide.CENTER in sides
+                else {}
+            ),
+            "journal_version": journal.journal_version,
         }
         journal.append_metadata(metadata)
         self._record_metadata = dict(metadata)
@@ -494,19 +552,27 @@ class AcquisitionService:
             # boundary after sync traffic has drained and before scheduling T0.
             await self.engine.reset_sequences(sides)
             lead_time_s = float(payload.get("lead_time_s", 5.0))
-            pc_start_ns = time.monotonic_ns() + int(lead_time_s * 1_000_000_000)
+            monotonic_now_ns = time.perf_counter_ns()
+            utc_now_ns = time.time_ns()
+            pc_start_ns = monotonic_now_ns + int(lead_time_s * 1_000_000_000)
+            utc_start_ms = (utc_now_ns + (pc_start_ns - monotonic_now_ns)) // 1_000_000
+            self._record_started_utc_ms = int(utc_start_ms)
+            if self._record_metadata is not None:
+                self._record_metadata["started_utc_ms"] = int(utc_start_ms)
             self._emit(
                 "recording_state",
                 {
                     "state": "countdown",
                     "seconds": max(1, round(lead_time_s)),
                     "pc_start_ns": pc_start_ns,
+                    "utc_start_ms": int(utc_start_ms),
                 },
             )
             start = await self.lifecycle.scheduled_start(
                 sides,
                 pc_start_ns=pc_start_ns,
                 ack_timeout_s=float(payload.get("ack_timeout_s", 1.0)),
+                utc_start_ms=int(utc_start_ms),
             )
             self._start_result = start
             self._record_started_ns = start.pc_start_ns
@@ -524,6 +590,7 @@ class AcquisitionService:
             self._journal = None
             self._record_sides = ()
             self._record_started_ns = None
+            self._record_started_utc_ms = None
             self._start_result = None
             self._record_metadata = None
             raise
@@ -536,7 +603,7 @@ class AcquisitionService:
         sides = self._record_sides
         stop_results = await self.lifecycle.stop_all(sides)
         await self.engine.join()
-        end_ns = time.monotonic_ns()
+        end_ns = time.perf_counter_ns()
         duration_s = max(
             0.001,
             (end_ns - (self._record_started_ns or end_ns)) / 1_000_000_000,
@@ -624,6 +691,7 @@ class AcquisitionService:
         summary = {
             "quality": qc.level.name,
             "duration_s": duration_s,
+            "started_utc_ms": self._record_started_utc_ms,
             "journal": {
                 "samples_written": journal.metrics.samples_written,
                 "queue_high_water": journal.metrics.queue_high_water,
@@ -657,12 +725,14 @@ class AcquisitionService:
             "sample_counts": {
                 item.side.value: item.host_metrics.samples_received for item in board_qc
             },
+            "started_utc_ms": self._record_started_utc_ms,
             "finalized_utc_ms": int(time.time() * 1000),
         }
         self._write_json_atomic(final_path.with_suffix(".summary.json"), manifest)
         self._journal = None
         self._record_sides = ()
         self._record_started_ns = None
+        self._record_started_utc_ms = None
         self._start_result = None
         self._record_metadata = None
         self._metric_baseline.clear()
@@ -695,6 +765,9 @@ class AcquisitionService:
             "quality",
             "sample_counts",
             "journal_path",
+            "started_utc_ms",
+            "finalized_utc_ms",
+            "recorded_utc_ms",
         )
         for journal_path in sorted(
             self.journal_root.rglob("*.waj"),
@@ -711,7 +784,14 @@ class AcquisitionService:
                 except (OSError, json.JSONDecodeError):
                     pass
             summary = summary or self._fallback_session_summary(journal_path)
-            sessions.append({key: summary.get(key) for key in fields})
+            item = {key: summary.get(key) for key in fields}
+            recorded_utc_ms = (
+                summary.get("started_utc_ms")
+                or summary.get("finalized_utc_ms")
+                or int(journal_path.stat().st_mtime * 1000)
+            )
+            item["recorded_utc_ms"] = int(recorded_utc_ms)
+            sessions.append(item)
         return {"sessions": sessions}
 
     async def _cmd_set_journal_root(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -890,10 +970,14 @@ class AcquisitionService:
         raise FileNotFoundError(self.journal_root / f"{session_id}.waj")
 
     def _fallback_session_summary(self, path: Path) -> dict[str, Any]:
-        records = JournalReader(path).read_all()
+        reader = JournalReader(path)
+        records = reader.read_all()
         metadata: dict[str, Any] = {}
         final: dict[str, Any] = {}
-        sample_counts = {"L": 0, "R": 0}
+        recorded_roles = [WheelSide.LEFT, WheelSide.RIGHT]
+        if (reader.journal_version or JOURNAL_VERSION) >= CENTER_JOURNAL_VERSION:
+            recorded_roles.append(WheelSide.CENTER)
+        sample_counts = {side.value: 0 for side in recorded_roles}
         for record in records:
             if record.kind is RecordKind.SESSION_META and record.json_value:
                 metadata = dict(record.json_value)
@@ -921,7 +1005,7 @@ class AcquisitionService:
 
     def status(self) -> dict[str, Any]:
         boards: dict[str, Any] = {}
-        now_ns = time.monotonic_ns()
+        now_ns = time.perf_counter_ns()
         for side in WheelSide:
             device_id = self.engine.device_id(side)
             metrics = self.engine.metrics(side)
@@ -929,8 +1013,14 @@ class AcquisitionService:
             previous = self._status_rate_baseline.get(side)
             notifications_hz = None
             samples_hz = None
-            if previous is not None and now_ns > previous[0]:
-                elapsed_s = (now_ns - previous[0]) / 1_000_000_000
+            if previous is not None:
+                # Status rate is observability only.  On Windows/VMs a very
+                # short telemetry interval can occasionally observe an equal
+                # (or anomalously non-increasing) monotonic tick.  Counts are
+                # still authoritative, so keep the rate defined without
+                # changing ingestion, queue, journal, or BLE timing semantics.
+                elapsed_ns = max(int(now_ns) - int(previous[0]), 1)
+                elapsed_s = elapsed_ns / 1_000_000_000
                 notifications_hz = (metrics.notifications_received - previous[1]) / elapsed_s
                 samples_hz = (metrics.samples_received - previous[2]) / elapsed_s
             self._status_rate_baseline[side] = (
@@ -967,6 +1057,7 @@ class AcquisitionService:
             "boards": boards,
             "recording": journal is not None and self._record_started_ns is not None,
             "recording_starting": journal is not None and self._record_started_ns is None,
+            "recording_started_utc_ms": self._record_started_utc_ms,
             "live": bool(self._live_sides),
             "live_sides": [side.value for side in self._live_sides],
             "journal_root": str(self.journal_root),
@@ -996,7 +1087,7 @@ class AcquisitionService:
     def _require_device(self, side: WheelSide) -> str:
         device_id = self.engine.device_id(side)
         if device_id is None:
-            raise RuntimeError(f"{side.value} wheel is not connected")
+            raise RuntimeError(f"{side.value} sensor is not connected")
         return device_id
 
     @staticmethod
@@ -1020,4 +1111,5 @@ class AcquisitionService:
             "mapped_start_ns": {side.value: value for side, value in result.mapped_start_ns.items()},
             "target_device_us": {side.value: value for side, value in result.target_device_us.items()},
             "start_skew_ns": result.start_skew_ns,
+            "utc_start_ms": result.utc_start_ms,
         }

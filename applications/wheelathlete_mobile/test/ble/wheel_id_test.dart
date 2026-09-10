@@ -12,6 +12,10 @@ void main() {
       expect(WheelId.fromByte(0x52), WheelId.right);
     });
 
+    test('0x43 maps to chair center', () {
+      expect(WheelId.fromByte(0x43), WheelId.center);
+    });
+
     test('any other byte throws FormatException', () {
       expect(() => WheelId.fromByte(0x00), throwsFormatException);
       expect(() => WheelId.fromByte(0x4D), throwsFormatException);
@@ -33,11 +37,13 @@ void main() {
     test('byte round-trips', () {
       expect(WheelId.left.byte, 0x4C);
       expect(WheelId.right.byte, 0x52);
+      expect(WheelId.center.byte, 0x43);
     });
 
-    test('label is single char L/R', () {
+    test('label is single char L/R/C', () {
       expect(WheelId.left.label, 'L');
       expect(WheelId.right.label, 'R');
+      expect(WheelId.center.label, 'C');
     });
   });
 }

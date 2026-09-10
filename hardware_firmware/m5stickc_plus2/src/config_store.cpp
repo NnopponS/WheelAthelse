@@ -39,6 +39,8 @@ void ConfigStore::begin(char default_wheel) {
         // Default name based on wheel
         if (config_.wheel_id == 0x52) {
             config_.setName("WheelAthlete-R");
+        } else if (config_.wheel_id == 0x43) {
+            config_.setName("WheelAthlete-C");
         } else {
             config_.setName("WheelAthlete-L");
         }

@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 
 from tools.pc_acquisition.journal import JournalRecorder
-from tools.pc_gui.controller import resolve_session_files
+from tools.pc_gui.controller import _recorded_board_scale, resolve_session_files
 
 
 def test_gui_resolves_nested_friendly_session_by_internal_uuid(tmp_path: Path):
@@ -44,3 +44,26 @@ def test_gui_resolves_nested_friendly_session_by_internal_uuid(tmp_path: Path):
     assert journal == friendly_path
     assert manifest == manifest_path
     assert csv_path == friendly_path.with_suffix(".csv")
+
+
+def test_recorded_board_scale_prefers_saved_capture_metadata():
+    meta = {
+        "boards": {
+            "L": {"accel_scale": 4.0 / 32768.0, "gyro_scale": 2000.0 / 32768.0}
+        }
+    }
+
+    accel = _recorded_board_scale(
+        meta, "L", "accel_scale", live_value=16.0 / 32768.0, fallback=16.0 / 32768.0
+    )
+    gyro = _recorded_board_scale(
+        meta, "L", "gyro_scale", live_value=1.0, fallback=2000.0 / 32768.0
+    )
+
+    assert accel == 4.0 / 32768.0
+    assert gyro == 2000.0 / 32768.0
+
+
+def test_recorded_board_scale_falls_back_to_live_then_default():
+    assert _recorded_board_scale({}, "L", "accel_scale", live_value=8.0 / 32768.0, fallback=16.0 / 32768.0) == 8.0 / 32768.0
+    assert _recorded_board_scale({}, "L", "accel_scale", live_value=1.0, fallback=16.0 / 32768.0) == 16.0 / 32768.0

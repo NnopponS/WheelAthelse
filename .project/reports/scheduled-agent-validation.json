@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "at_bangkok": "2026-09-08T03:31:10+07:00",
+  "branch": "feature/dual-imu-coaching-analysis",
+  "base_commit": "0961e7f5765f068abfdcb1ca86301555bd1a57a5",
+  "objective": "Audit complete publishable snapshots and establish honest hourly verification.",
+  "baseline": {
+    "schema_version": 1,
+    "at_utc": "20260907T201842_519263Z",
+    "suite": "all",
+    "checks": [
+      {
+        "check": "project_hygiene",
+        "exit_code": 0,
+        "seconds": 0.508,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/project_hygiene.txt",
+        "sha256": "d4c56b85198b2f68e625baab82e73ed6de51759c77d7718955400856f0d625a5"
+      },
+      {
+        "check": "tooling_tests",
+        "exit_code": 0,
+        "seconds": 0.192,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/tooling_tests.txt",
+        "sha256": "c176fa06e962681273fffe868b62b5c55338146522324232e81c9cae0df4b365"
+      },
+      {
+        "check": "update_manifest_tests",
+        "exit_code": 0,
+        "seconds": 0.22,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/update_manifest_tests.txt",
+        "sha256": "de0ad3508285733815610257030e822cfb0fd203aa0a9abec1e8bd76ff776405"
+      },
+      {
+        "check": "windows_tests",
+        "exit_code": 0,
+        "seconds": 22.624,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/windows_tests.txt",
+        "sha256": "b89809fea7833f9a6308ca13c9a96ab06c69ed1ee907cc08c9e011e42104daab"
+      },
+      {
+        "check": "flutter_analyze",
+        "exit_code": 0,
+        "seconds": 17.844,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/flutter_analyze.txt",
+        "sha256": "cbf1a6dca9f17d496b0040682c2c2e345d246386461b8ae034f89e4a7847a429"
+      },
+      {
+        "check": "flutter_tests",
+        "exit_code": 0,
+        "seconds": 41.564,
+        "log": ".project/local/verification/20260907T201842_519263Z_all/flutter_tests.txt",
+        "sha256": "264c79a8f6ba64ac029bb3f8d041ab2ccd10ad6a7e40b596037f12ccc8693e00"
+      }
+    ],
+    "passed": true
+  },
+  "after": {
+    "schema_version": 1,
+    "at_utc": "20260907T202701_607464Z",
+    "suite": "all",
+    "checks": [
+      {
+        "check": "project_hygiene",
+        "exit_code": 0,
+        "seconds": 0.626,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/project_hygiene.txt",
+        "sha256": "bab4b7b3ca32e30c39b6dfba37a27f746eb33e474328619521cd3b359a4e0cc5"
+      },
+      {
+        "check": "tooling_tests",
+        "exit_code": 0,
+        "seconds": 11.376,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/tooling_tests.txt",
+        "sha256": "8e5de94a93e8a3533864e498f0b75d58b853c56d4fe7d50b480b7b045c6c9019"
+      },
+      {
+        "check": "update_manifest_tests",
+        "exit_code": 0,
+        "seconds": 0.199,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/update_manifest_tests.txt",
+        "sha256": "f835eb1ea86a504a3a9a0dee3323a50023e87863a0824f109370b523d90437d5"
+      },
+      {
+        "check": "windows_tests",
+        "exit_code": 0,
+        "seconds": 23.442,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/windows_tests.txt",
+        "sha256": "724163b8def9702ee86c36684c611c2ace5ae12bbfb7bf01a1990b714e84d22f"
+      },
+      {
+        "check": "flutter_analyze",
+        "exit_code": 0,
+        "seconds": 15.944,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/flutter_analyze.txt",
+        "sha256": "1f91d0f31c494e04994a79e0b8cdc731e3f62b66347d50359548d5ec56fb5452"
+      },
+      {
+        "check": "flutter_tests",
+        "exit_code": 0,
+        "seconds": 39.616,
+        "log": ".project/local/verification/20260907T202701_607464Z_all/flutter_tests.txt",
+        "sha256": "91ed35dbaa84a95eb51af35b5b717b5336df2724d8297ff055583c8f8e17715d"
+      }
+    ],
+    "passed": true
+  },
+  "test_counts": {
+    "tooling": 14,
+    "windows": 148,
+    "flutter": 705,
+    "update_manifest": 1
+  },
+  "regression": {
+    "same_test_suite": 14,
+    "before_assertion_failures": 6,
+    "after_assertion_failures": 0,
+    "new_test_methods": 8,
+    "decision": "keep",
+    "synthetic_git_repositories_only": true
+  },
+  "changed_source_sha256": {
+    "scripts/verify_project.py": "012ab9b048e5329305bad9774c219813ae0a62d4878850d51e84e1cf4522908d",
+    "scripts/tests/test_project_verification.py": "239d7568db2aabbb9178386330edb67873df8f0c79fe2363da78226fb7d60b00"
+  },
+  "schedule": {
+    "task_name": "WheelAthlete-Hourly-Verification",
+    "kind": "verification_only_no_ai_agent",
+    "interval": "PT1H",
+    "start_bangkok": "2026-09-08T04:00:00+07:00",
+    "multiple_instances": "IgnoreNew",
+    "execution_limit": "PT40M",
+    "requires_awake_logged_in_ac_power": true,
+    "wake_to_run": false,
+    "catch_up_when_available": true,
+    "configuration_readback_verified": true,
+    "scheduled_execution_smoke": "passed through Windows Task Scheduler",
+    "scheduled_execution_result": 0,
+    "scheduled_execution_last_run": "2026-09-08T03:30:00.0000000+07:00",
+    "next_run_bangkok": "2026-09-08T04:00:00.0000000+07:00"
+  },
+  "autonomous_engineering": {
+    "configured": false,
+    "required_model": "GPT-6 Astra Pro",
+    "model_fallback_authorized": false,
+    "blocker": "No verified available scheduler route for the required Pro-only model."
+  },
+  "limitations": [
+    "No model, inference, calibration, dataset or firmware changes.",
+    "No new trajectory accuracy measurements.",
+    "Independent synchronized moving wheel-marker optical reference and grouped validation/final captures remain missing.",
+    "Physical device, installed app and coach acceptance were not performed.",
+    "Separate research suite was not rerun in this maintenance pass."
+  ],
+  "scheduled_execution_verification": {
+    "schema_version": 1,
+    "at_utc": "20260907T203001_573854Z",
+    "suite": "all",
+    "checks": [
+      {
+        "check": "project_hygiene",
+        "exit_code": 0,
+        "seconds": 0.613,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/project_hygiene.txt",
+        "sha256": "250bcf77d2b0ee14a380e626ad19f566105589f99562c2bb91a005b1a2ce4277"
+      },
+      {
+        "check": "tooling_tests",
+        "exit_code": 0,
+        "seconds": 10.806,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/tooling_tests.txt",
+        "sha256": "aa0377328f747a047354b1e0e737b6a9ed3c687c76f9d175ff8b35c4fbc479b9"
+      },
+      {
+        "check": "update_manifest_tests",
+        "exit_code": 0,
+        "seconds": 0.195,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/update_manifest_tests.txt",
+        "sha256": "fb05893ab492453ea8087d66d27eb5cdea03b0154b62218aa35c39f4eed90125"
+      },
+      {
+        "check": "windows_tests",
+        "exit_code": 0,
+        "seconds": 21.484,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/windows_tests.txt",
+        "sha256": "75b69f4afaa2c96618ef8d1686121e4856c04143057f551538559eb40edb5cec"
+      },
+      {
+        "check": "flutter_analyze",
+        "exit_code": 0,
+        "seconds": 14.916,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/flutter_analyze.txt",
+        "sha256": "80c240c7f2530ffb2184c9aaa9139a59c505d18b3f85c65708aa20c2ad6bfd5b"
+      },
+      {
+        "check": "flutter_tests",
+        "exit_code": 0,
+        "seconds": 37.333,
+        "log": ".project/local/verification/20260907T203001_573854Z_all/flutter_tests.txt",
+        "sha256": "4186bfbfd3fad9e1209ade29ae5e7df5bad5204ce450549fbe77e6b2b01af196"
+      }
+    ],
+    "passed": true
+  }
+}
