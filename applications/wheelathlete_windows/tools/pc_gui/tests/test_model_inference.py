@@ -146,7 +146,7 @@ def test_discover_current_best_recipe_without_user_library(monkeypatch, tmp_path
     assert len(models) == 1
     assert models[0].key == CURRENT_BEST_KEY
     assert models[0].checkpoint.name == CURRENT_BEST_RECIPE_NAME
-    assert models[0].label == "Classical v1"
+    assert models[0].label == "Kinematic Trajectory (XY + Yaw)"
     assert models[0].kind == "recipe"
 
 

@@ -22,13 +22,14 @@ WheelAthlete 1.8.2 รวมงาน Windows application, firmware M5/XIAO, ก
 
 Tag ของ version เก่ายังคงเก็บไว้เพื่อ trace ประวัติได้ แต่ branch พัฒนา/release เก่าที่ merge เรียบร้อยแล้วไม่จำเป็นต้องแสดงอยู่ต่อ
 
-### ตอนนี้ v1.8.2 เป็น source-only
+### รูปแบบการเผยแพร่ Windows และโหมด Community Build
 
-GitHub Release v1.8.2 ปัจจุบันเผยแพร่เฉพาะ source code ก่อน เนื่องจากยังไม่มี trusted Windows Code Signing identity ที่ผ่านเงื่อนไข release pipeline
+Repository รองรับการสร้างแพ็กเกจ Windows 2 รูปแบบ:
 
-ไฟล์ Windows installer, portable ZIP และ `latest.json` จะเผยแพร่เมื่อระบบตรวจครบทั้ง RSA Code Signing certificate, Code Signing EKU, publisher subject ที่ตรงตามกำหนด, timestamp, executable components, generated uninstaller และ installer แล้ว `public_release_ready=true` เท่านั้น
+1. **Trusted Signed Release**: ต้องใช้ RSA Code Signing certificate ระดับองค์กร, timestamp URL และ subject ที่ตรงกัน (`is_signed=true`, `public_release_ready=true`)
+2. **Community / Unsigned Release**: รองรับ `ALLOW_UNSIGNED_RELEASE=true` หรือ community build mode โดยไม่จำเป็นต้องใช้ commercial certificate โดย release pipeline และ update manifest จะระบุ `is_signed=false` และฝังโมเดลที่พร้อมใช้งาน (`wheelathlete_biwheel3d_m4.onnx`, `BiWheel3D-XY-Yaw-current_best.json` และ PyTorch residual checkpoint) ลงในแพ็กเกจ installer และ portable ZIP โดยตรง
 
-ไฟล์ local unsigned ใช้สำหรับพัฒนาและทดสอบได้ แต่ไม่ถือเป็น public trusted build และ SHA-256 เพียงอย่างเดียวไม่สามารถสร้าง publisher trust หรือข้าม SmartScreen/Application Control policy ได้
+ไฟล์ unsigned เหมาะสำหรับนักวิจัยและผู้ใช้งานชุมชนในการพัฒนา/ทดสอบ โดย SHA-256 ใช้ตรวจสอบความถูกต้องของไฟล์อย่างสมบูรณ์ สำหรับ Windows SmartScreen สามารถกดยืนยันผ่าน "More info" -> "Run anyway" ได้
 
 ## สิ่งที่อยู่ใน WheelAthlete 1.8.2
 
@@ -39,19 +40,22 @@ GitHub Release v1.8.2 ปัจจุบันเผยแพร่เฉพา�
 Windows application ใช้สถาปัตยกรรมแบบ 2 process:
 
 - **Acquisition daemon** — ดูแล BLE, packet parsing, clock synchronization, sequence/loss accounting, append-only `.waj`, QC, recovery และ synchronized lifecycle
-- **PySide6 GUI** — ดูแล Dashboard, Acquisition, Results, Diagnostics, export และ MODEL แบบ offline
+- **PySide6 GUI** — ดูแล Dashboard, Acquisition, Results, Diagnostics, export และการวิเคราะห์ Trajectory แบบ offline
 
 GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart ที่ช้า, model analysis หรือการ restart GUI ต้องไม่ทำให้เส้นทางบันทึก BLE สูญหายแบบเงียบ ๆ
 
 ความสามารถสำคัญของ 1.8.2:
 
-- Results แบบ Day -> Experiment -> Trial และเก็บ selection ด้วย session ID
+- Navigation sidebar แบบมินิมอล ("WheelAthlete") อ่านง่าย ไม่มีข้อความซ้ำซ้อน
+- Results แบบ Day -> Experiment -> Trial พร้อมแสดงจำนวน C samples และช่องกรอก Athlete ที่กะทัดรัด
 - เลือกทั้งวัน / เลือกทั้งหมด / ล้าง selection และ batch export แบบไม่ซ้ำ
+- หน้า Diagnostics แสดงข้อมูล telemetry แยกครบ 3 เซนเซอร์: ล้อซ้าย (L), ล้อขวา (R) และ กึ่งกลางตัวรถ (C)
+- หน้า Model แสดงโมเดล Kinematic Trajectory (XY + Yaw) ชัดเจน เชื่อมโยงกับโฟลเดอร์โมเดล `Documents/WheelAthlete`
 - ใช้ Windows QueryPerformanceCounter สำหรับ host timing ความละเอียดสูง
 - แสดงสาเหตุ sensor fault อย่างชัดเจน เช่น sequence, queue, FIFO, malformed packet, fatal และ active retry
 - ปิด acquisition daemon อย่างปลอดภัยและ finalize journal ก่อน upgrade/uninstall
 - เก็บ recordings และ custom/seeded models ไว้ระหว่าง installer lifecycle
-- รองรับ in-app update เมื่อมี trusted signed release และ `latest.json`
+- รองรับ in-app update ทั้ง channel build แบบ signed และ community
 - รองรับ portable model bundle แบบ `wheelathlete-model.json` พร้อม validation
 
 รันจาก source:

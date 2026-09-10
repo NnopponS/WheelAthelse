@@ -140,3 +140,69 @@ def test_dual_board_engine_keeps_left_and_right_ingestion_independent():
         await engine.stop()
 
     asyncio.run(scenario())
+
+
+def test_transient_malformed_packet_does_not_latch_fatal_fault():
+    async def scenario():
+        raw = []
+        ingestor = BoardIngestor(
+            WheelSide.LEFT,
+            queue_capacity=16,
+            sample_sink=raw.append,
+        )
+        await ingestor.start()
+
+        # Enqueue 1 valid packet
+        assert ingestor.enqueue_notification(
+            NotificationKind.IMU, _batch(_sample(0, 0)), arrival_ns=1
+        )
+        # Enqueue 1 corrupt packet (e.g. invalid length or bad count)
+        assert ingestor.enqueue_notification(
+            NotificationKind.IMU, b"\x00", arrival_ns=2
+        )
+        # Enqueue another valid packet
+        assert ingestor.enqueue_notification(
+            NotificationKind.IMU, _batch(_sample(1, 10)), arrival_ns=3
+        )
+
+        await ingestor.join()
+        await ingestor.stop()
+
+        assert len(raw) == 2
+        assert ingestor.metrics.malformed_packets == 1
+        assert ingestor.fatal_fault is None
+
+    asyncio.run(scenario())
+
+
+def test_persistent_malformed_packets_latch_fatal_fault_and_clean_packets_self_heal():
+    async def scenario():
+        raw = []
+        ingestor = BoardIngestor(
+            WheelSide.LEFT,
+            queue_capacity=32,
+            sample_sink=raw.append,
+        )
+        await ingestor.start()
+
+        # Enqueue 10 consecutive malformed packets
+        for i in range(10):
+            ingestor.enqueue_notification(NotificationKind.IMU, b"\x00", arrival_ns=i)
+        await ingestor.join()
+
+        assert ingestor.metrics.malformed_packets == 10
+        assert ingestor.fatal_fault is not None
+        assert ingestor.fatal_fault.code == "malformed_imu_packet"
+
+        # Now clean valid packets arrive -> self-heals!
+        ingestor.enqueue_notification(
+            NotificationKind.IMU, _batch(_sample(0, 0)), arrival_ns=100
+        )
+        await ingestor.join()
+        await ingestor.stop()
+
+        assert len(raw) == 1
+        assert ingestor.fatal_fault is None
+
+    asyncio.run(scenario())
+

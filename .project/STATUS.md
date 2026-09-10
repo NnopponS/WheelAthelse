@@ -32,12 +32,16 @@ The maintained Windows application uses a PySide6 GUI plus a separate acquisitio
 
 Implemented 1.8.2 release features include:
 
-- persistent Day -> Experiment -> Trial Results selection and deduplicated batch export;
+- streamlined minimal navigation sidebar ("WheelAthlete") with clean uncluttered page headers;
+- persistent Day -> Experiment -> Trial Results selection and deduplicated batch export with C sample counts;
+- Diagnostics page with three-sensor telemetry monitoring for Left (L), Right (R), and Chair Center (C);
+- Model page with intuitive Kinematic Trajectory (XY + Yaw) baseline and user library binding to `Documents/WheelAthlete`;
 - explicit daemon shutdown and active-journal finalization before upgrade/uninstall;
 - preservation of recordings and custom/seeded models through installer lifecycle operations;
 - high-resolution `perf_counter_ns()` timing for Windows acquisition and scheduled-start calculations;
 - concrete sensor fault reporting instead of an unexplained generic `CHECK` state;
 - contained versioned portable model bundles with compatibility/path validation;
+- support for `ALLOW_UNSIGNED_RELEASE=true` community build mode setting `is_signed=false` while embedding available models;
 - installed-app update support through a verified GitHub Release manifest when a trusted signed release exists;
 - fail-closed Windows release signing that verifies packaged EXE/DLL/PYD/PowerShell components, the generated uninstaller and the installer;
 - a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload.

@@ -50,6 +50,20 @@ class UpdateManifestTests(unittest.TestCase):
                 notes="Windows-first release",
             )
             self.assertEqual(set(manifest["platforms"]), {"windows"})
+            self.assertTrue(manifest["platforms"]["windows"]["is_signed"])
+
+    def test_unsigned_windows_manifest_sets_is_signed_false(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            installer = Path(tmp) / "WheelAthleteSetup-1.8.2.exe"
+            installer.write_bytes(b"unsigned-installer")
+            manifest = build_manifest(
+                version="1.8.2",
+                windows_installer=installer,
+                notes="Community release",
+                is_signed=False,
+            )
+            self.assertEqual(set(manifest["platforms"]), {"windows"})
+            self.assertFalse(manifest["platforms"]["windows"]["is_signed"])
 
 
 if __name__ == "__main__":

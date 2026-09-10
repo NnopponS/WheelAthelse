@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 
 from tools.pc_acquisition.ipc import AcquisitionIpcServer, PROTOCOL_VERSION, MAX_MESSAGE_BYTES
+from tools.pc_acquisition.models import WheelSide
 from tools.pc_acquisition.service import AcquisitionService
 from tools.pc_acquisition.transport import FakeBleTransport
 from tools.pc_acquisition.uuids import INFO_UUID
@@ -203,3 +204,43 @@ def test_ipc_supports_messages_exceeding_64kb(tmp_path: Path):
         await server.close()
 
     asyncio.run(scenario())
+
+
+def test_auto_reconnect_on_unexpected_transport_disconnect(tmp_path: Path):
+    async def scenario():
+        transport = FakeBleTransport()
+        transport.read_values[("left-device", INFO_UUID)] = (
+            bytes([0x4C, 1, 8, 2, 1, 3])
+            + struct.pack("<ff", 4 / 32768, 2000 / 32768)
+            + bytes([2, 1])
+        )
+        transport.mtu["left-device"] = 247
+        service = AcquisitionService(transport, journal_root=tmp_path)
+        events = []
+        service.set_event_sink(lambda ev, data: events.append((ev, data)))
+
+        await service.handle_command("connect", {"device_id": "left-device"})
+        assert service.engine.device_id(WheelSide.LEFT) == "left-device"
+
+        # Simulate unexpected transport drop (e.g. board reboot / reset)
+        transport.simulate_disconnect("left-device")
+        assert service.engine.device_id(WheelSide.LEFT) is None
+
+        # Disconnect event emitted with reconnecting: True
+        assert any(
+            ev == "connection_state" and data.get("reconnecting") is True
+            for ev, data in events
+        )
+
+        # Wait for auto-reconnect supervisor to reconnect (supervisor sleeps 1.0s)
+        await asyncio.sleep(1.2)
+        assert service.engine.device_id(WheelSide.LEFT) == "left-device"
+        assert any(
+            ev == "connection_state" and data.get("state") == "connected" and data.get("firmware") == "1.8.2"
+            for ev, data in events[1:]
+        )
+
+        await service.close()
+
+    asyncio.run(scenario())
+

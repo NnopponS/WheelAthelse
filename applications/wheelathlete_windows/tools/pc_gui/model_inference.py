@@ -238,11 +238,17 @@ def _recipe_spec(
             )
         return None
     key = str(payload.get("model_id") or f"recipe:{resolved}")
-    raw_label = str(payload.get("label") or resolved.stem)
     label = (
-        "Classical v1"
+        "Kinematic Trajectory (XY + Yaw)"
         if key == CURRENT_BEST_KEY
-        or raw_label in {"BiWheel3D XY + Yaw - current_best", "BiWheel3D-XY-Yaw-current_best", "BiWheel3D Classical Kinematic Baseline [Classical v1]"}
+        or raw_label in {
+            "Classical v1",
+            "BiWheel3D XY + Yaw - current_best",
+            "BiWheel3D-XY-Yaw-current_best",
+            "BiWheel3D Classical Kinematic Baseline [Classical v1]",
+            "BiWheel3D Classical Kinematic Baseline (XY + Yaw) [v1]",
+            "Kinematic Trajectory (XY + Yaw)",
+        }
         else raw_label
     )
     description = str(
@@ -366,9 +372,13 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
 
 def _candidate_model_dirs() -> list[Path]:
     roots = [model_library_root()]
+    if not os.environ.get("WHEELATHLETE_MODEL_DIR", "").strip():
+        doc_root = (Path.home() / "Documents" / "WheelAthlete").resolve()
+        model_sub = (doc_root / "Model").resolve()
+        roots.extend([model_sub, doc_root])
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
-        roots.extend([exe_dir / "Model", exe_dir.parent / "Model"])
+        roots.extend([exe_dir / "Model", exe_dir.parent / "Model", exe_dir])
     unique: list[Path] = []
     seen: set[Path] = set()
     for root in roots:

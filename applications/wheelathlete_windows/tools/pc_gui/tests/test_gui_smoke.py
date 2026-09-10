@@ -23,7 +23,7 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     # 5 clean pages: Dashboard, Acquisition, Results, MODEL, Diagnostics
     assert window.nav.count() == 5
     assert window.stack.count() == 5
-    assert window.windowTitle() == "WheelAthlete — Python Research Edition"
+    assert window.windowTitle() == "WheelAthlete"
     assert window.daemon_badge.text() == "DAQ READY"
 
     assert window.dashboard.devices.verticalHeader().isHidden()
@@ -102,8 +102,8 @@ def test_results_page_batch_export_and_session_folder():
 
     results = window.results
     assert results.table.rowCount() >= 2
-    assert results.table.columnWidth(9) >= 110
-    assert results._topic_cards[0].table.columnWidth(8) >= 110
+    assert results.table.columnWidth(10) >= 110
+    assert results._topic_cards[0].table.columnWidth(9) >= 110
     assert results.topic_filter.count() >= 2
     assert len(results._topic_cards) >= 1
 
@@ -199,7 +199,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
 
     # Inline rename: there is no Edit button. Trial/Athlete cells are edited
     # directly by double-click, independent from batch checkbox state.
-    first_actions = card.table.cellWidget(0, 8)
+    first_actions = card.table.cellWidget(0, 9)
     assert first_actions is not None
     assert first_actions.findChild(QPushButton, "editTableBtn") is None
     row_preview = first_actions.findChild(QPushButton, "previewTableBtn")
@@ -224,7 +224,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
         i for i, s in enumerate(active_card.sessions)
         if s.get("session_id") == "demo_sprint_01"
     )
-    action_container = active_card.table.cellWidget(active_row, 8)
+    action_container = active_card.table.cellWidget(active_row, 9)
     assert action_container is not None
     action_button = action_container.findChild(QPushButton)
     assert action_button is not None
@@ -232,7 +232,7 @@ def test_results_topic_grouping_see_more_and_telemetry_preview():
     results.preview_session("demo_sprint_01")
     _APP.processEvents()
     assert not results.preview_drawer.isHidden()
-    assert active_card.table.cellWidget(active_row, 8) is action_container
+    assert active_card.table.cellWidget(active_row, 9) is action_container
     assert action_button.text() == "Viewing"
 
     # Test Telemetry Preview Drawer (Session with Signal Loss gap)
@@ -272,7 +272,7 @@ def test_results_inline_metadata_editing_has_no_edit_buttons(monkeypatch):
     results.table.setCurrentCell(0, 4)
     _APP.processEvents()
     assert results.table.selectedItems() == []
-    preview_container = results.table.cellWidget(0, 9)
+    preview_container = results.table.cellWidget(0, 10)
     assert preview_container is not None
     preview_button = preview_container.findChild(QPushButton, "previewTableBtn")
     assert preview_button is not None and preview_button.isVisible()
@@ -295,7 +295,7 @@ def test_results_inline_metadata_editing_has_no_edit_buttons(monkeypatch):
     # Grouped view still supports direct Trial/Athlete editing and retains only Preview.
     grouped = next(c for c in results._topic_cards if any(s.get("session_id") == session_id for s in c.sessions))
     grouped_row = next(i for i, s in enumerate(grouped.sessions) if s.get("session_id") == session_id)
-    actions = grouped.table.cellWidget(grouped_row, 8)
+    actions = grouped.table.cellWidget(grouped_row, 9)
     assert actions is not None
     assert actions.findChild(QPushButton, "editTableBtn") is None
     assert actions.findChild(QPushButton, "previewTableBtn") is not None

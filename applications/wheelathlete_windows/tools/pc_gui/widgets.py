@@ -136,6 +136,10 @@ class BoardSummaryCard(Card):
             )
             self.status.setToolTip(fault or "Sensor is healthy")
             self.status.setProperty("state", "good" if board.healthy else "warning")
+        elif board.reconnecting:
+            self.status.setText("RECONNECTING")
+            self.status.setToolTip("Auto-reconnecting to sensor...")
+            self.status.setProperty("state", "warning")
         else:
             self.status.setText("OFFLINE")
             self.status.setToolTip("Sensor is not connected")
@@ -159,16 +163,16 @@ class CurrentSensorCard(Card):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(9)
-        title = QLabel(f"Wheel {side} — current sample")
+        title = QLabel(f"Wheel {side}")
         title.setObjectName("cardTitle")
         layout.addWidget(title)
         grid = QGridLayout()
         grid.setSpacing(8)
         self.values: dict[str, MetricTile] = {}
         labels = [
-            ("ax", "Accel X"),
-            ("ay", "Accel Y"),
-            ("az", "Accel Z"),
+            ("ax", "X"),
+            ("ay", "Y"),
+            ("az", "Z"),
             ("gx", "Gyro X"),
             ("gy", "Gyro Y"),
             ("gz", "Gyro Z"),

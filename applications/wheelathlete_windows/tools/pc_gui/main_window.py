@@ -94,11 +94,11 @@ from .widgets import (
 
 
 NAV_ITEMS = [
-    ("Dashboard", "Overview & connect"),
-    ("Acquisition", "Live preview & record"),
-    ("Results", "Sessions & CSV export"),
-    ("MODEL", "2D trajectory analysis"),
-    ("Diagnostics", "Data integrity"),
+    "Dashboard",
+    "Acquisition",
+    "Results",
+    "Model",
+    "Diagnostics",
 ]
 
 
@@ -250,11 +250,18 @@ QFrame#sidebar { background-color: #10243b; border: none; }
 QLabel#brand { color: white; font-size: 22px; font-weight: 700; }
 QLabel#brandSub { color: #94a3b8; font-size: 11px; }
 QListWidget#nav {
-    background: transparent; border: none; color: #cbd5e1; outline: none;
+    background: transparent; border: none; color: #94a3b8; outline: none;
 }
-QListWidget#nav::item { padding: 12px 14px; margin: 2px 7px; border-radius: 8px; }
+QListWidget#nav::item {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 16px;
+    margin: 4px 8px;
+    border-radius: 8px;
+    color: #cbd5e1;
+}
 QListWidget#nav::item:selected { background: #07877a; color: white; }
-QListWidget#nav::item:hover:!selected { background: #17324f; }
+QListWidget#nav::item:hover:!selected { background: #17324f; color: #f8fafc; }
 QFrame#card { background-color: white; border: 1px solid #dce5ef; border-radius: 12px; }
 QLabel#pageTitle { font-size: 27px; font-weight: 750; color: #0f1f3d; }
 QLabel#pageSub { color: #64748b; }
@@ -543,15 +550,16 @@ QMessageBox QPushButton:pressed {
 """
 
 
-def _page_header(title: str, subtitle: str) -> QVBoxLayout:
+def _page_header(title: str, subtitle: str = "") -> QVBoxLayout:
     layout = QVBoxLayout()
     title_label = QLabel(title)
     title_label.setObjectName("pageTitle")
-    subtitle_label = QLabel(subtitle)
-    subtitle_label.setObjectName("pageSub")
-    subtitle_label.setWordWrap(True)
     layout.addWidget(title_label)
-    layout.addWidget(subtitle_label)
+    if subtitle:
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setObjectName("pageSub")
+        subtitle_label.setWordWrap(True)
+        layout.addWidget(subtitle_label)
     return layout
 
 
@@ -776,12 +784,7 @@ class DashboardPage(QWidget):
         self.controller = controller
         root = QVBoxLayout(self)
         root.setSpacing(16)
-        root.addLayout(
-            _page_header(
-                "Research acquisition",
-                "Connect L/R wheel hubs and the optional C chair-center IMU, verify link health, then record. Raw samples stay inside the acquisition daemon.",
-            )
-        )
+        root.addLayout(_page_header("Dashboard"))
 
         actions = QHBoxLayout()
         self.scan_button = _button("Scan for sensors", "scanButton", primary=True)
@@ -1008,12 +1011,7 @@ class AcquisitionPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(14)
-        root.addLayout(
-            _page_header(
-                "Live preview & synchronized recording",
-                "Monitor L/R wheel hubs plus the optional C chair-center IMU and capture synchronized research data.",
-            )
-        )
+        root.addLayout(_page_header("Live preview & recording"))
 
         main_layout = QHBoxLayout()
         main_layout.setSpacing(16)
@@ -1059,6 +1057,7 @@ class AcquisitionPage(QWidget):
         self.athlete = QLineEdit()
         self.athlete.setPlaceholderText("Athlete name / ID")
         self.athlete.setAccessibleName("athleteInput")
+        self.athlete.setMaximumWidth(240)
         self.topic = QLineEdit()
         self.topic.setPlaceholderText("e.g. Sprint, Baseline, Agility")
         self.topic.setAccessibleName("topicInput")
@@ -1158,7 +1157,7 @@ class AcquisitionPage(QWidget):
             "Gyroscope (Right Wheel)", "°/s", gyro_value, side="R"
         )
         self.accel_chart_c = MultiAxisChart(
-            "Acceleration (Chair Center, +Z down)", "g", accel_value, side="C"
+            "Acceleration (Chair Center)", "g", accel_value, side="C"
         )
         self.gyro_chart_c = MultiAxisChart(
             "Gyroscope (Chair Center)", "deg/s", gyro_value, side="C"
@@ -1558,7 +1557,7 @@ class SessionPreviewDrawer(Card):
             self.accel_series_c,
             self.accel_gap_scatter_c,
             view_ac,
-        ) = _create_chart("Acceleration", "g", "Chair Center (+Z down)")
+        ) = _create_chart("Acceleration", "g", "Chair Center")
         (
             self.gyro_chart_c,
             self.gyro_x_axis_c,
@@ -1882,7 +1881,7 @@ class TopicCard(Card):
         table_layout.setContentsMargins(0, 8, 0, 0)
         table_layout.setSpacing(6)
 
-        self.table = QTableWidget(len(self.sessions), 9)
+        self.table = QTableWidget(len(self.sessions), 10)
         self.table.setHorizontalHeaderLabels(
             [
                 "Select",
@@ -1893,6 +1892,7 @@ class TopicCard(Card):
                 "Duration",
                 "L samples",
                 "R samples",
+                "C samples",
                 "Preview",
             ]
         )
@@ -1920,8 +1920,9 @@ class TopicCard(Card):
         )
         self.table.setColumnWidth(2, 75)
         self.table.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeMode.Stretch
+            3, QHeaderView.ResizeMode.Interactive
         )
+        self.table.setColumnWidth(3, 130)
         self.table.horizontalHeader().setSectionResizeMode(
             4, QHeaderView.ResizeMode.Fixed
         )
@@ -1941,8 +1942,12 @@ class TopicCard(Card):
         self.table.horizontalHeader().setSectionResizeMode(
             8, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(8, 110)
-        self.table.horizontalHeaderItem(8).setTextAlignment(
+        self.table.setColumnWidth(8, 85)
+        self.table.horizontalHeader().setSectionResizeMode(
+            9, QHeaderView.ResizeMode.Fixed
+        )
+        self.table.setColumnWidth(9, 110)
+        self.table.horizontalHeaderItem(9).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
 
@@ -1977,6 +1982,8 @@ class TopicCard(Card):
             )
             tr = item.get("trial_number", "—")
             tr_str = f"Trial {tr}" if tr != "—" else "—"
+            c_count = counts.get("C")
+            c_str = f"{int(c_count):,}" if c_count is not None else "—"
             values = [
                 str(item.get("quality", "GOOD")),
                 tr_str,
@@ -1985,6 +1992,7 @@ class TopicCard(Card):
                 fmt(item.get("duration_s"), " s", 1),
                 f"{int(counts.get('L', 0) or 0):,}",
                 f"{int(counts.get('R', 0) or 0):,}",
+                c_str,
             ]
             for col, val in enumerate(values, start=1):
                 cell = QTableWidgetItem(val)
@@ -1995,7 +2003,7 @@ class TopicCard(Card):
                 cell.setFlags(flags)
                 if col in (1, 2):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                elif col in (4, 5, 6, 7):
+                elif col in (4, 5, 6, 7, 8):
                     cell.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                     )
@@ -2013,7 +2021,7 @@ class TopicCard(Card):
                 lambda _=None, s=sess_id: self.preview_requested.emit(s),
                 active=is_active,
             )
-            self.table.setCellWidget(row, 8, action_widget)
+            self.table.setCellWidget(row, 9, action_widget)
 
         self._block_signals = False
 
@@ -2022,7 +2030,7 @@ class TopicCard(Card):
         for row, item in enumerate(self.sessions):
             sess_id = str(item.get("session_id", ""))
             is_active = sess_id == session_id and bool(session_id)
-            container = self.table.cellWidget(row, 8)
+            container = self.table.cellWidget(row, 9)
             if not _set_table_action_state(
                 container, "Viewing" if is_active else "Preview", active=is_active
             ):
@@ -2032,7 +2040,7 @@ class TopicCard(Card):
                     lambda _=None, s=sess_id: self.preview_requested.emit(s),
                     active=is_active,
                 )
-                self.table.setCellWidget(row, 8, action_widget)
+                self.table.setCellWidget(row, 9, action_widget)
 
     def toggle_expanded(self) -> None:
         self.set_expanded(not self.table_container.isVisible())
@@ -2272,12 +2280,7 @@ class ResultsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(14)
-        root.addLayout(
-            _page_header(
-                "Recording results & CSV export",
-                "Browse recordings by collection date and topic, inspect trials and athletes, preview telemetry with signal-loss detection, and batch export.",
-            )
-        )
+        root.addLayout(_page_header("Results"))
 
         # Session Folder Card
         folder_card = Card()
@@ -2380,7 +2383,7 @@ class ResultsPage(QWidget):
         flat_container = QWidget()
         flat_layout = QVBoxLayout(flat_container)
         flat_layout.setContentsMargins(0, 4, 0, 0)
-        self.table = QTableWidget(0, 10)
+        self.table = QTableWidget(0, 11)
         self.table.setHorizontalHeaderLabels(
             [
                 "Select",
@@ -2392,6 +2395,7 @@ class ResultsPage(QWidget):
                 "Duration",
                 "L samples",
                 "R samples",
+                "C samples",
                 "Preview",
             ]
         )
@@ -2415,8 +2419,9 @@ class ResultsPage(QWidget):
         )
         self.table.setColumnWidth(3, 75)
         self.table.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeMode.Stretch
+            4, QHeaderView.ResizeMode.Interactive
         )
+        self.table.setColumnWidth(4, 130)
         self.table.horizontalHeader().setSectionResizeMode(
             5, QHeaderView.ResizeMode.Fixed
         )
@@ -2436,8 +2441,12 @@ class ResultsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             9, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(9, 110)
-        self.table.horizontalHeaderItem(9).setTextAlignment(
+        self.table.setColumnWidth(9, 85)
+        self.table.horizontalHeader().setSectionResizeMode(
+            10, QHeaderView.ResizeMode.Fixed
+        )
+        self.table.setColumnWidth(10, 110)
+        self.table.horizontalHeaderItem(10).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
         # Batch selection is checkbox-driven. Disable Qt row selection so
@@ -2567,6 +2576,8 @@ class ResultsPage(QWidget):
                 if isinstance(item.get("sample_counts"), dict)
                 else {}
             )
+            c_count = counts.get("C")
+            c_str = f"{int(c_count):,}" if c_count is not None else "—"
             values = [
                 str(item.get("quality", "—")),
                 str(item.get("topic", "")),
@@ -2576,6 +2587,7 @@ class ResultsPage(QWidget):
                 fmt(item.get("duration_s"), " s", 1),
                 f"{int(counts.get('L', 0) or 0):,}",
                 f"{int(counts.get('R', 0) or 0):,}",
+                c_str,
             ]
             for col, value in enumerate(values, start=1):
                 cell = QTableWidgetItem(value)
@@ -2586,7 +2598,7 @@ class ResultsPage(QWidget):
                 cell.setFlags(flags)
                 if col in (1, 3):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                elif col in (5, 6, 7, 8):
+                elif col in (5, 6, 7, 8, 9):
                     cell.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                     )
@@ -2604,7 +2616,7 @@ class ResultsPage(QWidget):
                 lambda _=None, s=sess_id: self.preview_session(s),
                 active=is_active,
             )
-            self.table.setCellWidget(row, 9, action_widget)
+            self.table.setCellWidget(row, 10, action_widget)
 
         self._block_table_signals = False
 
@@ -2700,7 +2712,7 @@ class ResultsPage(QWidget):
                 sess = self._visible[row]
                 sess_id = str(sess.get("session_id", ""))
                 is_active = sess_id == self._active_session_id and bool(sess_id)
-                container = self.table.cellWidget(row, 9)
+                container = self.table.cellWidget(row, 10)
                 if not _set_table_action_state(
                     container, "Viewing" if is_active else "Preview", active=is_active
                 ):
@@ -2710,7 +2722,7 @@ class ResultsPage(QWidget):
                         lambda _=None, s=sess_id: self.preview_session(s),
                         active=is_active,
                     )
-                    self.table.setCellWidget(row, 9, action_widget)
+                    self.table.setCellWidget(row, 10, action_widget)
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
         if self._block_table_signals:
@@ -3047,12 +3059,7 @@ class ModelPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 10, 16, 10)
         root.setSpacing(7)
-        root.addLayout(
-            _page_header(
-                "MODEL",
-                "Offline experimental estimates. Review the full path, then inspect a time or window.",
-            )
-        )
+        root.addLayout(_page_header("Model"))
 
         controls = Card()
         controls_layout = QGridLayout(controls)
@@ -3319,8 +3326,15 @@ class ModelPage(QWidget):
                 f"inputs {'/'.join(spec.required_sensor_roles)} via {spec.preprocessing_id} · "
                 f"outputs {outputs}"
             )
+            desc = spec.description or ""
+            if "classical kinematic planar" in desc.lower() or "biwheel3d classical" in desc.lower():
+                desc_text = ""
+            elif desc:
+                desc_text = f"{desc}  ·  "
+            else:
+                desc_text = ""
             self.model_detail.setText(
-                f"{spec.description}  ·  {technical}  ·  {spec.checkpoint}"
+                f"{desc_text}{technical}  ·  {spec.checkpoint}"
             )
             ready, detail = model_spec_runtime_status(spec)
             self.runtime_label.setText(
@@ -3345,6 +3359,10 @@ class ModelPage(QWidget):
         current = self.model_combo.currentData()
         if isinstance(current, ModelSpec) and current.checkpoint.is_file():
             initial_dir = str(current.checkpoint.parent)
+        elif (Path.home() / "Documents" / "WheelAthlete" / "Model").is_dir():
+            initial_dir = str((Path.home() / "Documents" / "WheelAthlete" / "Model").resolve())
+        elif (Path.home() / "Documents" / "WheelAthlete").is_dir():
+            initial_dir = str((Path.home() / "Documents" / "WheelAthlete").resolve())
         else:
             initial_dir = str(model_library_root())
         chosen, _filter = QFileDialog.getOpenFileName(
@@ -3762,12 +3780,7 @@ class DiagnosticsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 22, 24, 22)
         root.setSpacing(14)
-        root.addLayout(
-            _page_header(
-                "Diagnostics",
-                "One place for loss, queue, firmware, sync and UI-isolation metrics. RSSI alone is never treated as data quality.",
-            )
-        )
+        root.addLayout(_page_header("Diagnostics"))
         toolbar = QHBoxLayout()
         self.refresh = _button("Refresh", "refreshDiagnosticsButton")
         self.export = _button("Export report", "exportDiagnosticsButton", primary=True)
@@ -3782,13 +3795,16 @@ class DiagnosticsPage(QWidget):
         root.addLayout(toolbar)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Metric", "Left", "Right"])
+        self.tree.setHeaderLabels(["Metric", "Left (L)", "Right (R)", "Center (C)"])
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.tree.header().setSectionResizeMode(
             1, QHeaderView.ResizeMode.ResizeToContents
         )
         self.tree.header().setSectionResizeMode(
             2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.tree.header().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.ResizeToContents
         )
         self.tree.setAlternatingRowColors(True)
         self.tree.setAccessibleName("diagnosticsTree")
@@ -3884,9 +3900,11 @@ class DiagnosticsPage(QWidget):
             ("Clock residual", lambda b: fmt(b.residual_rms_ms, " ms", 3)),
         ]
         for name, getter in metrics:
+            center_board = state.boards.get("C")
+            center_val = getter(center_board) if center_board is not None else "—"
             self.tree.addTopLevelItem(
                 QTreeWidgetItem(
-                    [name, getter(state.boards["L"]), getter(state.boards["R"])]
+                    [name, getter(state.boards["L"]), getter(state.boards["R"]), center_val]
                 )
             )
         self.tree.expandAll()
@@ -3913,11 +3931,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.demo = demo
-        self.setWindowTitle("WheelAthlete — Python Research Edition")
+        self.setWindowTitle("WheelAthlete")
         self.resize(1500, 930)
         self.setMinimumSize(1180, 760)
         self.setStyleSheet(APP_QSS)
-        self.setAccessibleName("WheelAthletePythonResearchEdition")
+        self.setAccessibleName("WheelAthlete")
         self.update_controller = UpdateController(
             app_root=Path(__file__).resolve().parents[2], parent=self
         )
@@ -3937,16 +3955,14 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(14, 22, 14, 18)
         brand = QLabel("WheelAthlete")
         brand.setObjectName("brand")
-        sub = QLabel("PYTHON RESEARCH EDITION")
-        sub.setObjectName("brandSub")
         side_layout.addWidget(brand)
-        side_layout.addWidget(sub)
         side_layout.addSpacing(18)
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         self.nav.setAccessibleName("mainNavigation")
-        for title, subtitle in NAV_ITEMS:
-            item = QListWidgetItem(f"{title}\n{subtitle}")
+        for item_data in NAV_ITEMS:
+            title = item_data if isinstance(item_data, str) else item_data[0]
+            item = QListWidgetItem(title)
             item.setSizeHint(item.sizeHint().expandedTo(item.sizeHint()))
             self.nav.addItem(item)
         self.nav.setCurrentRow(0)
@@ -4122,8 +4138,8 @@ class MainWindow(QMainWindow):
         self.model.select_session(session_id)
         model_index = next(
             index
-            for index, (title, _subtitle) in enumerate(NAV_ITEMS)
-            if title == "MODEL"
+            for index, item_data in enumerate(NAV_ITEMS)
+            if (item_data if isinstance(item_data, str) else item_data[0]).upper() == "MODEL"
         )
         self.nav.setCurrentRow(model_index)
 

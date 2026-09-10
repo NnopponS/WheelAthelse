@@ -71,8 +71,14 @@ jobs:
           SIGN_PFX_PASSWORD: ${{ secrets.WHEELATHLETE_SIGN_PFX_PASSWORD }}
           TIMESTAMP_URL: ${{ vars.WHEELATHLETE_TIMESTAMP_URL }}
           EXPECTED_SUBJECT: ${{ vars.WHEELATHLETE_SIGN_CERT_SUBJECT }}
+          ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
         run: |
           if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD -or -not $env:TIMESTAMP_URL -or -not $env:EXPECTED_SUBJECT) {
+            if ($env:ALLOW_UNSIGNED_RELEASE -eq "true") {
+              Write-Host "ALLOW_UNSIGNED_RELEASE=true: Building community unsigned release."
+              "ALLOW_UNSIGNED_RELEASE=true" >> $env:GITHUB_ENV
+              return
+            }
             throw "Trusted Windows signing secrets, expected subject, and timestamp URL are required for publication."
           }
           $pfx = Join-Path $env:RUNNER_TEMP "wheelathlete-signing.pfx"
@@ -131,13 +137,17 @@ jobs:
 
       - name: Re-check public signing gate
         shell: bash
+        env:
+          ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
+          allow_unsigned = os.environ.get('ALLOW_UNSIGNED_RELEASE', '').lower() == 'true'
           report = json.loads(Path('dist/signing-report.json').read_text(encoding='utf-8'))
-          if report.get('public_release_ready') is not True:
+          if not allow_unsigned and report.get('public_release_ready') is not True:
               raise SystemExit('signing-report.json did not pass public_release_ready')
           PY
 

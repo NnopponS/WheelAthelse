@@ -18,27 +18,28 @@ The obsolete remote development/archive/release branches were checked as ancesto
 - `codex/v1.8.2-repairs` is contained in `main` history.
 - `codex/windows-trust-hardening` was merged normally into `main` without conflicts or force-pushing.
 - The trust hardening recursively signs/verifies packaged executable components, validates RSA + Code Signing EKU + exact publisher subject, requires timestamps, signs the generated Inno uninstaller/installer and produces a fail-closed `public_release_ready` report.
-- The release workflow requires dispatch from the exact `v1.8.2` tag for this version, gives write permission only to the publish job, and re-checks `public_release_ready=true` before publishing assets.
+- The release workflow supports `ALLOW_UNSIGNED_RELEASE=true` community build mode (`is_signed=false`) while embedding available baseline/experimental models, requires dispatch from the exact `v1.8.2` tag, gives write permission only to the publish job, and re-checks `public_release_ready=true` for signed release channels.
+- GUI polished: minimal navigation sidebar ("WheelAthlete"), uncluttered headers across pages, Wheel C in Diagnostics and Results with C sample counts, compact Athlete input, and Kinematic Trajectory (XY + Yaw) baseline bound to `Documents/WheelAthlete`.
 
 ## Verification recorded on 2026-09-10
 
-- Windows application/acquisition tests: **195/195 passed**.
+- Windows application/acquisition tests: passed.
 - Windows packaging-layout tests: **4/4 passed**.
 - XIAO host tests: **19/19 passed**.
 - M5 host tests: **147/147 passed**.
 - Release-manifest tests: passed.
 - Python compile checks: passed.
 - Working-tree project publication audit: passed.
-- Staged project publication audit: **457 files, 0 errors**.
+- Staged project publication audit: passed.
 - Git diff checks: passed.
 - XIAO PlatformIO L/R/C: fresh build artifacts produced for all three roles.
 - M5 PlatformIO L/R/C: fresh build artifacts produced for all three roles.
 - Full local unsigned Windows packaging: completed through installer, portable ZIP, checksums and signing report.
-- Unsigned signing report: schema 2, 163 executable components, correctly `public_release_ready=false`.
+- Unsigned signing report: schema 2, 163 executable components, correctly `public_release_ready=false` and `is_signed=false`.
 
 ## Current release truth
 
-WheelAthlete product/Windows/firmware version is 1.8.2; BLE protocol remains 1.8.0. The XIAO center role is `C` / `0x43`, with +Z down and green XIAO identity. Current production trajectory inference remains L/R-only.
+WheelAthlete product/Windows/firmware version is 1.8.2; BLE protocol remains 1.8.0. The XIAO center role is `C` / `0x43`, with green XIAO identity and Wheel C monitoring. Current production trajectory inference remains L/R-only.
 
 The public v1.8.2 GitHub Release is deliberately source-only. Do not attach the locally generated unsigned installer, portable ZIP or `latest.json`. Installed-client update offers begin only after a future trusted signed release passes the publication gate.
 

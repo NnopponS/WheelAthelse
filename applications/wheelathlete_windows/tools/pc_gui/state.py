@@ -83,6 +83,7 @@ class PreviewBuffer:
 class BoardView:
     side: str
     connected: bool = False
+    reconnecting: bool = False
     device_id: str | None = None
     name: str = "Not connected"
     firmware: str = "—"
@@ -126,6 +127,7 @@ class BoardView:
         health = data.get("health") if isinstance(data.get("health"), dict) else {}
         clock = data.get("clock") if isinstance(data.get("clock"), dict) else {}
         connected = bool(data.get("connected"))
+        reconnecting = bool(data.get("reconnecting"))
         name = str(
             info.get("name")
             or info.get("advertised_name")
@@ -134,6 +136,7 @@ class BoardView:
         return cls(
             side=side,
             connected=connected,
+            reconnecting=reconnecting,
             device_id=str(data["device_id"]) if data.get("device_id") else None,
             name=name,
             firmware=str(info.get("firmware", "—")),

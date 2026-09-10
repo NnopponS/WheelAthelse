@@ -65,7 +65,7 @@ class AnalysisTimeline(QWidget):
         overview_layout.setContentsMargins(14, 12, 14, 12)
         overview_layout.setSpacing(7)
 
-        eyebrow = QLabel("ANALYSIS TIMELINE")
+        eyebrow = QLabel("Analysis Timeline")
         eyebrow.setObjectName("analysisEyebrow")
         overview_layout.addWidget(eyebrow)
 

@@ -22,11 +22,14 @@ The public repository is intentionally organized around two branches:
 
 Historical version tags are retained for traceability. Obsolete development/release branches do not need to remain visible after their work is fully integrated.
 
-### Source-only Windows release while signing is unavailable
+### Windows release packages and community build mode
 
-The current v1.8.2 GitHub Release is source-only. Public Windows installer, portable archive, and `latest.json` are withheld until the fail-closed signing pipeline can verify a trusted RSA Code Signing identity, Code Signing EKU, exact publisher subject, timestamped executable components, generated uninstaller, and installer.
+The repository provides two paths for packaging and distributing the Windows application:
 
-An unsigned local package is suitable for development/testing only. SHA-256 protects artifact integrity but does not establish Windows publisher trust or bypass SmartScreen/Application Control policy.
+1. **Trusted Signed Release**: Requires commercial RSA Code Signing certificate, timestamp URL, and matching publisher subject (`is_signed=true`, `public_release_ready=true`).
+2. **Community / Unsigned Release**: Supports `ALLOW_UNSIGNED_RELEASE=true` or community build mode without requiring a commercial certificate. The pipeline and update manifest record `is_signed=false`, allowing portable ZIP and installer packages to be built and evaluated with embedded baseline and experimental models (`wheelathlete_biwheel3d_m4.onnx`, `BiWheel3D-XY-Yaw-current_best.json`, and PyTorch residual checkpoint).
+
+An unsigned local package is suitable for development/testing and community distribution. SHA-256 protects artifact integrity; when installing unsigned packages on Windows, SmartScreen prompt can be dismissed via "More info" -> "Run anyway".
 
 ## What is included in 1.8.2
 
@@ -37,19 +40,22 @@ Location: [`applications/wheelathlete_windows/`](applications/wheelathlete_windo
 The Windows application uses a two-process architecture:
 
 - **Acquisition daemon** — owns BLE, packet parsing, clock synchronization, sequence/loss accounting, append-only `.waj` recording, QC, recovery, and synchronized lifecycle control.
-- **PySide6 GUI** — owns Dashboard, Acquisition, Results, Diagnostics, export, and optional offline MODEL review.
+- **PySide6 GUI** — owns Dashboard, Acquisition, Results, Diagnostics, export, and offline Model trajectory review.
 
 The GUI is not the authoritative raw-data path. A slow chart, model task, or GUI restart must not silently become the BLE recording bottleneck.
 
 Key 1.8.2 behavior:
 
-- Day -> Experiment -> Trial Results hierarchy with persistent session-ID selection;
+- Streamlined, minimal navigation sidebar ("WheelAthlete") with clean uncluttered headers across all pages;
+- Day -> Experiment -> Trial Results hierarchy with persistent session-ID selection and C sample counts;
 - day/all/clear batch selection and deduplicated export;
 - high-resolution Windows host timing based on QueryPerformanceCounter;
+- Diagnostics page with three-sensor metrics for Left (L), Right (R), and Chair Center (C);
+- Model page with intuitive Kinematic Trajectory (XY + Yaw) baseline and user library binding to `Documents/WheelAthlete`;
 - exact sensor fault reporting for sequence, queue, FIFO, malformed packet, fatal, and active retry states;
 - safe daemon shutdown and active-journal finalization before upgrade/uninstall;
 - recordings and custom/seeded models preserved across installer lifecycle operations;
-- verified in-app update flow when a trusted signed release and `latest.json` exist;
+- verified in-app update flow supporting both signed and community build channels;
 - portable, contained `wheelathlete-model.json` model bundles with compatibility validation.
 
 Run from source:

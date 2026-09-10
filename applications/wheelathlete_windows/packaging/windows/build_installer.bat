@@ -70,22 +70,32 @@ copy /y "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BiWheel3D-XY-Yaw-curr
 if errorlevel 1 exit /b 1
 copy /y "%WINDOWS_APP_ROOT%\tools\pc_gui\biwheel3d_runtime\BIWHEEL3D_LICENSE.txt" "%OUT_DIR%\WheelAthlete\Model\BIWHEEL3D_LICENSE.txt" >nul
 if errorlevel 1 exit /b 1
+if exist "%REPO_ROOT%\BiWheel3D\models\experimental\torch_residual_v1\model.pt" (
+  copy /y "%REPO_ROOT%\BiWheel3D\models\experimental\torch_residual_v1\model.pt" "%OUT_DIR%\WheelAthlete\Model\WheelAthlete-PyTorch-Residual-v1.pt" >nul
+) else if exist "%USERPROFILE%\Documents\WheelAthlete\Model\WheelAthlete-PyTorch-Residual-v1.pt" (
+  copy /y "%USERPROFILE%\Documents\WheelAthlete\Model\WheelAthlete-PyTorch-Residual-v1.pt" "%OUT_DIR%\WheelAthlete\Model\WheelAthlete-PyTorch-Residual-v1.pt" >nul
+)
 
 set "SIGNING_ENABLED=0"
 if defined WHEELATHLETE_SIGN_CERT_SHA1 set "SIGNING_ENABLED=1"
 if defined WHEELATHLETE_TIMESTAMP_URL set "SIGNING_ENABLED=1"
 if defined WHEELATHLETE_SIGN_CERT_SUBJECT set "SIGNING_ENABLED=1"
-if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SHA1 (
-  echo ERROR: WHEELATHLETE_SIGN_CERT_SHA1 is required when signing is enabled.
-  exit /b 1
-)
-if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_TIMESTAMP_URL (
-  echo ERROR: WHEELATHLETE_TIMESTAMP_URL is required when signing is enabled.
-  exit /b 1
-)
-if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SUBJECT (
-  echo ERROR: WHEELATHLETE_SIGN_CERT_SUBJECT is required when signing is enabled.
-  exit /b 1
+if /i "%ALLOW_UNSIGNED_RELEASE%"=="true" (
+  echo Community build mode: ALLOW_UNSIGNED_RELEASE=true; proceeding unsigned.
+  set "SIGNING_ENABLED=0"
+) else (
+  if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SHA1 (
+    echo ERROR: WHEELATHLETE_SIGN_CERT_SHA1 is required when signing is enabled.
+    exit /b 1
+  )
+  if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_TIMESTAMP_URL (
+    echo ERROR: WHEELATHLETE_TIMESTAMP_URL is required when signing is enabled.
+    exit /b 1
+  )
+  if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SUBJECT (
+    echo ERROR: WHEELATHLETE_SIGN_CERT_SUBJECT is required when signing is enabled.
+    exit /b 1
+  )
 )
 copy /y "%OUT_DIR%\WheelAthleteDaemon.exe" "%OUT_DIR%\WheelAthlete\_internal\WheelAthleteDaemon.exe" >nul
 if errorlevel 1 exit /b 1

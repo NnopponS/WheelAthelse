@@ -38,6 +38,7 @@ def build_manifest(
     ios_url: str = "",
     repo: str = REPO,
     channel: str = "stable",
+    is_signed: bool = True,
 ) -> dict[str, Any]:
     tag = f"v{version}"
     base = f"https://github.com/{repo}/releases/download/{tag}"
@@ -45,6 +46,7 @@ def build_manifest(
     platforms: dict[str, Any] = {
         "windows": {
             "version": version,
+            "is_signed": is_signed,
             **artifact_record(
                 windows_installer,
                 url=f"{base}/{windows_installer.name}",
@@ -89,11 +91,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel", default="stable")
     parser.add_argument("--notes", default="")
     parser.add_argument("--ios-url", default="")
+    parser.add_argument(
+        "--is-signed",
+        dest="is_signed",
+        action="store_true",
+        default=None,
+        help="Mark Windows release as signed.",
+    )
+    parser.add_argument(
+        "--unsigned",
+        dest="is_signed",
+        action="store_false",
+        help="Mark Windows release as unsigned (community build).",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    is_signed = args.is_signed
+    if is_signed is None:
+        report_path = args.windows.parent / "signing-report.json"
+        if report_path.is_file():
+            try:
+                rep = json.loads(report_path.read_text(encoding="utf-8"))
+                is_signed = bool(rep.get("is_signed", rep.get("public_release_ready", False)))
+            except Exception:
+                is_signed = False
+        else:
+            is_signed = True
+
     manifest = build_manifest(
         version=args.version,
         android_apk=args.android,
@@ -103,6 +130,7 @@ def main() -> int:
         ios_url=args.ios_url,
         repo=args.repo,
         channel=args.channel,
+        is_signed=is_signed,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

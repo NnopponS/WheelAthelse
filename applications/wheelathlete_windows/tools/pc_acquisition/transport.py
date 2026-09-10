@@ -9,6 +9,7 @@ from .uuids import IMU_DATA_UUID, SERVICE_UUID, SYNC_UUID
 
 
 NotificationCallback = Callable[[bytes, int], None]
+DisconnectCallback = Callable[[str], None]
 
 
 class BleTransport(Protocol):
@@ -37,6 +38,8 @@ class BleTransport(Protocol):
 
     def negotiated_mtu(self, device_id: str) -> int | None: ...
 
+    def set_disconnect_callback(self, callback: DisconnectCallback | None) -> None: ...
+
 
 class BleakTransport:
     """Production Windows BLE transport backed by Bleak/WinRT.
@@ -58,6 +61,20 @@ class BleakTransport:
         self._BleakScanner = BleakScanner
         self._clients: dict[str, object] = {}
         self._callbacks: dict[tuple[str, str], object] = {}
+        self._disconnect_callback: DisconnectCallback | None = None
+        self._intentional_disconnects: set[str] = set()
+
+    def set_disconnect_callback(self, callback: DisconnectCallback | None) -> None:
+        self._disconnect_callback = callback
+
+    def _on_device_disconnected(self, device_id: str) -> None:
+        if device_id in self._intentional_disconnects:
+            return
+        self._clients.pop(device_id, None)
+        for key in [k for k in self._callbacks if k[0] == device_id]:
+            self._callbacks.pop(key, None)
+        if self._disconnect_callback is not None:
+            self._disconnect_callback(device_id)
 
     async def scan(self, timeout_s: float = 5.0) -> list[DeviceCandidate]:
         # Bleak >=0.22 can return AdvertisementData alongside BLEDevice. RSSI
@@ -95,16 +112,26 @@ class BleakTransport:
     async def connect(self, device_id: str) -> None:
         if device_id in self._clients:
             return
-        client = self._BleakClient(device_id)
+        client = self._BleakClient(
+            device_id,
+            disconnected_callback=lambda _client: self._on_device_disconnected(device_id),
+        )
         await client.connect(timeout=10.0)
         self._clients[device_id] = client
 
     async def disconnect(self, device_id: str) -> None:
-        client = self._clients.pop(device_id, None)
-        if client is not None:
-            await client.disconnect()
-        for key in [key for key in self._callbacks if key[0] == device_id]:
-            self._callbacks.pop(key, None)
+        self._intentional_disconnects.add(device_id)
+        try:
+            client = self._clients.pop(device_id, None)
+            for key in [key for key in self._callbacks if key[0] == device_id]:
+                self._callbacks.pop(key, None)
+            if client is not None:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+        finally:
+            self._intentional_disconnects.discard(device_id)
 
     def _client(self, device_id: str):
         try:
@@ -129,6 +156,8 @@ class BleakTransport:
             return
         try:
             await client.stop_notify(characteristic_uuid)
+        except Exception:
+            pass
         finally:
             self._callbacks.pop((device_id, characteristic_uuid), None)
 
@@ -165,6 +194,17 @@ class FakeBleTransport:
         self.writes: list[tuple[str, str, bytes, bool]] = []
         self.mtu: dict[str, int] = {}
         self.scan_results: list[DeviceCandidate] = []
+        self._disconnect_callback: DisconnectCallback | None = None
+
+    def set_disconnect_callback(self, callback: DisconnectCallback | None) -> None:
+        self._disconnect_callback = callback
+
+    def simulate_disconnect(self, device_id: str) -> None:
+        self.connected.discard(device_id)
+        for key in [key for key in self.callbacks if key[0] == device_id]:
+            self.callbacks.pop(key, None)
+        if self._disconnect_callback is not None:
+            self._disconnect_callback(device_id)
 
     async def scan(self, timeout_s: float = 5.0) -> list[DeviceCandidate]:
         del timeout_s

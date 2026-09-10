@@ -132,7 +132,7 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     _APP.processEvents()
 
     assert model.model_combo.count() >= 1
-    assert model.model_combo.itemText(0) == "Classical v1"
+    assert model.model_combo.itemText(0) == "Kinematic Trajectory (XY + Yaw)"
     assert model.model_combo.currentIndex() == 0
     assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
     assert "recipe ready" in model.runtime_label.text()

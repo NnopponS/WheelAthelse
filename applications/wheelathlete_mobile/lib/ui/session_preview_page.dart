@@ -667,7 +667,7 @@ class _ChartSection extends StatelessWidget {
                       ),
                       isAccel: isAccel,
                       axisColors: axisColors,
-                      label: 'C (+Z down)',
+                      label: 'C',
                       color: wc.center.solid,
                     ),
                   ],
@@ -681,7 +681,7 @@ class _ChartSection extends StatelessWidget {
                 label: switch (selection) {
                   PreviewWheelSelection.left => 'L',
                   PreviewWheelSelection.right => 'R',
-                  PreviewWheelSelection.center => 'C (+Z down)',
+                  PreviewWheelSelection.center => 'C',
                   PreviewWheelSelection.both => 'All',
                 },
                 color: wc.forWheel(switch (selection) {

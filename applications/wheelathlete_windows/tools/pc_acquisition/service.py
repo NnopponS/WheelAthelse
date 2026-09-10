@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import os
 import struct
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Callable
 
@@ -162,6 +164,8 @@ class AcquisitionService:
         self._status_rate_baseline: dict[WheelSide, tuple[int, int, int]] = {}
         self._record_metadata: dict[str, Any] | None = None
         self._live_sides: tuple[WheelSide, ...] = ()
+        self._auto_reconnect_tasks: dict[WheelSide, asyncio.Task[None]] = {}
+        self._intentional_disconnect: set[str] = set()
         self.engine = DualBoardEngine(
             transport,
             sample_sink=self._on_sample,
@@ -169,6 +173,8 @@ class AcquisitionService:
         )
         self.lifecycle = SyncLifecycleController(self.engine, transport)
         self._started = False
+        if hasattr(self.transport, "set_disconnect_callback"):
+            self.transport.set_disconnect_callback(self._on_transport_disconnect)
 
     def set_event_sink(self, sink: EventSink | None) -> None:
         self._event_sink = sink
@@ -180,6 +186,10 @@ class AcquisitionService:
         self._started = True
 
     async def close(self) -> None:
+        for task in self._auto_reconnect_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._auto_reconnect_tasks.clear()
         if self._journal is not None:
             self._journal.abort_without_finalize_for_test()
             self._journal = None
@@ -245,6 +255,82 @@ class AcquisitionService:
             },
         )
 
+    def _on_transport_disconnect(self, device_id: str) -> None:
+        if device_id in self._intentional_disconnect:
+            return
+        matching_side: WheelSide | None = None
+        for side in WheelSide:
+            if self.engine.device_id(side) == device_id:
+                matching_side = side
+                break
+        if matching_side is None:
+            for side, info in self._device_info.items():
+                if info.get("device_id") == device_id:
+                    matching_side = side
+                    break
+        if matching_side is None:
+            return
+
+        self.engine.handle_disconnect(matching_side)
+        self._emit(
+            "connection_state",
+            {
+                "side": matching_side.value,
+                "device_id": device_id,
+                "state": "disconnected",
+                "reconnecting": True,
+            },
+        )
+        existing = self._auto_reconnect_tasks.get(matching_side)
+        if existing is None or existing.done():
+            self._auto_reconnect_tasks[matching_side] = asyncio.create_task(
+                self._supervise_auto_reconnect(matching_side, device_id),
+                name=f"auto-reconnect-{matching_side.value}",
+            )
+
+    async def _supervise_auto_reconnect(self, side: WheelSide, device_id: str) -> None:
+        await asyncio.sleep(1.0)
+        for _attempt in range(20):
+            if device_id in self._intentional_disconnect:
+                return
+            if self.engine.device_id(side) is not None:
+                return
+            try:
+                await self.transport.connect(device_id)
+                if self.engine.device_id(side) is None:
+                    await self.engine.connect(side, device_id)
+                info = _parse_info(await self.transport.read(device_id, INFO_UUID))
+                info = dict(info)
+                info["device_id"] = device_id
+                info["mtu"] = self.transport.negotiated_mtu(device_id)
+                candidate = self._scan_cache.get(device_id, {})
+                info["advertised_name"] = candidate.get("name")
+                info["rssi"] = candidate.get("rssi")
+                try:
+                    config = _parse_config(await self.transport.read(device_id, CONFIG_UUID))
+                except Exception:
+                    config = {}
+                info.update(config)
+                info["sensor_role"] = "chair_center" if side is WheelSide.CENTER else "wheel_hub"
+                try:
+                    battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
+                    info["battery_percent"] = int(battery[0]) if battery else None
+                except Exception:
+                    info["battery_percent"] = None
+                info.setdefault("sample_rate_hz", 100)
+                info.setdefault("name", info.get("advertised_name") or f"WheelAthlete-{side.value}")
+                self._device_info[side] = info
+                self._emit("connection_state", {**info, "state": "connected"})
+                if side in self._live_sides:
+                    try:
+                        await self.lifecycle.synchronize(side, count=3)
+                        await self.lifecycle.scheduled_start((side,), lead_time_s=1.0)
+                    except Exception:
+                        pass
+                return
+            except Exception:
+                await asyncio.sleep(1.5)
+
     async def handle_command(self, command: str, payload: dict[str, Any]) -> dict[str, Any]:
         await self.start()
         handlers = {
@@ -301,6 +387,9 @@ class AcquisitionService:
         try:
             info = _parse_info(await self.transport.read(device_id, INFO_UUID))
             side = _side(info["side"])
+            task = self._auto_reconnect_tasks.pop(side, None)
+            if task is not None and not task.done():
+                task.cancel()
             existing = self.engine.device_id(side)
             if existing is not None and existing != device_id:
                 raise RuntimeError(f"{side.value} wheel is already connected as {existing}")
@@ -340,15 +429,26 @@ class AcquisitionService:
 
     async def _cmd_disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
         side = _side(payload["side"])
-        device_id = self.engine.device_id(side)
-        await self.engine.disconnect(side)
-        self._live_sides = tuple(item for item in self._live_sides if item is not side)
-        self._device_info.pop(side, None)
-        self._emit(
-            "connection_state",
-            {"side": side.value, "device_id": device_id, "state": "disconnected"},
-        )
-        return {"side": side.value, "disconnected": True}
+        device_id = self.engine.device_id(side) or self._device_info.get(side, {}).get("device_id")
+        if device_id:
+            self._intentional_disconnect.add(device_id)
+        task = self._auto_reconnect_tasks.pop(side, None)
+        if task is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        try:
+            await self.engine.disconnect(side)
+            self._live_sides = tuple(item for item in self._live_sides if item is not side)
+            self._device_info.pop(side, None)
+            self._emit(
+                "connection_state",
+                {"side": side.value, "device_id": device_id, "state": "disconnected"},
+            )
+            return {"side": side.value, "disconnected": True}
+        finally:
+            if device_id:
+                self._intentional_disconnect.discard(device_id)
 
     async def _cmd_configure(self, payload: dict[str, Any]) -> dict[str, Any]:
         side = _side(payload["side"])
@@ -1028,8 +1128,14 @@ class AcquisitionService:
                 metrics.notifications_received,
                 metrics.samples_received,
             )
+            reconnecting = (
+                device_id is None
+                and side in self._auto_reconnect_tasks
+                and not self._auto_reconnect_tasks[side].done()
+            )
             boards[side.value] = {
                 "connected": device_id is not None,
+                "reconnecting": reconnecting,
                 "device_id": device_id,
                 "info": self._device_info.get(side),
                 "mtu": self.transport.negotiated_mtu(device_id) if device_id else None,

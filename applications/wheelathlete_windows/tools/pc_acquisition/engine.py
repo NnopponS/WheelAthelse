@@ -58,7 +58,14 @@ class BoardIngestor:
         self._sync_sink = sync_sink
         self._sequence = SequenceTracker()
         self._next_packet_id = 0
+        self._consecutive_malformed = 0
+        self._consecutive_malformed_sync = 0
         self._worker: asyncio.Task[None] | None = None
+
+    def clear_fault(self) -> None:
+        self.fatal_fault = None
+        self._consecutive_malformed = 0
+        self._consecutive_malformed_sync = 0
 
     @property
     def pending_notifications(self) -> int:
@@ -81,6 +88,7 @@ class BoardIngestor:
             )
         self._sequence.reset()
         self._last_preview_ns = None
+        self.clear_fault()
 
     async def start(self) -> None:
         if self._worker is None or self._worker.done():
@@ -147,12 +155,19 @@ class BoardIngestor:
             if self._sync_sink is not None:
                 try:
                     self._sync_sink(self.side, envelope)
+                    self._consecutive_malformed_sync = 0
+                    if (
+                        self.fatal_fault is not None
+                        and self.fatal_fault.code == "malformed_sync_packet"
+                    ):
+                        self.fatal_fault = None
                 except PacketFormatError as exc:
                     self.metrics.malformed_packets += 1
-                    if self.fatal_fault is None:
+                    self._consecutive_malformed_sync += 1
+                    if self._consecutive_malformed_sync >= 10 and self.fatal_fault is None:
                         self.fatal_fault = AcquisitionFault(
                             code="malformed_sync_packet",
-                            message=f"{self.side.value}: {exc}",
+                            message=f"{self.side.value}: persistent malformed sync packets ({exc})",
                         )
             return
 
@@ -160,12 +175,17 @@ class BoardIngestor:
             samples = parse_imu_batch(envelope.payload)
         except PacketFormatError as exc:
             self.metrics.malformed_packets += 1
-            if self.fatal_fault is None:
+            self._consecutive_malformed += 1
+            if self._consecutive_malformed >= 10 and self.fatal_fault is None:
                 self.fatal_fault = AcquisitionFault(
                     code="malformed_imu_packet",
-                    message=f"{self.side.value}: {exc}",
+                    message=f"{self.side.value}: persistent malformed packets ({exc})",
                 )
             return
+
+        self._consecutive_malformed = 0
+        if self.fatal_fault is not None and self.fatal_fault.code == "malformed_imu_packet":
+            self.fatal_fault = None
 
         for sample in samples:
             observed = self._sequence.observe(sample.seq)
@@ -267,9 +287,19 @@ class DualBoardEngine:
         device_id = self._device_by_side.pop(side, None)
         if device_id is None:
             return
-        await self.transport.unsubscribe(device_id, IMU_DATA_UUID)
-        await self.transport.unsubscribe(device_id, SYNC_UUID)
-        await self.transport.disconnect(device_id)
+        with suppress(Exception):
+            await self.transport.unsubscribe(device_id, IMU_DATA_UUID)
+        with suppress(Exception):
+            await self.transport.unsubscribe(device_id, SYNC_UUID)
+        with suppress(Exception):
+            await self.transport.disconnect(device_id)
+
+    def handle_disconnect(self, side: WheelSide) -> str | None:
+        """Clear device ownership when an unexpected transport drop occurs."""
+        return self._device_by_side.pop(side, None)
+
+    def clear_fault(self, side: WheelSide) -> None:
+        self._ingestors[side].clear_fault()
 
     async def join(self) -> None:
         await asyncio.gather(*(ing.join() for ing in self._ingestors.values()))
