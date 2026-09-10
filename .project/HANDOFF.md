@@ -94,9 +94,14 @@
 - `origin/codex/v1.8.2-repairs` is published. Local `main` merged it normally at
   `c66c6ba` without conflicts or force. The exact merge tree passes project
   hygiene (455 candidates, zero errors) and Windows **195/195** in 57.527 s.
-- Immediate next action: commit this final handoff, verify the documentation-only
-  tip, and push `main`. Do not publish binaries or tag `v1.8.2` because all three
-  artifacts are unsigned.
+- Source publication complete: final tested tip `29c007c` passes project hygiene
+  and Windows 195/195 and is published on `origin/main`. The repair branch also
+  remains published for review. No force push occurred.
+- Next release action requires an external state change: supply a trusted Windows
+  signing identity, rebuild and verify all three signatures, then publish the
+  `v1.8.2` tag/assets. When hardware returns, separately run the Python-app C
+  record/QC/reopen/export check and the simultaneous L/R/C acceptance. Do not
+  publish the current unsigned binaries.
 
 Updated: 2026-09-08. This file is the continuation checklist after publishing the Windows/firmware 1.8.1 release branch while preserving unrelated dirty work.
 

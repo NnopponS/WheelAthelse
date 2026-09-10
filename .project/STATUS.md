@@ -7,7 +7,7 @@ Branch: `main`. Implementation and local acceptance are complete. The maintained
 Pre-existing tracked changes and untracked source were copied to ignored
 `.project/local/v1.8.2/preexisting/`, with staged/unstaged binary patches.
 
-Work queue: commit this final handoff and push tested `main`. Results, graceful daemon shutdown, signing support,
+Software source publication is complete. Results, graceful daemon shutdown, signing support,
 portable model bundles, center firmware/clock repair, release documentation,
 Windows packaging, and the installed lifecycle are complete. The Python-app C
 record/QC/reopen/export check and full L/R/C hardware acceptance are deferred
@@ -152,9 +152,10 @@ The reviewed source was committed on `codex/v1.8.2-repairs` as `667a7e0`
 after commit. The repair branch is published at `origin/codex/v1.8.2-repairs`.
 It was merged without force or conflicts into local `main` at `c66c6ba`. That
 exact merge tree passes project hygiene with 455 candidates and zero errors and
-passes the full Windows suite **195/195** in 57.527 s. Main push is the only
-remaining software publication action; binary release publication remains
-blocked.
+passes the full Windows suite **195/195** in 57.527 s. The final documentation
+tip `29c007c` also passes project hygiene and Windows **195/195**, then `main`
+was pushed normally from `5fbf9ee` through `29c007c`. Binary release publication
+remains blocked.
 
 The user directed this release to skip Flutter verification and instead complete
 the XIAO C record/QC workflow in the Python app. The mobile suite was stopped and
