@@ -64,9 +64,10 @@ jobs:
           SIGN_PFX_BASE64: ${{ secrets.WHEELATHLETE_SIGN_PFX_BASE64 }}
           SIGN_PFX_PASSWORD: ${{ secrets.WHEELATHLETE_SIGN_PFX_PASSWORD }}
           TIMESTAMP_URL: ${{ vars.WHEELATHLETE_TIMESTAMP_URL }}
+          EXPECTED_SUBJECT: ${{ vars.WHEELATHLETE_SIGN_CERT_SUBJECT }}
         run: |
-          if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD -or -not $env:TIMESTAMP_URL) {
-            throw "Trusted Windows signing secrets and timestamp URL are required for publication."
+          if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD -or -not $env:TIMESTAMP_URL -or -not $env:EXPECTED_SUBJECT) {
+            throw "Trusted Windows signing secrets, expected subject, and timestamp URL are required for publication."
           }
           $pfx = Join-Path $env:RUNNER_TEMP "wheelathlete-signing.pfx"
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
@@ -80,6 +81,7 @@ jobs:
             $certificate = $signingCertificates[0]
             "WHEELATHLETE_SIGN_CERT_SHA1=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
             "WHEELATHLETE_TIMESTAMP_URL=$env:TIMESTAMP_URL" >> $env:GITHUB_ENV
+            "WHEELATHLETE_SIGN_CERT_SUBJECT=$env:EXPECTED_SUBJECT" >> $env:GITHUB_ENV
           } finally {
             Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
           }

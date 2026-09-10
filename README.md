@@ -13,7 +13,7 @@ WheelAthlete synchronizes left- and right-wheel inertial sensors, records resear
 
 ## WheelAthlete 1.8.2 for Windows
 
-Version 1.8.2 is a Windows release. Install with `WheelAthleteSetup-1.8.2.exe`, or extract `WheelAthlete-1.8.2-portable.zip`. The installer and all installed executables must have a valid trusted Authenticode signature for public distribution. An unsigned local package does not resolve Microsoft Defender download reputation warnings or Application Control error 4551.
+Version 1.8.2 is the Windows release line. Public installer and portable assets are added only after every executable component, the generated uninstaller, and installer pass trusted timestamped Authenticode verification. An unsigned local package does not resolve Microsoft Defender download reputation warnings or Application Control error 4551, and an administrator allowlist may still require an explicit organization rule.
 
 The Flutter iOS/Android source and tests remain in this repository for maintenance. No mobile binary, download link, or mobile update is offered in v1.8.2.
 

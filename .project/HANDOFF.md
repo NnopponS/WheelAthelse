@@ -1,6 +1,41 @@
 # Current engineering handoff
 
-## Active v1.8.2 session handoff (2026-09-10)
+## Completed Windows Application Control hardening handoff (2026-09-10)
+
+- Working branch: `codex/windows-trust-hardening`; it was created from clean,
+  published `main` at `fa3d4ac`.
+- Repository implementation is complete. Signed builds now fail closed unless
+  every packaged EXE/DLL/PYD, the daemon-stop PowerShell helper, the generated
+  Inno uninstaller, and the outer installer pass trusted Authenticode checks.
+  The selected certificate must be RSA, valid, have Code Signing EKU, and match
+  the exact expected publisher subject; RFC3161 timestamping is required.
+- Release metadata schema v2 inventories executable components, records signer
+  and timestamp state, writes SHA-256 checksums, and exposes
+  `public_release_ready`. GitHub release CI requires the signing PFX, expected
+  publisher subject, and timestamp URL.
+- Acceptance evidence: focused packaging checks **4/4**; PowerShell scripts parse
+  cleanly; project hygiene **456 candidates / 0 errors**; Windows suite
+  **195/195**. A complete unsigned-local build passed end-to-end and produced
+  installer SHA-256
+  `c17f433f175774234cecc936e4064cbfa169c4e86d1046a84e4f76fa57971226`
+  and portable SHA-256
+  `d1aa66f9b79d8fdb540367b5a5735f86b35b731c665e58d7738f8341925ada9a`.
+  Its signing report correctly remains `public_release_ready=false`.
+- During acceptance, Windows PowerShell exposed a compatibility bug because
+  `[System.IO.Path]::GetRelativePath` is unavailable on this host. The metadata
+  script now uses a release-root-confined relative-path helper and regression
+  coverage prevents reintroducing that API dependency.
+- External gate only: this machine has no private-key certificate with Code
+  Signing EKU and no trusted GitHub signing identity is configured. Do not upload
+  unsigned binaries or claim Application Control compatibility. Once a trusted
+  RSA Code Signing identity plus RFC3161 service is available, rerun the existing
+  pipeline and publish only if `public_release_ready=true`.
+- Hardware gate remains separate and deferred: resume C Python-app QC and the
+  simultaneous L/R/C physical acceptance only after hardware is available again.
+- Preserve recordings, models, release evidence, and the separate `BiWheel3D`
+  repository.
+
+## Completed v1.8.2 session handoff
 
 - Working branch: `main`; the tracked tree was clean before this final handoff
   update. The original dirty work remains archived under ignored local evidence.

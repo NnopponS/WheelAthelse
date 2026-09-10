@@ -1,6 +1,37 @@
 # WheelAthlete current status
 
-## Active session: v1.8.2 repairs (2026-09-10)
+## Completed source session: Windows Application Control hardening (2026-09-10)
+
+Branch: `codex/windows-trust-hardening`. The repository-side Windows trust gate is
+complete: signed builds recursively sign and verify packaged EXE/DLL/PYD files and
+the daemon-stop PowerShell helper, require an RSA certificate with Code Signing
+EKU and the exact expected publisher subject, require RFC3161 timestamping, and
+use Inno Setup signing for both the generated uninstaller and outer installer.
+Release metadata records every executable component, signer/timestamp state,
+SHA-256 hashes, and a fail-closed `public_release_ready` decision; CI requires the
+PFX, expected subject, and timestamp URL instead of silently producing a public
+unsigned binary.
+
+Verification on 2026-09-10: focused packaging checks pass **4/4**; PowerShell
+signing/metadata scripts parse cleanly; project hygiene passes across **456**
+publication candidates with zero errors; the full Windows suite passes
+**195/195**. A complete unsigned-local v1.8.2 package build also succeeds from
+PyInstaller through Inno Setup and metadata generation. Its final installer is
+`WheelAthleteSetup-1.8.2.exe` SHA-256
+`c17f433f175774234cecc936e4064cbfa169c4e86d1046a84e4f76fa57971226`; the
+portable ZIP SHA-256 is
+`d1aa66f9b79d8fdb540367b5a5735f86b35b731c665e58d7738f8341925ada9a`.
+The resulting signing report correctly says `public_release_ready=false`.
+
+The remaining public-binary gate is external, not unfinished repository work:
+this machine has no private-key certificate with Code Signing EKU, and no trusted
+GitHub signing identity is configured. Do not publish the unsigned binaries or
+claim they solve Application Control/Smart App Control. When a trusted RSA Code
+Signing identity and RFC3161 service are supplied, rerun the same fail-closed
+pipeline and publish only after the report returns `public_release_ready=true`.
+The separate L/R/C physical acceptance remains deferred until hardware returns.
+
+## Completed v1.8.2 repair session
 
 Branch: `main`. Implementation and local acceptance are complete. The maintained execution plan is
 `.project/plans/v1.8.2-repair-release.md`.

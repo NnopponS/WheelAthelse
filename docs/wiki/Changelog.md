@@ -3,7 +3,7 @@
 ## 1.8.2 / Firmware 1.8.2 / BLE 1.8.0 / Windows 1.8.2 — 2026-09-10
 
 - Add installation-specific daemon shutdown before Windows upgrade/uninstall, including active journal finalization and fail-closed removal.
-- Add trusted Authenticode signing/verification hooks, checksums, signing report, and Windows-only release automation. Public release remains gated on a trusted signing identity.
+- Harden trusted Authenticode release gating across packaged EXE/DLL/PYD files, the daemon-stop script, generated uninstaller, and installer; require an RSA Code Signing certificate, exact publisher identity, RFC3161 timestamps, checksums, and a passing signing report. Public binaries remain gated on a trusted signing identity.
 - Add collapsible Day → Experiment → Trials Results grouping with persistent session-ID selection, day/all/clear actions, selection scope, and unique export.
 - Replace low-resolution Windows acquisition timestamps with the high-resolution performance counter after physical sync evidence exposed zero-RTT fits.
 - Make XIAO retry indication reflect active consecutive notification failures while preserving cumulative failure/loss counters; show the exact sensor fault in the Windows UI.

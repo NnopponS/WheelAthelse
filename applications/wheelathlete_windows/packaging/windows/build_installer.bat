@@ -73,20 +73,31 @@ if errorlevel 1 exit /b 1
 
 set "SIGNING_ENABLED=0"
 if defined WHEELATHLETE_SIGN_CERT_SHA1 set "SIGNING_ENABLED=1"
+if defined WHEELATHLETE_TIMESTAMP_URL set "SIGNING_ENABLED=1"
+if defined WHEELATHLETE_SIGN_CERT_SUBJECT set "SIGNING_ENABLED=1"
+if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SHA1 (
+  echo ERROR: WHEELATHLETE_SIGN_CERT_SHA1 is required when signing is enabled.
+  exit /b 1
+)
 if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_TIMESTAMP_URL (
   echo ERROR: WHEELATHLETE_TIMESTAMP_URL is required when signing is enabled.
   exit /b 1
 )
-if "%SIGNING_ENABLED%"=="1" (
-  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%sign_windows_artifact.ps1" -Path "%OUT_DIR%\WheelAthlete\WheelAthlete.exe" -CertificateThumbprint "%WHEELATHLETE_SIGN_CERT_SHA1%" -TimestampUrl "%WHEELATHLETE_TIMESTAMP_URL%"
-  if errorlevel 1 exit /b 1
-  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%sign_windows_artifact.ps1" -Path "%OUT_DIR%\WheelAthleteDaemon.exe" -CertificateThumbprint "%WHEELATHLETE_SIGN_CERT_SHA1%" -TimestampUrl "%WHEELATHLETE_TIMESTAMP_URL%"
-  if errorlevel 1 exit /b 1
-) else (
-  echo WARNING: no signing thumbprint supplied; artifacts are for local testing only.
+if "%SIGNING_ENABLED%"=="1" if not defined WHEELATHLETE_SIGN_CERT_SUBJECT (
+  echo ERROR: WHEELATHLETE_SIGN_CERT_SUBJECT is required when signing is enabled.
+  exit /b 1
 )
 copy /y "%OUT_DIR%\WheelAthleteDaemon.exe" "%OUT_DIR%\WheelAthlete\_internal\WheelAthleteDaemon.exe" >nul
 if errorlevel 1 exit /b 1
+copy /y "%SCRIPT_DIR%stop_installed_daemon.ps1" "%OUT_DIR%\WheelAthlete\stop_installed_daemon.ps1" >nul
+if errorlevel 1 exit /b 1
+
+if "%SIGNING_ENABLED%"=="1" (
+  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%sign_windows_tree.ps1" -Root "%OUT_DIR%\WheelAthlete" -CertificateThumbprint "%WHEELATHLETE_SIGN_CERT_SHA1%" -TimestampUrl "%WHEELATHLETE_TIMESTAMP_URL%" -ExpectedSubject "%WHEELATHLETE_SIGN_CERT_SUBJECT%"
+  if errorlevel 1 exit /b 1
+) else (
+  echo WARNING: no signing identity supplied; artifacts are for local testing only.
+)
 
 set "ISCC="
 where ISCC.exe >nul 2>nul
@@ -100,20 +111,22 @@ if not defined ISCC (
   exit /b 1
 )
 
-"%ISCC%" /DMyAppVersion=%APP_VERSION% "%WINDOWS_APP_ROOT%\packaging\windows\installer.iss"
-if errorlevel 1 exit /b 1
-
+set "INNO_SIGN_COMMAND=powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $q%SCRIPT_DIR%sign_windows_artifact.ps1$q -Path $f -CertificateThumbprint %WHEELATHLETE_SIGN_CERT_SHA1% -TimestampUrl $q%WHEELATHLETE_TIMESTAMP_URL%$q -ExpectedSubject $q%WHEELATHLETE_SIGN_CERT_SUBJECT%$q"
 if "%SIGNING_ENABLED%"=="1" (
-  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%sign_windows_artifact.ps1" -Path "%OUT_DIR%\WheelAthleteSetup-%APP_VERSION%.exe" -CertificateThumbprint "%WHEELATHLETE_SIGN_CERT_SHA1%" -TimestampUrl "%WHEELATHLETE_TIMESTAMP_URL%"
-  if errorlevel 1 exit /b 1
+  "%ISCC%" /DMyAppVersion=%APP_VERSION% /DMySignedBuild=1 "/Swheelathlete=%INNO_SIGN_COMMAND%" "%WINDOWS_APP_ROOT%\packaging\windows\installer.iss"
+) else (
+  "%ISCC%" /DMyAppVersion=%APP_VERSION% "%WINDOWS_APP_ROOT%\packaging\windows\installer.iss"
 )
+if errorlevel 1 exit /b 1
 
 powershell -NoProfile -Command "Compress-Archive -Path '%OUT_DIR%\WheelAthlete' -DestinationPath '%OUT_DIR%\WheelAthlete-%APP_VERSION%-portable.zip' -Force"
 if errorlevel 1 exit /b 1
 
-set "SIGNATURE_REQUIREMENT="
-if "%SIGNING_ENABLED%"=="1" set "SIGNATURE_REQUIREMENT=-RequireValidSignatures"
-powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%write_release_metadata.ps1" -ReleaseDir "%WINDOWS_APP_ROOT%\%OUT_DIR%" -Version "%APP_VERSION%" %SIGNATURE_REQUIREMENT%
+if "%SIGNING_ENABLED%"=="1" (
+  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%write_release_metadata.ps1" -ReleaseDir "%WINDOWS_APP_ROOT%\%OUT_DIR%" -Version "%APP_VERSION%" -RequireValidSignatures -ExpectedSignerSubject "%WHEELATHLETE_SIGN_CERT_SUBJECT%"
+) else (
+  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%SCRIPT_DIR%write_release_metadata.ps1" -ReleaseDir "%WINDOWS_APP_ROOT%\%OUT_DIR%" -Version "%APP_VERSION%"
+)
 if errorlevel 1 exit /b 1
 
 echo.

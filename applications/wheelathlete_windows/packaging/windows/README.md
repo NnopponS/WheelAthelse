@@ -14,7 +14,7 @@ This folder contains the only supported Windows packaging path for the Python Re
 - Python with the Windows app dependencies installed
 - PyInstaller (`python -m pip install pyinstaller`)
 - Inno Setup 6 installed at the standard per-user location
-- Windows SDK `signtool.exe`, a trusted code-signing certificate installed in the current user's certificate store, and an RFC3161 timestamp service for public packages
+- Windows SDK `signtool.exe`, a trusted RSA certificate with the Code Signing EKU installed in the current user's certificate store, and an RFC3161 timestamp service for public packages
 
 ## Build
 
@@ -26,15 +26,18 @@ applications\wheelathlete_windows\packaging\windows\build_installer.bat
 
 The script builds the GUI, builds a standalone `WheelAthleteDaemon.exe`, bundles the daemon into the GUI distribution, creates a portable ZIP, then creates the Inno Setup installer.
 
-For a trusted release, set the certificate thumbprint and timestamp URL in the build environment:
+For a trusted release, set the certificate thumbprint, its exact subject, and timestamp URL in the build environment:
 
 ```bat
 set WHEELATHLETE_SIGN_CERT_SHA1=<40-hex-certificate-thumbprint>
+set WHEELATHLETE_SIGN_CERT_SUBJECT=<exact-certificate-subject>
 set WHEELATHLETE_TIMESTAMP_URL=https://<rfc3161-service>
 applications\wheelathlete_windows\packaging\windows\build_installer.bat
 ```
 
-The build signs and verifies `WheelAthlete.exe`, both packaged copies of `WheelAthleteDaemon.exe`, and the final installer. It fails a requested signed build unless every Authenticode status is `Valid`. The certificate and private key must never be added to the repository. With no signing variables, the script creates an explicitly unsigned local-development package; this does not fix Microsoft Defender download reputation or Application Control error 4551.
+The build signs every packaged `.exe`, `.dll`, `.pyd`, and `.ps1`, then uses Inno Setup's signing hook for both the generated uninstaller and final installer. It requires a valid timestamp on every executable component and the expected publisher on first-party files. Any partial signing configuration or failed check stops the build. The certificate and private key must never be added to the repository. With no signing variables, the script creates an explicitly unsigned local-development package; this does not fix Microsoft Defender download reputation or Application Control error 4551.
+
+GitHub Actions uses secrets `WHEELATHLETE_SIGN_PFX_BASE64` and `WHEELATHLETE_SIGN_PFX_PASSWORD`, plus variables `WHEELATHLETE_SIGN_CERT_SUBJECT` and `WHEELATHLETE_TIMESTAMP_URL`. The release workflow is fail closed when any value is absent. A valid trusted signature addresses the normal Smart App Control trust path, but an organization may still enforce a narrower allowlist; no package can override that administrator policy.
 
 ## Outputs
 
