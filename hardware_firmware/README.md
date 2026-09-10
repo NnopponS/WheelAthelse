@@ -1,12 +1,14 @@
-# WheelAthlete Hardware & Firmware
+# WheelAthlete firmware
 
-This directory contains the maintained embedded firmware targets for WheelAthlete dual-wheel IMU sensors.
+WheelAthlete v1.8.2 maintains two sensor firmware targets that share the BLE 1.8.0 protocol contract.
 
-| Directory | Official firmware name | Target |
+| Directory | Hardware | Supported roles |
 |---|---|---|
-| `m5stickc_plus2/` | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 |
-| `xiao_nrf52840_sense/` | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense |
+| [`m5stickc_plus2/`](m5stickc_plus2/) | M5StickC Plus2 / ESP32 | L, R, optional C |
+| [`xiao_nrf52840_sense/`](xiao_nrf52840_sense/) | Seeed XIAO nRF52840 Sense / LSM6DS3 | L, R, optional C |
 
-Both targets implement the same left/right WheelAthlete BLE protocol defined in [`docs/ble-protocol.md`](../docs/ble-protocol.md).
+Role identity is `L=0x4C`, `R=0x52`, `C=0x43`. The optional chair-center C mounting contract is **+Z down toward the floor**. XIAO C uses green identity/heartbeat; M5 C retains its yellow display identity.
 
-See the repository-level [`README.md`](../README.md) or [`README.th.md`](../README.th.md) for build, flash, synchronization, and version information.
+Build output under `.pio/` is generated and must not be committed. A successful compile is a software/build result only; flashing, RF behavior, physical orientation and synchronized L/R/C integrity require separate hardware acceptance.
+
+Canonical wire semantics: [`../docs/ble-protocol.md`](../docs/ble-protocol.md).

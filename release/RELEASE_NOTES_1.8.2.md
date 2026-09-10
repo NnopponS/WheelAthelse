@@ -1,26 +1,30 @@
 # WheelAthlete 1.8.2
 
-WheelAthlete 1.8.2 is a Windows-first reliability and workflow release. The Flutter mobile project remains in source maintenance and is not available as a v1.8.2 download or update.
+WheelAthlete 1.8.2 is the consolidated Windows-first reliability, acquisition and release-engineering update. Mobile development is not part of this publication and no mobile binary/update asset is provided.
 
-## Changes
+## Highlights
 
-- Safely finishes active journal writes and stops the installation-owned acquisition daemon before Windows upgrade or uninstall. Setup blocks removal with an actionable message if safe shutdown cannot be confirmed.
-- Adds Authenticode signing and verification support for the GUI, daemon, and installer, plus release checksums and a machine-readable signing report.
-- Organizes Results as collapsible Day → Experiment → Trials, with distinct day-only, all-recordings, and clear-selection actions. Selection persists by session ID through filtering, view changes, and collapse; export deduplicates recordings and shows count/date scope.
-- Uses the high-resolution Windows performance counter for BLE clock observations and scheduled acquisition timing.
-- Makes sensor `CHECK` status report the specific data-loss, queue, FIFO, malformed-packet, fatal, or active BLE retry fault while keeping cumulative evidence.
-- Shortens model menu names and shows technical/runtime/experimental information in details.
-- Adds self-contained model bundles with a versioned manifest, contained artifact paths, preprocessing identity, required roles, units, output capabilities, and runtime requirements. Existing model imports and defaults remain compatible.
-- Marks the Flutter mobile application under maintenance and removes mobile artifacts from the v1.8.2 update/release channel.
+- Safely finalizes an active `.waj` journal and shuts down the installation-owned acquisition daemon before Windows upgrade/uninstall; setup stops instead of replacing files when safe shutdown cannot be confirmed.
+- Preserves recordings, logs and custom/seeded models across the installed lifecycle.
+- Organizes Results as collapsible Day -> Experiment -> Trial groups with persistent session-ID selection, day/all/clear actions and deduplicated export.
+- Uses high-resolution Windows performance-counter timing for acquisition clock observations and scheduled starts.
+- Reports concrete sensor/data-loss/queue/FIFO/malformed/retry faults instead of an unexplained generic `CHECK` state.
+- Supports optional sensor role `C` (`0x43`) for chair-center acquisition/storage with +Z down. XIAO C identity is green; existing production trajectory models remain L/R-only.
+- Adds concise model presentation and a contained, versioned `wheelathlete-model.json` bundle contract while keeping the frozen classical L/R model as the installed default.
+- Hardens Windows release signing across packaged EXE/DLL/PYD/PowerShell components, generated uninstaller and installer, with exact publisher validation, timestamps, checksums and a fail-closed machine-readable signing report.
 
-## Trust and acceptance status
+## Verification boundary
 
-This GitHub Release publishes the tested source snapshot only. Windows binaries,
-`latest.json`, and mobile binaries are withheld. The locally tested Windows
-packages are unsigned, and checksums alone do not remove Microsoft download
-reputation warnings or bypass an organization’s Application Control policy.
+Fresh 2026-09-10 consolidation verification passed **195/195** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest tests, Python compile checks, project hygiene and diff checks. Fresh PlatformIO build artifacts were produced for L/R/C on both XIAO and M5 targets. A complete unsigned-local Windows packaging lifecycle also completed through PyInstaller, Inno Setup, portable ZIP, checksums and schema-2 signing-report generation; as expected without a trusted publisher identity, that report remains `public_release_ready=false` and those local artifacts are not public release assets.
 
-A later binary release requires a trusted Windows publisher certificate and a
-`signing-report.json` in which the GUI, daemon, and installer are all `Valid`.
-Hardware acceptance still requires the deferred Python-app C QC/export and
-simultaneous L/R/C run described in `.project/STATUS.md`.
+The center XIAO 1.8.2 post-flash observation reached 1,780.865 s before the board was removed, with zero observed sequence/malformed/queue/notification/FIFO fault counters in the final 1,750 s snapshot. The missing final STOP/QC/reopen/export sequence and simultaneous L/R/C run remain deferred hardware acceptance, not a software-release claim.
+
+## Trust status
+
+This GitHub Release remains **source-only** until a trusted Windows publisher identity is available. No installer, portable archive or `latest.json` should be attached while the signing report cannot return `public_release_ready=true`.
+
+Checksums establish artifact integrity but do not establish publisher trust or bypass SmartScreen/Application Control policy. Organization allowlists may still impose stricter rules even on correctly signed software.
+
+## Publication scope
+
+The release publishes the integrated root source only. It does not publish generated research data, local evidence, signing material, `BiWheel3D`, or any mobile installation/update asset.

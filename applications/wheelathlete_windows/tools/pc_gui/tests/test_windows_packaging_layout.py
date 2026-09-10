@@ -81,3 +81,7 @@ def test_build_signs_and_verifies_every_distributed_executable() -> None:
     assert '"WheelAthleteSetup-$Version.exe"' in metadata
     assert "Get-FileHash" in metadata
     assert "WHEELATHLETE_SIGN_CERT_SUBJECT" in workflow
+    assert "contents: read" in workflow
+    assert "contents: write" in workflow
+    assert "public_release_ready" in workflow
+    assert "Release workflow must be dispatched on exact tag" in workflow

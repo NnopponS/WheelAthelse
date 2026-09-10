@@ -9,6 +9,10 @@ desktop.ini
 .idea/
 *.iml
 
+# Local developer worktrees / source-graph scratch
+/.worktrees/
+/graft/
+
 # Temporary logs / agent scratch
 *.log
 *.tmp

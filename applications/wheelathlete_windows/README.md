@@ -6,11 +6,11 @@ Current package version: `1.8.2`
 
 ## Architecture
 
-- `tools/pc_acquisition/` â€” authoritative BLE acquisition daemon, synchronization, sequence/loss accounting, journal storage, QC, and recovery.
-- `tools/pc_gui/` â€” PySide6 operator interface, Results workflow, diagnostics, export, and optional offline MODEL integration.
-- `packaging/windows/` â€” PyInstaller and Inno Setup packaging sources.
-- `run_wheelathlete_windows.bat` â€” source launcher.
-- `build/` and `release/` â€” generated artifacts; excluded from Git.
+- `tools/pc_acquisition/` — authoritative BLE acquisition daemon, synchronization, sequence/loss accounting, journal storage, QC, and recovery.
+- `tools/pc_gui/` — PySide6 operator interface, Results workflow, diagnostics, export, and optional offline MODEL integration.
+- `packaging/windows/` — PyInstaller and Inno Setup packaging sources.
+- `run_wheelathlete_windows.bat` — source launcher.
+- `build/` and `release/` — generated artifacts; excluded from Git.
 
 ## Experimental PyTorch research review
 

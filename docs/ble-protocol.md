@@ -258,7 +258,7 @@ Mounting contract for the current center-sensor build:
 - `+Z` points **down toward the floor**.
 - `X`/`Y` retain the physical board axes until a forward/lateral mounting direction is measured and documented; clients must not silently reinterpret them.
 - Existing L/R trajectory models continue to consume only L/R hub samples. Center samples are recorded, synchronized, previewed, and exported but are not inserted into the legacy 12-channel model input.
-- XIAO center firmware uses yellow on the RGB LED (red + green on, blue off): a 500 ms identity blink while advertising/connected and a 150 ms heartbeat each second while recording. Error/retry indication still has priority over the identity color.
+- XIAO center firmware uses **green** on the RGB LED: it blinks at 500 ms cadence while advertising, stays solid green while connected/counting down, and uses a brief green-off heartbeat each second while recording. Error/retry indication still has priority over the identity color.
 - M5StickC Plus2 has no equivalent RGB status LED. Its center build keeps the left identity bar yellow and blinks the large yellow `C` glyph at 500 ms cadence, switching to a 150 ms heartbeat each second while recording; status/error text remains independently visible.
 
 ---

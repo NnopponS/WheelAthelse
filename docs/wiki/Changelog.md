@@ -10,7 +10,7 @@
 - Standardize concise model names and add contained, versioned portable model bundles with strict compatibility validation.
 - Retain the Flutter project and tests under maintenance while excluding mobile downloads and update offers from v1.8.2.
 
-## 1.8.0+10 / Firmware 1.8.0 / BLE 1.8.0 / Windows 1.8.0 â€” 2026-09-05
+## 1.8.0+10 / Firmware 1.8.0 / BLE 1.8.0 / Windows 1.8.0 — 2026-09-05
 
 - Consolidate the supported product surface to Flutter mobile (iOS/Android) and the Python PySide6 Windows Research Edition.
 - Remove the retired Flutter Windows implementation, Flutter Web scaffold, and legacy Tkinter/Matplotlib desktop GUI.
@@ -21,7 +21,7 @@
 - Add on-device BiWheel3D trajectory inference to the Flutter mobile app; no HTTP model server is required.
 - Add verified GitHub Releases auto-update flows for Android and the installed Windows application.
 - Consolidate `.project` into canonical current-state documents; historical phase prompts remain available through Git history.
-## 1.7.0+8 / Firmware 1.7.0 / BLE 1.7.0 â€” 2026-07-25
+## 1.7.0+8 / Firmware 1.7.0 / BLE 1.7.0 — 2026-07-25
 
 - Harden dual-wheel BLE connect, start, stop, replay, and recovery flows.
 - Keep STOP responsive under load and remove the Android dual-connection
@@ -73,14 +73,14 @@
 - Add event-driven phone countdown tones synchronized to firmware cues.
 - Match XIAO LED countdown flashes to the M5 3-2-1-start schedule.
 
-## 1.2.0 â€” BLE recovery and Live control
+## 1.2.0 — BLE recovery and Live control
 
 - Live Start/Stop controls connected boards directly without saving a trial.
 - Protocol 1.3 adds 25 ms MTU-aware batching and bounded sample replay.
 - Connected devices are filtered from scans and battery is read on connect.
 - Topic export creates a named folder with trial CSVs and metadata.
 
-## v1.1.0 â€” BLE reliability and portable exports (2026-07-11)
+## v1.1.0 — BLE reliability and portable exports (2026-07-11)
 
 - App 1.2.0+3, both firmware targets 1.3.0, BLE protocol 1.3.0.
 - Unified idle/countdown/recording/stop lifecycle for M5StickC Plus2 and Xiao.
@@ -91,9 +91,9 @@
 All notable changes to WheelAthlete are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [v0.1.0] â€” 2026-07-06 (pre-release)
+## [v0.1.0] — 2026-07-06 (pre-release)
 
-First usable release. Data collection MVP â€” captures synchronized IMU
+First usable release. Data collection MVP — captures synchronized IMU
 data from two wheelchair wheels, with clock sync, session preview,
 quality badges, and CSV/Excel export. **No ML model training or inference
 yet.**
@@ -118,9 +118,9 @@ yet.**
 - `DROP_COUNT` event for queue overflow reporting
 
 #### Fixed
-- All samples in a batch got the same `micros()` â†’ interpolated per-sample
-- FIFO overflow not detected â†’ now checks `INT_STATUS` + byte count â‰¥ 512
-- Rate validation accepted arbitrary rates â†’ only 50/100/200 Hz
+- All samples in a batch got the same `micros()` → interpolated per-sample
+- FIFO overflow not detected → now checks `INT_STATUS` + byte count ≥ 512
+- Rate validation accepted arbitrary rates → only 50/100/200 Hz
 - ES.46 narrowing in FIFO byte parsing
 
 ### App (1.0.0+1)
@@ -128,10 +128,10 @@ yet.**
 - BLE scan + connect to two M5StickCPlus2 modules simultaneously
 - Automatic L/R side assignment from board Info characteristic
 - Clock sync engine (NTP/PTP-lite over BLE): offset + drift correction
-  â†’ common UTC timeline in milliseconds
+  → common UTC timeline in milliseconds
 - Realtime IMU display (6 metrics per wheel + sample/drop counts)
 - Recording with synchronized start, countdown, and beep
-- Session storage organized by topic â†’ trial â†’ session
+- Session storage organized by topic → trial → session
 - Protocol templates with target trial count (experiment tracker dashboard)
 - Session tags + search/filter on Browse
 - Session preview page: scrub slider, accel/gyro charts, summary stats
@@ -156,13 +156,13 @@ yet.**
 
 #### Fixed
 - Two-board signal drops from unthrottled IMU/recording state emissions
-  â†’ throttled emissions + `.select` to eliminate rebuilds
+  → throttled emissions + `.select` to eliminate rebuilds
 - Board settings save reliability improvements
-- `UnmountedRefException` on async state set after dispose â†’ `ref.mounted`
+- `UnmountedRefException` on async state set after dispose → `ref.mounted`
   guards
 - `pumpAndSettle` timeout from infinite spinner animation
 - `flutter_blue_plus` 2.x API drift (Guid, License, states)
-- `servicesStream` deprecated in fbp 2.x â†’ `servicesList + lastValueStream`
+- `servicesStream` deprecated in fbp 2.x → `servicesList + lastValueStream`
 
 ### Documentation
 #### Added
@@ -186,7 +186,7 @@ yet.**
 - No ML model training or inference
 - No real-time biomechanical feedback
 - No cloud sync or server backend
-- No automated videoâ†”IMU alignment (manual via beep + mark events)
+- No automated video↔IMU alignment (manual via beep + mark events)
 - No OTA firmware updates (flash via USB only)
 - No multi-athlete/session comparison dashboard
 - No CI/CD pipeline (tests run locally)

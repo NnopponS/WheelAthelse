@@ -1,12 +1,12 @@
-# WheelAthlete Applications
+# WheelAthlete applications
 
-This directory contains the available Windows application and retained mobile source.
+WheelAthlete v1.8.2 is **Windows-first**. This directory contains the active Windows application and the retained Flutter mobile maintenance source.
 
-| Directory | Official product name | Platform |
+| Directory | Product | v1.8.2 status |
 |---|---|---|
-| `wheelathlete_windows/` | **WheelAthlete Windows Research Application** | Windows 10/11 |
-| `wheelathlete_mobile/` | **WheelAthlete Mobile Application** | iOS / Android source under maintenance; not currently available |
+| `wheelathlete_windows/` | **WheelAthlete Windows Research Application** | Active release surface; Python/PySide6 GUI + acquisition daemon |
+| `wheelathlete_mobile/` | **WheelAthlete Mobile Application** | Existing Android/iOS source retained for maintenance; no new mobile publication/binary in this release |
 
-Only one operator application should own a given left/right sensor pair at a time.
+The Windows acquisition daemon is the authoritative BLE/raw-recording owner for the current release. Only one operator application should own a given L/R[/C] sensor set at a time.
 
-See the repository-level [`README.md`](../README.md) or [`README.th.md`](../README.th.md) for the complete architecture and build instructions.
+See [`wheelathlete_windows/README.md`](wheelathlete_windows/README.md) for the active application and the repository-level [`README.md`](../README.md) / [`README.th.md`](../README.th.md) for release scope and system architecture.

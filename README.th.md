@@ -1,240 +1,163 @@
 # WheelAthlete
 
-**แพลตฟอร์มเก็บและวิเคราะห์ข้อมูล IMU จากล้อซ้าย–ขวา สำหรับงานวิจัยกีฬาวีลแชร์**
+**แพลตฟอร์มเก็บข้อมูล IMU และวิเคราะห์การเคลื่อนไหวสำหรับงานวิจัยกีฬาวีลแชร์ โดยเน้นความเสถียรและความถูกต้องของข้อมูล**
 
-WheelAthlete ใช้เซนเซอร์ที่ล้อซ้ายและขวาเพื่อเก็บข้อมูล accelerometer และ gyroscope แบบซิงโครไนซ์ พร้อมแอปสำหรับมือถือและ Windows เพื่อใช้เก็บข้อมูลภาคสนาม ดูสถานะ ตรวจคุณภาพ จัดการ session ส่งออกข้อมูล และวิเคราะห์ trajectory แบบเสริม
+WheelAthlete ซิงโครไนซ์เซนเซอร์ที่ล้อซ้ายและขวา บันทึกข้อมูลการเคลื่อนไหวแบบ research-grade และมี Windows application สำหรับเก็บข้อมูล ตรวจคุณภาพ จัดการผลลัพธ์ ส่งออกข้อมูล ดู diagnostics และวิเคราะห์ trajectory แบบ offline นอกจากนี้ระบบยังรองรับ IMU ตัวที่สามตำแหน่งกลางเก้าอี้ (`C`) สำหรับการเก็บข้อมูลและงานทดลอง
 
-> **Release ปัจจุบัน:** `v1.8.2` (Windows-first)
-> **Mobile application:** source `1.8.2+12` อยู่ระหว่างบำรุงรักษาและยังไม่เปิดให้ใช้งาน
+> **Release ปัจจุบัน:** `v1.8.2` — Windows-first
+> **Windows application:** `1.8.2`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Windows package:** `1.8.2`
+> **Mobile source:** `1.8.2+12` อยู่ในโหมด maintenance; release นี้ไม่เพิ่ม mobile source หรือ mobile binary ใหม่
 > **ภาษา:** [English](README.md) | ไทย
 
-## WheelAthlete 1.8.2 สำหรับ Windows
+## สถานะ Release
 
-รุ่น 1.8.2 เผยแพร่เฉพาะ Windows ส่วน source และ tests ของ Flutter iOS/Android ยังคงอยู่ใน repository เพื่อบำรุงรักษา แต่ไม่มีไฟล์ติดตั้ง ลิงก์ดาวน์โหลด หรือ mobile update ใน release นี้ แพ็กเกจ Windows สำหรับเผยแพร่ต้องมีลายเซ็น Authenticode ที่เชื่อถือได้; checksum หรือแพ็กเกจที่ไม่ได้เซ็นไม่สามารถแก้ download reputation warning หรือ Application Control error 4551 ได้
+WheelAthlete 1.8.2 รวมงาน Windows application, firmware M5/XIAO, การรองรับเซนเซอร์ 3 ตัว, installer lifecycle, Results workflow, model bundle และระบบ release hardening ไว้ใน source line เดียว
 
-สถานะปัจจุบันอยู่ใน `.project/STATUS.md` และงานต่อเนื่องอยู่ใน `.project/HANDOFF.md` ข้อมูลวิจัย log และเอกสารเก่าถูกเก็บใน `.project/local/` ซึ่งไม่นำขึ้น Git ตรวจโครงสร้างก่อน commit ด้วย `python scripts/verify_project.py` การผ่าน source tests ไม่ใช่การรับรองความแม่นยำจากข้อมูลจริง
+โครงสร้าง branch สาธารณะตั้งใจให้เหลือเพียง:
 
-## สถาปัตยกรรมของผลิตภัณฑ์
+- `main` — source หลักที่รวมงานทั้งหมดแล้ว
+- `release/main-v1.8.2` — release line ที่ชี้ไปยัง commit 1.8.2 ที่ผ่านการตรวจสอบ
 
-Repository แบ่งเป็น 2 กลุ่มหลักอย่างชัดเจน:
+Tag ของ version เก่ายังคงเก็บไว้เพื่อ trace ประวัติได้ แต่ branch พัฒนา/release เก่าที่ merge เรียบร้อยแล้วไม่จำเป็นต้องแสดงอยู่ต่อ
 
-1. **Applications** — ซอฟต์แวร์ที่ผู้ใช้ใช้งานโดยตรง
-2. **Hardware & Firmware** — firmware สำหรับบอร์ดเซนเซอร์
+### ตอนนี้ v1.8.2 เป็น source-only
 
-มีแอปที่ดูแลอยู่ 2 ตัวเท่านั้น และควรใช้แอปเพียงตัวเดียวต่อ sensor pair ในเวลาเดียวกัน
+GitHub Release v1.8.2 ปัจจุบันเผยแพร่เฉพาะ source code ก่อน เนื่องจากยังไม่มี trusted Windows Code Signing identity ที่ผ่านเงื่อนไข release pipeline
 
-| ส่วนประกอบ | ชื่ออย่างเป็นทางการ | Platform / Hardware | เทคโนโลยี | หน้าที่หลัก |
-|---|---|---|---|---|
-| Mobile | **WheelAthlete Mobile Application** | iOS, Android | Flutter / Dart | เชื่อมต่อ BLE, ดูข้อมูลสด, บันทึก session, จัดการและ export ข้อมูล |
-| Windows | **WheelAthlete Windows Research Application** | Windows 10/11 | Python / PySide6 | เก็บข้อมูลแบบ reliability-first, QC, recovery, workflow งานวิจัย และ MODEL แบบเสริม |
-| Firmware | **WheelAthlete M5StickC Plus2 Firmware** | M5StickC Plus2 / ESP32 | PlatformIO | อ่าน IMU และส่งข้อมูลผ่าน BLE |
-| Firmware | **WheelAthlete XIAO nRF52840 Sense Firmware** | Seeed Studio XIAO nRF52840 Sense | PlatformIO | อ่าน IMU และส่งข้อมูลผ่าน BLE |
+ไฟล์ Windows installer, portable ZIP และ `latest.json` จะเผยแพร่เมื่อระบบตรวจครบทั้ง RSA Code Signing certificate, Code Signing EKU, publisher subject ที่ตรงตามกำหนด, timestamp, executable components, generated uninstaller และ installer แล้ว `public_release_ready=true` เท่านั้น
 
-Flutter Windows, Flutter Web และ GUI รุ่นเก่าแบบ Tkinter ไม่อยู่ใน product surface ที่ดูแลแล้ว
+ไฟล์ local unsigned ใช้สำหรับพัฒนาและทดสอบได้ แต่ไม่ถือเป็น public trusted build และ SHA-256 เพียงอย่างเดียวไม่สามารถสร้าง publisher trust หรือข้าม SmartScreen/Application Control policy ได้
 
-## โครงสร้าง Repository
-
-```text
-WheelAthelse/
-├── applications/
-│   ├── wheelathlete_mobile/              # Flutter — iOS / Android
-│   │   ├── android/
-│   │   ├── ios/
-│   │   ├── lib/
-│   │   ├── test/
-│   │   └── pubspec.yaml
-│   │
-│   └── wheelathlete_windows/             # Python / PySide6 — Windows
-│       ├── tools/
-│       │   ├── pc_acquisition/           # BLE acquisition daemon
-│       │   └── pc_gui/                   # PySide6 UI + MODEL adapter
-│       ├── packaging/
-│       │   └── windows/                  # PyInstaller + Inno Setup
-│       ├── run_wheelathlete_windows.bat
-│       ├── build/                        # generated, ไม่เก็บใน Git
-│       └── release/                      # generated, ไม่เก็บใน Git
-│
-├── hardware_firmware/
-│   ├── m5stickc_plus2/                   # M5StickC Plus2 / ESP32 firmware
-│   └── xiao_nrf52840_sense/              # XIAO nRF52840 Sense firmware
-│
-├── assets/                               # icon และ asset ที่ใช้ร่วมกัน
-├── docs/                                 # BLE spec, test plan, protocol, wiki
-├── .project/                             # สถานะและเอกสารวิศวกรรมของโปรเจกต์
-├── VERSION                               # เวอร์ชันหลักของระบบ
-├── README.md
-└── README.th.md
-```
-
-ไฟล์ที่ generate จากการ build เช่น `build/`, `release/`, `.pio/`, Flutter generated files, Python cache และข้อมูล session ที่บันทึกจริง จะไม่ถูกเก็บใน Git
-
-## ภาพรวมการทำงานของระบบ
-
-```text
- IMU ล้อซ้าย                           IMU ล้อขวา
-      |                                     |
-      +--------------- BLE -----------------+
-                         |
-             +-----------+-----------+
-             |                       |
-             v                       v
- WheelAthlete Mobile       WheelAthlete Windows
- Application               Research Application
- Flutter / Dart             PySide6 GUI
- เชื่อม BLE โดยตรง              |
-                                v
-                          localhost IPC
-                                |
-                                v
-                         Acquisition daemon
-                         Bleak / WinRT BLE
-                                |
-                                v
-                         append-only .waj journal
-                         QC / recovery / CSV export
-                                |
-                                v
-                         optional offline MODEL
-```
-
-Firmware ทั้งสองชนิดใช้ BLE contract เดียวกัน โดย specification หลักอยู่ที่ [`docs/ble-protocol.md`](docs/ble-protocol.md)
-
-## Applications
-
-### WheelAthlete Mobile Application
-
-ตำแหน่ง: [`applications/wheelathlete_mobile/`](applications/wheelathlete_mobile/)
-
-ความสามารถหลัก:
-
-- เชื่อมต่อ sensor ล้อซ้ายและขวาผ่าน BLE
-- แสดง Accel XYZ และ Gyro XYZ แบบ real-time
-- synchronize clock และเวลาเริ่มบันทึกของสองบอร์ด
-- จัดข้อมูลเป็น topic / trial / session
-- ใช้ protocol template และ experiment tracking
-- เพิ่ม tag, search, filter และ preview session
-- แสดง QC, quality indicator และสถิติ
-- export เป็น CSV, Excel, ZIP และ share ผ่านระบบปฏิบัติการ
-- รองรับ Android และ iOS เท่านั้น
-
-เริ่มใช้งาน:
-
-```bash
-cd applications/wheelathlete_mobile
-flutter pub get
-flutter run -d <device-id>
-```
-
-ตรวจสอบโค้ด:
-
-```bash
-cd applications/wheelathlete_mobile
-flutter test
-flutter analyze
-```
-
-Build release:
-
-```bash
-# Android
-flutter build apk --release
-flutter build appbundle --release
-
-# iOS — ต้องใช้ macOS + Xcode
-flutter build ios --release
-```
+## สิ่งที่อยู่ใน WheelAthlete 1.8.2
 
 ### WheelAthlete Windows Research Application
 
 ตำแหน่ง: [`applications/wheelathlete_windows/`](applications/wheelathlete_windows/)
 
-Windows Application ใช้โครงสร้างแบบ 2 process เพื่อแยกเส้นทางเก็บข้อมูลจริงออกจาก UI:
+Windows application ใช้สถาปัตยกรรมแบบ 2 process:
 
-- **Acquisition daemon** ดูแล BLE, packet parsing, synchronization, sequence/loss accounting, การเขียน journal, QC และ recovery
-- **PySide6 GUI** ดูแลการควบคุม, status, preview, Results, Diagnostics, export และ MODEL แบบเสริม
+- **Acquisition daemon** — ดูแล BLE, packet parsing, clock synchronization, sequence/loss accounting, append-only `.waj`, QC, recovery และ synchronized lifecycle
+- **PySide6 GUI** — ดูแล Dashboard, Acquisition, Results, Diagnostics, export และ MODEL แบบ offline
 
-GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart ที่ช้า, model inference หรือการ restart GUI จะไม่ควรทำให้เส้นทางเก็บ raw BLE data หยุดหรือสูญหายโดยเงียบ
+GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart ที่ช้า, model analysis หรือการ restart GUI ต้องไม่ทำให้เส้นทางบันทึก BLE สูญหายแบบเงียบ ๆ
 
-หน้าหลักของ Windows Application:
+ความสามารถสำคัญของ 1.8.2:
 
-- **Dashboard** — การเชื่อมต่อบอร์ดและภาพรวมระบบ
-- **Acquisition** — live preview และควบคุมการบันทึกแบบ synchronized
-- **Results** — session ที่บันทึกแล้ว, QC, แก้ metadata, export และลบข้อมูล
-- **MODEL** — วิเคราะห์ trajectory แบบ offline
-- **Diagnostics** — ข้อมูลด้าน acquisition และ data integrity
+- Results แบบ Day -> Experiment -> Trial และเก็บ selection ด้วย session ID
+- เลือกทั้งวัน / เลือกทั้งหมด / ล้าง selection และ batch export แบบไม่ซ้ำ
+- ใช้ Windows QueryPerformanceCounter สำหรับ host timing ความละเอียดสูง
+- แสดงสาเหตุ sensor fault อย่างชัดเจน เช่น sequence, queue, FIFO, malformed packet, fatal และ active retry
+- ปิด acquisition daemon อย่างปลอดภัยและ finalize journal ก่อน upgrade/uninstall
+- เก็บ recordings และ custom/seeded models ไว้ระหว่าง installer lifecycle
+- รองรับ in-app update เมื่อมี trusted signed release และ `latest.json`
+- รองรับ portable model bundle แบบ `wheelathlete-model.json` พร้อม validation
 
-เปิดจาก source:
+รันจาก source:
 
 ```bat
 cd applications\wheelathlete_windows
 run_wheelathlete_windows.bat
 ```
 
-โหมด Demo:
+Demo mode:
 
 ```bat
-cd applications\wheelathlete_windows
 run_wheelathlete_windows.bat --demo
 ```
 
-ตำแหน่งข้อมูล default บน Windows:
+ตำแหน่งข้อมูลหลักบน Windows:
 
-- Sessions: `~/Documents/WheelAthlete/PC Sessions`
-- GUI log: `~/Documents/WheelAthlete/Logs/wheelathlete-windows.log`
-- Experiment presets: `~/Documents/WheelAthlete/experiments.json`
+```text
+~/Documents/WheelAthlete/PC Sessions
+~/Documents/WheelAthlete/Model
+~/Documents/WheelAthlete/Logs
+```
 
-เอกสาร Windows แบบละเอียด: [`applications/wheelathlete_windows/tools/pc_gui/README.md`](applications/wheelathlete_windows/tools/pc_gui/README.md)
+เอกสาร Windows แบบละเอียด: [`applications/wheelathlete_windows/README.md`](applications/wheelathlete_windows/README.md)
+
+### Firmware และ Sensor
+
+WheelAthlete ดูแล firmware 2 target:
+
+| Target | Hardware | Roles | Version |
+|---|---|---|---:|
+| M5StickC Plus2 | ESP32 / M5StickC Plus2 | L / R / optional C | `1.8.2` |
+| XIAO nRF52840 Sense | nRF52840 / LSM6DS3 | L / R / optional C | `1.8.2` |
+
+ตำแหน่ง:
+
+- [`hardware_firmware/m5stickc_plus2/`](hardware_firmware/m5stickc_plus2/)
+- [`hardware_firmware/xiao_nrf52840_sense/`](hardware_firmware/xiao_nrf52840_sense/)
+
+Role byte คือ `L=0x4C`, `R=0x52` และ optional chair-center `C=0x43`
+
+การติดตั้ง C ปัจจุบันกำหนดให้ **+Z ชี้ลงพื้น** ส่วน X/Y ยังเป็นแกนจริงของบอร์ดจนกว่าจะวัดทิศ chair-forward/lateral อย่างชัดเจน XIAO C ใช้ไฟประจำตัว **สีเขียว** ส่วน M5 C ยังคงใช้สีเหลืองบนจอ Existing production trajectory model ยังใช้ข้อมูล L/R เท่านั้น
+
+BLE specification หลัก: [`docs/ble-protocol.md`](docs/ble-protocol.md)
 
 ### MODEL แบบ Offline
 
-หน้า `MODEL` ของแอป Windows ใช้ **BiWheel3D XY + Yaw current_best** ที่ฝังอยู่ในตัวแอปแล้ว ไม่ต้องใช้ PyTorch, ไฟล์ checkpoint `.pt/.pth`, model server หรือโฟลเดอร์ `BiWheel3D` ภายนอกในตอนใช้งานจริง
+Windows installed default ยังคงเป็น **Classical v1** ที่ใช้ L/R เท่านั้น ส่วน residual, Slalom และ hybrid เป็น research option ที่ต้องเลือกอย่างชัดเจน และไม่เปลี่ยน production default โดยอัตโนมัติ
 
-สำหรับการรันจาก source ให้ติดตั้ง NumPy ผ่านไฟล์ dependency นี้:
+Model ใหม่ที่นำเข้าแบบ portable ใช้ contract:
 
-```bat
-python -m pip install -r applications\wheelathlete_windows\tools\pc_gui\requirements-model.txt
+[`docs/model_analysis/MODEL_BUNDLES.md`](docs/model_analysis/MODEL_BUNDLES.md)
+
+ไฟล์ `.waj` ยังคงเป็น authoritative research record ส่วน MODEL output, preview chart และ derived export ไม่ใช่สิ่งทดแทนความสมบูรณ์ของ raw recording หรือ physical reference validation
+
+### สถานะ Mobile
+
+Flutter Android/iOS source ที่มีอยู่เดิมยังเก็บไว้เพื่อ maintenance แต่ **การรวม v1.8.2 รอบนี้จะไม่เพิ่ม/แก้ mobile source สำหรับการ publish, ไม่สร้าง APK/AAB/IPA, ไม่มี mobile download และไม่มี mobile update offer**
+
+ดังนั้น mobile ไม่ใช่ publication gate ของ v1.8.2 รอบนี้ หากจะกลับมาเผยแพร่ mobile ในอนาคตควรแยกเป็น release scope ที่ตรวจสอบต่างหาก
+
+## โครงสร้าง Repository
+
+```text
+WheelAthelse/
+├── applications/
+│   ├── wheelathlete_windows/          # Windows v1.8.2 ที่ใช้งานหลัก
+│   └── wheelathlete_mobile/           # mobile source สำหรับ maintenance
+├── hardware_firmware/
+│   ├── m5stickc_plus2/
+│   └── xiao_nrf52840_sense/
+├── assets/                            # shared product assets
+├── docs/                              # BLE/model contracts, testing, wiki
+├── release/                           # release notes + manifest tooling
+├── scripts/                           # verification/hygiene tooling
+├── .project/                          # สถานะวิศวกรรมปัจจุบัน
+├── VERSION                            # coordinated product version
+├── README.md
+└── README.th.md
 ```
 
-ตัว Windows package จะรวม NumPy, calibration ของ current_best, runtime ที่จำเป็น และ MIT license ไว้ให้แล้ว การวิเคราะห์ทำแบบ offline และแยกจาก acquisition daemon โดยไฟล์ `.waj` ยังคงเป็นข้อมูลวิจัยต้นฉบับที่เชื่อถือได้
+Generated builds, `.pio/`, Python cache, Flutter generated output, recordings, local engineering evidence และ local `BiWheel3D/` research repository จะไม่ถูกนำเข้า root source publication
 
-MODEL ใช้ข้อมูล Left/Right ที่บันทึกไว้ที่ 100 Hz แปลงหน่วยเป็น SI, รวม 5 samples ต่อหนึ่ง trajectory step ที่ 20 Hz แล้วคำนวณ XY และ net yaw ด้วยสูตร current_best ของ BiWheel3D รวมถึง yaw delay 27 frames ตาม recipe ปัจจุบัน
+## Data Integrity
 
-## Hardware & Firmware
+Windows acquisition daemon เขียนข้อมูลหลักลง append-only `.waj` journal โดยถือเป็น authoritative recording ส่วน CSV และ summary เป็น derived output ที่สร้างใหม่ได้ และ `.open` journal ที่ยังไม่สมบูรณ์มี recovery path
 
-Firmware ทั้งสอง target ใช้ WheelAthlete BLE contract เดียวกัน และรองรับ wheel identity, sampling rate, synchronized lifecycle, battery, sequence accounting, replay/recovery และ acquisition-health telemetry
+Recording แบบ L/R-only ยังคง backward compatible ส่วน session ที่มี C ใช้ side code ของ C อย่างชัดเจน ระบบต้องไม่ decode C เป็น R และต้องไม่แทรก C เข้า legacy L/R model tensor โดยอัตโนมัติ
 
-### WheelAthlete M5StickC Plus2 Firmware
+## ระบบอัปเดต Windows
 
-ตำแหน่ง: [`hardware_firmware/m5stickc_plus2/`](hardware_firmware/m5stickc_plus2/)
+Windows ที่ติดตั้งผ่าน installer ใช้ manifest:
 
-```bash
-cd hardware_firmware/m5stickc_plus2
-
-pio run -e left
-pio run -e right
-
-pio run -e left -t upload
-pio run -e right -t upload
+```text
+https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-### WheelAthlete XIAO nRF52840 Sense Firmware
+เมื่อมี trusted signed release ระบบจะตรวจ semantic version, HTTPS URL ที่ต้องอยู่ใน GitHub Releases ของ repository นี้, exact byte size และ SHA-256 ก่อนเปิด installer และจะไม่เริ่มติดตั้ง update ขณะ Live preview, countdown หรือ recording ทำงานอยู่
 
-ตำแหน่ง: [`hardware_firmware/xiao_nrf52840_sense/`](hardware_firmware/xiao_nrf52840_sense/)
+v1.8.2 ที่เป็น source-only ในตอนนี้ **ไม่มี `latest.json`** จึงยังไม่มี update offer ไปยังเครื่องที่ติดตั้งอยู่
 
-```bash
-cd hardware_firmware/xiao_nrf52840_sense
+Release workflow ที่ [`.github/workflows/release.yml`](.github/workflows/release.yml) ใช้แบบ **manual workflow dispatch** โดยจะทดสอบ Windows, บังคับ trusted signing configuration, build/verify package, สร้าง `latest.json` และ publish เมื่อ release gate ผ่านเท่านั้น
 
-pio run -e left
-pio run -e right
+รายละเอียด trust/release: [`release/README.md`](release/README.md)
 
-pio run -e left -t upload
-pio run -e right -t upload
-```
-
-## Build Windows Installer
+## Build Windows Package
 
 สิ่งที่ต้องมี:
 
@@ -242,147 +165,63 @@ pio run -e right -t upload
 - PyInstaller
 - Inno Setup 6
 
-Build portable package และ installer:
-
 ```bat
 cd applications\wheelathlete_windows
 packaging\windows\build_installer.bat
 ```
 
-Output จะอยู่ที่:
-
-```text
-applications/wheelathlete_windows/release/
-├── WheelAthlete-1.8.2-portable.zip
-└── WheelAthleteSetup-1.8.2.exe
-```
-
-ทั้ง portable package และ installer จะ bundle `WheelAthleteDaemon.exe` ไปด้วย
-
-รายละเอียด packaging: [`applications/wheelathlete_windows/packaging/windows/README.md`](applications/wheelathlete_windows/packaging/windows/README.md)
-
-## ระบบอัปเดตแอปอัตโนมัติ
-
-ตำแหน่ง manifest สำหรับ Python Windows คือ:
-
-```text
-https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
-```
-
-Release `v1.8.2` ปัจจุบันเผยแพร่เฉพาะ source code เพราะยังไม่มี trusted
-Windows signing certificate จึงไม่มี `latest.json` และไม่มี update offer ในแอป
-ไฟล์ Windows จะเผยแพร่เมื่อ GUI, daemon และ installer ผ่าน Authenticode
-verification ครบทั้งหมดเท่านั้น
-
-- **Windows:** เมื่อมี signed release แอปจะตรวจ exact size และ SHA-256 จาก
-  `latest.json` ก่อนติดตั้งอัปเดต
-- **ความปลอดภัยระหว่างเก็บข้อมูล:** แอป Windows จะไม่เริ่มติดตั้งอัปเดตขณะ
-  Live preview, countdown หรือ recording กำลังทำงาน
-- **Mobile:** Flutter อยู่ระหว่าง maintenance และไม่มี download/update ใน
-  `v1.8.2`
-
-ระบบ release อัตโนมัติอยู่ที่ `.github/workflows/release.yml` และจะ publish
-เฉพาะ Windows assets หลัง signing ผ่าน ดูรายละเอียดที่
-[`release/README.md`](release/README.md)
-
-> หมายเหตุ bootstrap: แอปเวอร์ชันเก่าที่ติดตั้งก่อนมี updater ไม่สามารถอัปเดตตัวเองได้ ต้องติดตั้ง updater-enabled release ครั้งแรกด้วยตนเอง 1 ครั้ง หลังจากนั้นจึงใช้อัปเดตในแอปได้
-
-## Data Integrity
-
-### Mobile
-
-Mobile Application เก็บ session ตามโครงสร้าง topic / trial / session และสามารถ export เป็น CSV, metadata, Excel และ ZIP
-
-### Windows
-
-Acquisition daemon เขียนข้อมูลหลักลง append-only `.waj` journal โดยถือ journal นี้เป็น authoritative record ส่วน CSV และ summary เป็นข้อมูลที่ derive มาจาก journal
-
-ไฟล์ `.open` ที่บันทึกไม่สมบูรณ์สามารถทำ recovery ได้
-
-เมื่อ finalize แล้ว ระบบใช้ชื่อไฟล์ที่อ่านง่ายตาม topic / trial / athlete แต่ยังคง internal session UUID เดิมไว้
-
-**ค่าที่เห็นใน preview, chart และผล MODEL ไม่ถือเป็น authoritative research record**
-
-## BLE Protocol และ Synchronization
-
-Specification หลัก: [`docs/ble-protocol.md`](docs/ble-protocol.md)
-
-Protocol version ปัจจุบัน: `1.8.0`
-
-กลไกด้าน reliability ที่สำคัญ:
-
-- explicit recording lifecycle acknowledgement
-- synchronized start ระหว่างล้อซ้ายและขวา
-- clock synchronization และ drift mapping
-- sequence accounting
-- acquisition-health telemetry
-- replay / recovery
-- strict packet parsing และ QC
+Generated package จะอยู่ใน `applications/wheelathlete_windows/release/` และถูก ignore จาก Git
 
 ## Verification
 
-Mobile Application:
+ตรวจ publication hygiene:
 
 ```bash
-cd applications/wheelathlete_mobile
-flutter test
-flutter analyze
+python scripts/verify_project.py
 ```
 
-Windows Application:
+ตรวจ Windows application:
 
 ```bat
 cd applications\wheelathlete_windows
-python -m pytest tools\pc_acquisition\tests tools\pc_gui\tests -q
-python -m compileall -q tools\pc_acquisition tools\pc_gui
+python -m pytest tools\pc_gui\tests tools\pc_acquisition\tests -q
+python -m compileall -q tools\pc_gui tools\pc_acquisition
 ```
 
-Firmware:
+Firmware host tests/builds ให้รันจากแต่ละ firmware target ด้วย test และ PlatformIO configuration ที่มีอยู่
 
-```bash
-cd hardware_firmware/m5stickc_plus2
-pio run -e left
-pio run -e right
+Automated tests หรือการ build สำเร็จ **ไม่ใช่** หลักฐานยืนยัน RF throughput จริง, orientation จริง, synchronized timing ของ 3 บอร์ด หรือ trajectory accuracy สิ่งเหล่านี้ต้องใช้ physical/reference acceptance
 
-cd ../xiao_nrf52840_sense
-pio run -e left
-pio run -e right
-```
+## ขอบเขต Acceptance ปัจจุบัน
 
-Automated test ไม่สามารถแทน physical acceptance test ที่ใช้บอร์ดจริง 2 ตัวภายใต้สภาพ RF จริงได้ทั้งหมด
+Source/software acceptance ของ 1.8.2 แยกออกจาก external gate 2 เรื่อง:
 
-## Version Matrix
+- **Trusted Windows signing** — ต้องมีก่อน publish Windows binaries และ update manifest
+- **Final L/R/C physical acceptance** — รอจนกว่าจะมี hardware กลับมาใช้งานอีกครั้ง
 
-| Component | Version |
-|---|---:|
-| Product release | `1.8.2` |
-| WheelAthlete Mobile Application source | `1.8.2+12` (อยู่ระหว่างบำรุงรักษา; ยังไม่เปิดให้ใช้งาน) |
-| WheelAthlete Windows Research Application | `1.8.2` |
-| M5StickC Plus2 firmware | `1.8.2` |
-| XIAO nRF52840 Sense firmware | `1.8.2` |
-| BLE protocol | `1.8.0` |
-
-ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation
+XIAO C firmware 1.8.2 มี partial runtime evidence ที่ดี แต่ final Windows C record/QC/reopen/export และ simultaneous L/R/C bench run ยังไม่เสร็จ จึงไม่กล่าวว่า physical acceptance เสร็จสมบูรณ์
 
 ## เอกสารวิศวกรรม
 
-- [`docs/`](docs/) — protocol, workflow ภาคสนาม, test plan และ wiki
-- [`.project/`](.project/) — architecture, progress, engineering decision และสถานะล่าสุดของโปรเจกต์
+- [`.project/STATUS.md`](.project/STATUS.md) — สถานะล่าสุดและ open gates
+- [`.project/HANDOFF.md`](.project/HANDOFF.md) — ขั้นตอนต่อเนื่องที่ชัดเจน
+- [`.project/architecture.md`](.project/architecture.md) — runtime/data/model boundaries
+- [`.project/decisions.md`](.project/decisions.md) — active engineering decisions
+- [`release/RELEASE_NOTES_1.8.2.md`](release/RELEASE_NOTES_1.8.2.md) — release summary
+
+## Version Matrix
+
+| Component | Version / status |
+|---|---|
+| Product release | `1.8.2` |
+| Windows Research Application | `1.8.2` |
+| M5StickC Plus2 firmware | `1.8.2` |
+| XIAO nRF52840 Sense firmware | `1.8.2` |
+| BLE protocol | `1.8.0` |
+| Flutter mobile source | `1.8.2+12` — maintenance-only, ไม่อยู่ใน publication รอบนี้ |
+
+ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation
 
 ## License
 
 Proprietary — การใช้งาน แจกจ่าย หรือแก้ไข source code ต้องได้รับอนุญาตจากผู้ดูแลโปรเจกต์
-
-## การอัปเดตซอฟต์แวร์อัตโนมัติ
-
-WheelAthlete Mobile และ WheelAthlete Windows ใช้ manifest กลางชุดเดียวจาก GitHub Releases และตรวจสอบไฟล์ด้วยขนาดจริงและ SHA-256 ก่อนติดตั้ง:
-
-```text
-https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
-```
-
-- **Android:** release build จะตรวจอัปเดตอัตโนมัติ ดาวน์โหลด APK ที่ตรวจสอบแล้ว และเปิดหน้าติดตั้งของ Android ผู้ใช้ยังต้องกดยืนยันเอง และ APK ทุก public release ต้องเซ็นด้วย release key เดิมพร้อมเพิ่ม `versionCode` ทุกครั้ง
-- **iOS:** ตรวจ manifest เดียวกัน แต่การติดตั้งต้องผ่าน App Store/TestFlight ตามข้อกำหนดของ iOS
-- **Windows:** เวอร์ชันที่ติดตั้งด้วย PyInstaller/Inno Setup จะตรวจหลังเปิดโปรแกรมและทุก 6 ชั่วโมง ดาวน์โหลด installer ที่ตรวจ SHA-256 แล้ว ไม่ติดตั้งระหว่าง Live/Countdown/Recording จากนั้นปิดโปรแกรม อัปเดตแบบ silent และเปิด WheelAthlete กลับอัตโนมัติ ส่วน source/portable build จะไม่เขียนทับตัวเอง
-
-`.github/workflows/release.yml` เป็นตัว build Android + Windows และสร้าง `latest.json` จาก binary จริง รุ่น production แรกที่มี updater ต้องติดตั้งด้วยตนเองหนึ่งครั้งสำหรับเครื่องที่ยังใช้รุ่นเก่าซึ่งไม่มีระบบ updater รายละเอียด signing และ release อยู่ที่ `release/README.md`

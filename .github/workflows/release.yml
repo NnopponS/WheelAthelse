@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: wheelathlete-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   metadata:
@@ -27,8 +31,10 @@ jobs:
 
           version = Path('VERSION').read_text(encoding='utf-8').strip()
           ref = os.environ.get('GITHUB_REF_NAME', '')
-          if ref.startswith('v') and ref != f'v{version}':
-              raise SystemExit(f'Tag {ref} != v{version}')
+          if ref != f'v{version}':
+              raise SystemExit(
+                  f'Release workflow must be dispatched on exact tag v{version}; got {ref!r}'
+              )
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
               stream.write(f'version={version}\n')
@@ -113,6 +119,8 @@ jobs:
   publish:
     needs: [metadata, windows]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -120,6 +128,18 @@ jobs:
         with:
           name: windows-release
           path: dist
+
+      - name: Re-check public signing gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('dist/signing-report.json').read_text(encoding='utf-8'))
+          if report.get('public_release_ready') is not True:
+              raise SystemExit('signing-report.json did not pass public_release_ready')
+          PY
 
       - name: Generate verified-artifact update manifest
         shell: bash

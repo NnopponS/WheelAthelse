@@ -1,91 +1,81 @@
 # WheelAthlete current engineering decisions
 
-Updated: 2026-09-08.
+Updated: 2026-09-10.
 
-Only active durable decisions belong here. Historical experiment outcomes belong in phase/history files.
+Only active durable decisions belong here. Historical experiment outcomes and superseded branch instructions belong in Git history or `.project/history/`.
 
-## D1 - Maintained applications
+## D1 - v1.8.2 is Windows-first
 
-WheelAthlete maintains:
-- Flutter mobile for Android/iOS.
-- Python/PySide6 Windows Research Edition.
-
-Flutter Windows/Web and the retired Tkinter GUI are not maintained product paths.
+The active release surface is the Python/PySide6 **WheelAthlete Windows Research Application** plus maintained M5/XIAO firmware. Flutter Android/iOS source remains maintenance material, but new mobile source changes, mobile binaries and mobile updater assets are excluded from the current v1.8.2 publication unless explicitly requested later.
 
 ## D2 - One BLE protocol, explicit role semantics
 
-Both clients use `docs/ble-protocol.md`. Role bytes are `L=0x4C`, `R=0x52`, optional chair-center `C=0x43`. Packet/command semantic changes require coordinated clients/firmware documentation and compatibility tests.
+All clients and firmware use `docs/ble-protocol.md`. Role bytes are `L=0x4C`, `R=0x52`, and optional chair-center `C=0x43`. Packet/command semantic changes require coordinated documentation and compatibility tests.
 
-## D3 - L/R remains the model baseline; C is optional instrumentation
+## D3 - L/R is the production model baseline; C is optional instrumentation
 
-L/R wheel hubs remain the baseline sensing configuration and current model input. The user has authorized source support for optional center sensor C. This authorization does not establish that C improves trajectory accuracy.
+L/R wheel hubs remain the production sensing/model input. C is a chair-frame IMU with declared **+Z down toward the floor**. Center X/Y remain physical board axes until measured. Existing production trajectory models must not silently consume C.
 
-C is a chair-frame IMU with declared **+Z down toward the floor**. X/Y remain board axes until physically mapped. Do not call C a wheel or infer its forward/lateral axes from convenience.
+## D4 - Center identity is hardware-specific
 
-## D4 - Supported acquisition rates
+XIAO center uses a **green** identity/heartbeat while preserving higher-priority retry/error indication. M5 center retains the yellow display identity. Identity color is not evidence of correct orientation, range, sample rate or data integrity.
 
-Supported board acquisition rates are 50, 100 and 200 Hz. Configuration must be applied to the actual connected boards; metadata alone is not configuration evidence.
+## D5 - Supported acquisition rates are explicit
 
-## D5 - Mobile owns BLE directly
+Supported board acquisition rates are 50, 100 and 200 Hz. Metadata alone is not evidence that the connected hardware actually applied the requested configuration.
 
-Mobile uses its native BLE path and remains independent of the Windows acquisition daemon/server.
+## D6 - Windows raw-data ownership stays outside the GUI
 
-## D6 - Windows raw data ownership stays outside the GUI
+`tools.pc_acquisition` owns BLE, clocks, sequence/loss accounting, append-only journal writes, QC and recovery. `tools.pc_gui` receives state/preview/control over localhost IPC. Preview may be bounded; authoritative raw capture must fail visibly rather than silently drop data.
 
-`tools.pc_acquisition` owns BLE, clocks, sequence/loss accounting, raw journal writes, QC and recovery. `tools.pc_gui` receives state/preview/control over localhost IPC. Preview may drop; raw capture must fail visibly rather than silently overwrite unread data.
+## D7 - `.waj` is authoritative
 
-## D7 - Windows `.waj` is authoritative
+Windows raw recording truth is append-only `.waj`; CSV and summaries are derived. L/R-only recordings retain journal v1 semantics. Recordings containing C use journal v2 with explicit `C` side code. Historical data must not be reinterpreted by newer readers.
 
-Windows raw recording truth is append-only `.waj`; CSV is derived. L/R-only recordings keep journal v1. Recordings containing C use journal v2 with explicit C side code. Readers must preserve historical v1 semantics.
+## D8 - Synchronization requires provenance
 
-## D8 - Mobile storage remains mobile-native and backward-compatible
+Cross-sensor timing uses saved clock observations/drift fitting and common scheduled-start evidence. Independently zeroing L/R/C epochs is not synchronization proof. Windows uses the high-resolution performance-counter clock domain for host timing.
 
-Mobile uses its versioned app storage. Center support is additive. A C recording may add `center_raw.csv`; legacy L/R training/export schema must not silently become 18-channel data.
+## D9 - One operator owns a sensor set
 
-## D9 - Synchronization requires provenance
+Do not operate the same connected L/R[/C] set concurrently from multiple operator clients.
 
-Cross-sensor timing uses saved clock observations/drift fitting and common scheduled start evidence. A saved affine map documents a mapping but is not independent proof of physical simultaneity. Never synchronize L/R/C by independently zeroing their epochs.
+## D10 - Model defaults remain frozen until accepted evidence exists
 
-## D10 - One operator client per sensor set
+The installed Windows default remains the frozen classical L/R model. Experimental residual, Slalom and hybrid paths are opt-in research tools. Model promotion requires reproducible application-runtime behavior plus independent grouped validation/final evidence.
 
-Do not operate the same connected L/R[/C] set concurrently from mobile and Windows.
+## D11 - Course constraints must be labeled as constraints
 
-## D11 - Release/build artifacts are not source state
+Slalom endpoint/heading closure uses known protocol structure. Report raw pose, constrained pose and correction magnitudes separately. A constrained endpoint near zero is not independent odometry accuracy.
 
-Packaging definitions are source-controlled; generated installers/firmware binaries/build directories remain untracked/ignored. A successful build is not an installation, flash, release or physical acceptance.
+## D12 - Research/private boundaries are strict
 
-## D12 - Feature-branch safety
+`BiWheel3D/` is a separate local repository and is not part of the WheelAthlete root publication. Do not publish athlete recordings, participant-derived data, pseudo-GT, generated private models, local evidence, absolute private paths or signing material.
 
-Current work belongs on `feature/dual-imu-coaching-analysis`. Preserve `main` and `release/main-v1.8.0`; no merge, force-push, tag, updater/release publication or repository rename without explicit user direction. Preserve unrelated `.github/workflows/release.yml` work.
+## D13 - Build artifacts are not source state
 
-## D13 - Stable version identity remains unchanged
+Packaging definitions are source-controlled; generated installers, portable archives, firmware binaries, `.pio` trees, Python caches and recordings remain ignored/untracked. A successful build is not a physical flash, release or acceptance result.
 
-The stable v1.8.0 product/release identity remains the release line. Experimental model and center-sensor source work does not advance stable version metadata by itself.
+## D14 - Public Windows binaries require trusted signing
 
-## D14 - Physical claims require physical evidence
+A public Windows installer/portable/update manifest is allowed only when the fail-closed signing pipeline verifies the required packaged executable components, generated uninstaller and installer, and `public_release_ready=true`. Checksums do not establish publisher trust.
 
-Unit tests, simulated BLE and compile output can prove software/build behavior. They cannot establish real RF throughput, actual start skew, gravity orientation, range configuration, loss rate or trajectory accuracy. Those require hardware/reference measurements.
+## D15 - Installed upgrades must preserve research data
 
-## D15 - Model defaults remain frozen until P3 acceptance
+Upgrade/uninstall must gracefully stop the installation-owned daemon, finalize active journals when safe, and preserve recordings, logs and custom/seeded models. If safe daemon shutdown cannot be verified, setup must stop instead of replacing/removing files.
 
-Inherited geometry/calibration values remain assumptions unless separately measured. Windows classical default and mobile M4 ONNX default remain unchanged. PyTorch residual/Slalom paths are explicitly experimental. P3 remains `blocked_by_reference_data`.
+## D16 - Branch surface is intentionally small
 
-## D16 - Public source vs private research evidence
+The normal public branch surface after v1.8.2 consolidation is `main` plus `release/main-v1.8.2`. `main` must not be force-pushed. Release tags identify exact tested commits. Obsolete remote development/release branches may be removed once their work is fully contained in the integrated release history.
 
-Do not publish athlete recordings, derived participant data, pseudo-GT, generated private models, absolute private paths, signing material or local evidence. `BiWheel3D/` remains a separate local research repository.
+## D17 - Historical tags are traceability, not active release branches
 
-## D17 - Center data cannot silently enter the legacy model
+Old GitHub Release entries and remote branches may be removed from the visible project surface when explicitly requested. Historical version tags may remain so released source ancestry can still be traced without keeping obsolete branches alive.
 
-Current L/R model feature extraction must produce exactly the same tensor with or without C samples. Any center-aware estimator gets a new explicit model/feature contract, training set and validation/final gate. Never extend the legacy tensor merely by iterating every enum role.
+## D18 - Physical claims require physical evidence
 
-## D18 - Course constraints must be labeled as constraints
+Unit tests, simulated BLE and compile output prove software/build behavior only. Real RF throughput, start skew, gravity orientation, sensor ranges, data loss and trajectory accuracy require physical/reference measurements.
 
-Slalom endpoint/heading closure uses known protocol structure. Report raw pose, constrained pose and correction magnitudes separately. A constrained endpoint near zero cannot be advertised as independent odometry accuracy.
+## D19 - Deferred hardware acceptance does not block source hygiene
 
-## D19 - Runtime reproducibility is a model-selection requirement
-
-Exploratory metrics are not accepted until the same algorithm reproduces deterministically through the intended application/runtime. Slalom course v2 is the negative precedent: numerically unstable float32 finite-difference behavior produced apparent gains that collapsed in app execution. Keep it as rejected evidence; do not resurrect its headline numbers as validated performance.
-
-## D20 - Reference timing errors must not be learned away
-
-If C3D/IMU alignment exhibits drift/time-scale mismatch, audit reference clock provenance before training more model complexity. A neural/calibration model must not be used to compensate an unverified reference timeline simply because that reduces a plotted error.
+The XIAO C 1.8.2 partial runtime evidence may be documented accurately, but final C QC/reopen/export and simultaneous L/R/C acceptance remain deferred until hardware returns. The source repository can still be consolidated and released source-only while that external evidence is pending.
