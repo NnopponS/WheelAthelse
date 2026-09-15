@@ -47,6 +47,7 @@ The GUI is not the authoritative raw-data path. A slow chart, model task, or GUI
 Key 1.8.2 behavior:
 
 - Streamlined, minimal navigation sidebar ("WheelAthlete") with clean uncluttered headers across all pages;
+- Focused, distraction-free Acquisition setup with simplified trial inputs and countdown audio cues;
 - Day -> Experiment -> Trial Results hierarchy with persistent session-ID selection and C sample counts;
 - day/all/clear batch selection and deduplicated export;
 - high-resolution Windows host timing based on QueryPerformanceCounter;

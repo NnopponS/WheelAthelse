@@ -47,6 +47,7 @@ GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart �
 ความสามารถสำคัญของ 1.8.2:
 
 - Navigation sidebar แบบมินิมอล ("WheelAthlete") อ่านง่าย ไม่มีข้อความซ้ำซ้อน
+- หน้า Acquisition setup กระชับ ลดฟิลด์ที่ไม่จำเป็น พร้อมระบบเสียงนับถอยหลัง (audio countdown cues)
 - Results แบบ Day -> Experiment -> Trial พร้อมแสดงจำนวน C samples และช่องกรอก Athlete ที่กะทัดรัด
 - เลือกทั้งวัน / เลือกทั้งหมด / ล้าง selection และ batch export แบบไม่ซ้ำ
 - หน้า Diagnostics แสดงข้อมูล telemetry แยกครบ 3 เซนเซอร์: ล้อซ้าย (L), ล้อขวา (R) และ กึ่งกลางตัวรถ (C)

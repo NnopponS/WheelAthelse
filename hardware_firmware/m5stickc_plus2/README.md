@@ -81,3 +81,4 @@ The canonical wire specification is:
 `../../docs/ble-protocol.md`
 
 Coordinated firmware version: `1.8.0`.
+Coordinated firmware version: `1.8.2`.

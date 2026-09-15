@@ -1,6 +1,6 @@
 # Current engineering handoff
 
-Updated: 2026-09-10
+Updated: 2026-09-15
 
 ## v1.8.2 repository state
 
