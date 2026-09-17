@@ -35,8 +35,8 @@ void main() {
       '$repoRoot/.github/workflows/release.yml',
     ).readAsStringSync();
 
-    expect(productVersion, '1.8.2');
-    expect(app, contains('version: 1.8.2+12'));
+    expect(productVersion, '1.8.3');
+    expect(app, contains('version: 1.8.3+13'));
     expect(sessionModel, contains("this.protocolVersion = '1.8.0'"));
     expect(
       exportActions,
@@ -52,16 +52,16 @@ void main() {
       expect(firmware, contains('WheelAthlete_FW_PATCH=2'));
     }
     expect(protocol, contains('1.8.0'));
-    expect(readme, contains('**Current release line:** `v1.8.2`'));
-    expect(readme, contains('applications/wheelathlete_mobile/'));
+    expect(readme, contains('**Current release:** `v1.8.3`'));
+    expect(readme, contains('wheelathlete_mobile/'));
     expect(readme, contains('applications/wheelathlete_windows/'));
     expect(readme, contains('hardware_firmware/m5stickc_plus2/'));
     expect(readme, contains('hardware_firmware/xiao_nrf52840_sense/'));
     expect(buildScript, contains(r'set /p APP_VERSION=<"%REPO_ROOT%\VERSION"'));
-    expect(installer, contains('#define MyAppVersion "1.8.2"'));
+    expect(installer, contains('#define MyAppVersion "1.8.3"'));
     expect(installer, contains(r'#define WindowsAppRoot "..\.."'));
-    expect(appVersion, contains("wheelAthleteAppVersion = '1.8.2'"));
-    expect(appVersion, contains('wheelAthleteAppBuild = 12'));
+    expect(appVersion, contains("wheelAthleteAppVersion = '1.8.3'"));
+    expect(appVersion, contains('wheelAthleteAppBuild = 13'));
     expect(appVersion, contains('releases/latest/download/latest.json'));
     expect(updateService, contains('wheelathlete/app_update'));
     expect(releaseWorkflow, contains('workflow_dispatch:'));

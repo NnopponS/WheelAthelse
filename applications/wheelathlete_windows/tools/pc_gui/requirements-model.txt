@@ -2,4 +2,4 @@
 # NumPy powers the bundled BiWheel3D XY + Yaw recipe; ONNX Runtime enables
 # user-browsed / installer-seeded BiWheel3D learned models without PyTorch.
 numpy>=1.24
-onnxruntime>=1.18
+scipy>=1.11

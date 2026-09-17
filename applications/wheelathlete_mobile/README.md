@@ -2,9 +2,9 @@
 
 Flutter source for **iOS and Android only**. This application is under maintenance and is not currently available for installation or download. Its source and tests remain in the repository for repair and future validation.
 
-Source version: `1.8.2+12`
+Source version: `1.8.3+13`
 
-WheelAthlete v1.8.2 is a Windows-only distribution. Do not publish a mobile binary, show a mobile download, or enable mobile update offers for this release.
+WheelAthlete v1.8.3 release-gates this mobile source and its tests together with Windows. The current release workflow still publishes Windows artifacts only, so do not advertise an APK/AAB/IPA unless a separately verified mobile package is added.
 
 ## Supported platforms
 

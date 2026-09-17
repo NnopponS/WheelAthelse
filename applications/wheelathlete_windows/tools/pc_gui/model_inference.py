@@ -19,6 +19,12 @@ CURRENT_BEST_WHEEL_RADIUS_M = 0.30
 CURRENT_BEST_TRACK_WIDTH_M = 0.52
 CURRENT_BEST_KEY = "biwheel3d:xy_yaw_current_best"
 CURRENT_BEST_RECIPE_NAME = "BiWheel3D-XY-Yaw-current_best.json"
+THREE_IMU_V5_KEY = "biwheel3d:three_imu_odometry_v5"
+THREE_IMU_V4_KEY = "biwheel3d:three_imu_odometry_v4"
+THREE_IMU_V3_KEY = "biwheel3d:three_imu_odometry_v3"
+THREE_IMU_V2_KEY = "biwheel3d:three_imu_odometry_v2"
+ACTIVE_MODEL_KEY = THREE_IMU_V3_KEY
+ROLLBACK_MODEL_KEY = THREE_IMU_V2_KEY
 MODEL_BUNDLE_MANIFEST = "wheelathlete-model.json"
 SUPPORTED_BUNDLE_INPUTS = {
     "recipe": ("biwheel3d_dual_hub_v1", 60, ("numpy",)),
@@ -219,6 +225,47 @@ def _bundled_current_best_recipe() -> Path:
     return _runtime_root() / CURRENT_BEST_RECIPE_NAME
 
 
+def _three_imu_spec(version: int) -> ModelSpec:
+    if version not in {2, 3, 4, 5}:
+        raise ModelInferenceError(f"Unsupported three-IMU model version: {version}")
+    checkpoint = _runtime_root() / "models" / f"imu_v{version}.json"
+    if version == 5:
+        key = THREE_IMU_V5_KEY
+        lifecycle = "research - development candidate"
+    elif version == 4:
+        key = THREE_IMU_V4_KEY
+        lifecycle = "research - rejected"
+    elif version == 3:
+        key = THREE_IMU_V3_KEY
+        lifecycle = "active"
+    else:
+        key = THREE_IMU_V2_KEY
+        lifecycle = "rollback"
+    return ModelSpec(
+        key=key,
+        label=f"IMU v{version} ({lifecycle.title()})",
+        checkpoint=checkpoint,
+        description=(
+            "Three-IMU L/R/C wheelchair odometry with pause-aware bias correction, "
+            "center-chair yaw fusion, and C3D-free runtime inference."
+        ),
+        kind=f"three_imu_v{version}",
+        bundled=True,
+        model_version=str(version),
+        preprocessing_id="biwheel3d_three_imu_v1",
+        required_sensor_roles=("L", "R", "C"),
+        output_capabilities=(
+            ("x_m", "m"),
+            ("y_m", "m"),
+            ("signed_speed_mps", "m/s"),
+            ("yaw_rad", "rad"),
+            ("yaw_rate_radps", "rad/s"),
+        ),
+        runtime_requirements=("numpy", "scipy"),
+        experimental=version in {4, 5},
+    )
+
+
 def _recipe_spec(
     path: Path, *, bundled: bool = False, strict: bool = True
 ) -> ModelSpec | None:
@@ -242,6 +289,7 @@ def _recipe_spec(
             )
         return None
     key = str(payload.get("model_id") or f"recipe:{resolved}")
+    raw_label = str(payload.get("label") or resolved.stem)
     label = (
         "Kinematic Trajectory (XY + Yaw)"
         if key == CURRENT_BEST_KEY
@@ -413,7 +461,7 @@ def _research_registry_specs(repo_root: Path) -> list[ModelSpec]:
     for entry in payload.get("models", []):
         if (
             not isinstance(entry, dict)
-            or entry.get("status") == "frozen_application_baseline"
+            or entry.get("status") in {"frozen_application_baseline", "archived"}
         ):
             continue
         manifest_rel = entry.get("manifest")
@@ -550,8 +598,13 @@ def _same_checkpoint_content(left: Path, right: Path) -> bool:
         return False
 
 
-def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
-    """Discover built-in, user-library, and optional local research models."""
+def discover_compatible_models(
+    repo_root: Path, *, lifecycle_only: bool = False
+) -> list[ModelSpec]:
+    """Discover compatible models, or only the lifecycle-managed app choices."""
+    if lifecycle_only:
+        return [_three_imu_spec(3), _three_imu_spec(2)]
+
     discovered: list[ModelSpec] = []
     seen_keys: set[str] = set()
     seen_paths: set[Path] = set()
@@ -570,7 +623,6 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
             seen_keys.add(spec.key)
             seen_paths.add(spec.checkpoint)
 
-    # Prefer a user-visible copy of the current recipe when setup has seeded it.
     for root in _candidate_model_dirs():
         if not root.is_dir():
             continue
@@ -589,6 +641,16 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
             discovered.insert(0, spec)
             seen_keys.add(spec.key)
             seen_paths.add(spec.checkpoint)
+
+    for version in (5, 4, 3, 2):
+        try:
+            three_spec = _three_imu_spec(version)
+            if three_spec.key not in seen_keys and three_spec.checkpoint not in seen_paths:
+                discovered.append(three_spec)
+                seen_keys.add(three_spec.key)
+                seen_paths.add(three_spec.checkpoint)
+        except Exception:
+            continue
 
     learned_specs: list[ModelSpec] = []
     for root in _candidate_model_dirs():
@@ -622,21 +684,29 @@ def discover_compatible_models(repo_root: Path) -> list[ModelSpec]:
         seen_paths.add(spec.checkpoint)
         seen_keys.add(spec.key)
 
-    # Keep the calibrated current-best recipe first, then browseable learned models.
     return discovered + learned_specs
 
 
 def model_runtime_status(repo_root: Path) -> tuple[bool, str]:
-    """Check the common MODEL runtime without importing heavy optional providers."""
+    """Check the lifecycle-managed three-IMU runtime."""
     del repo_root
-    if importlib.util.find_spec("numpy") is None:
-        return False, "NumPy is required for BiWheel3D trajectory analysis."
+    for requirement in ("numpy", "scipy"):
+        if importlib.util.find_spec(requirement) is None:
+            return False, f"{requirement} is required for three-IMU trajectory analysis."
     runtime = _runtime_root()
-    if not (runtime / "yaw_ab.py").is_file():
-        return False, "Bundled BiWheel3D XY + Yaw runtime is missing."
-    if not _bundled_current_best_recipe().is_file():
-        return False, "Bundled BiWheel3D current_best recipe is missing."
-    return True, f"Model library: {model_library_root()}"
+    required = [
+        runtime / "three_imu_odometry_v2.py",
+        runtime / "three_imu_odometry_v3.py",
+        runtime / "three_imu_odometry_v4.py",
+        runtime / "three_imu_odometry_v5.py",
+        runtime / "models" / "imu_v5.json",
+        runtime / "models" / "imu_v4.json",
+        runtime / "models" / "imu_v3.json",
+        runtime / "models" / "imu_v2.json",
+    ]
+    if any(not path.is_file() for path in required):
+        return False, "Bundled three-IMU v5/v4/v3/v2 runtime is incomplete."
+    return True, f"IMU v3 active; IMU v2 rollback ready; IMU v5 research candidate available. Model library: {model_library_root()}"
 
 
 def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
@@ -648,6 +718,11 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
     for requirement in spec.runtime_requirements:
         if importlib.util.find_spec(requirement) is None:
             return False, f"This model requires the Python package {requirement}."
+    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5"}:
+        module = _runtime_root() / f"three_imu_odometry_v{spec.model_version}.py"
+        if not module.is_file():
+            return False, f"Three-IMU v{spec.model_version} runtime is missing."
+        return True, f"Three-IMU v{spec.model_version} runtime ready (L/R/C)."
     if spec.kind == "onnx":
         if importlib.util.find_spec("onnxruntime") is None:
             return False, "ONNX Runtime is required for this model."
@@ -1443,6 +1518,185 @@ def _run_unified_hybrid_model(
     }
 
 
+def _prepare_three_imu_session(
+    session_data: dict[str, Any],
+) -> tuple[Any, dict[str, Any], Any]:
+    """Normalize finalized L/R/C physical samples to the frozen 100 Hz calibration scale."""
+    import numpy as np
+
+    from .analysis_timing import AnalysisInputError, CHANNELS, finite_number, ordered_samples
+    from .biwheel3d_runtime.three_imu_odometry_v2 import IMUSynchronized
+
+    source_hz = finite_number(session_data.get("sample_rate_hz", TARGET_SAMPLE_HZ), "source rate")
+    if not 20 <= source_hz <= 1000:
+        raise ModelInferenceError("Source sample rate must be between 20 and 1000 Hz")
+    streams = session_data.get("samples", {})
+    prepared: dict[str, tuple[Any, Any, dict[str, Any]]] = {}
+    warnings = list(session_data.get("analysis_warnings", []))
+    try:
+        for role in ("L", "R", "C"):
+            role_samples = streams.get(role, [])
+            if role == "C" and (not isinstance(role_samples, list) or len(role_samples) < 2):
+                raise ModelInferenceError(
+                    "Three-IMU model requires Wheel C (center) sensor data, but this recording only has L/R wheels. "
+                    "Select 'Kinematic Trajectory (XY + Yaw)' or 'Mobile M4' for dual-wheel recordings."
+                )
+            rows, seq, info = ordered_samples(role_samples)
+            values = np.asarray(
+                [[finite_number(row.get(channel), channel) for channel in CHANNELS] for row in rows],
+                dtype=np.float64,
+            )
+            supplied = np.asarray(
+                [finite_number(row.get("t"), "sample time") for row in rows], dtype=np.float64
+            )
+            if np.all(np.diff(supplied) > 0):
+                times = supplied
+                basis = "saved_recording_time"
+            elif not info["sequence_unavailable"]:
+                times = supplied[0] + (seq - seq[0]).astype(float) / source_hz
+                basis = "legacy_sequence_arrival_anchor"
+                warnings.append(
+                    "Legacy timing: nominal sequence cadence used for three-IMU alignment."
+                )
+            else:
+                raise ModelInferenceError(
+                    f"{role} timeline is nonmonotonic and has no sequence counter for repair."
+                )
+            prepared[role] = (times, values, {**info, "time_basis": basis})
+    except (AnalysisInputError, ValueError, TypeError) as exc:
+        raise ModelInferenceError(str(exc)) from exc
+
+    start = max(float(prepared[role][0][0]) for role in ("L", "R", "C"))
+    stop = min(float(prepared[role][0][-1]) for role in ("L", "R", "C"))
+    if stop - start < 2.0:
+        raise ModelInferenceError("Three-IMU inference needs at least 2.0 s of shared L/R/C data.")
+    grid = np.arange(start, stop + 0.0025, 1.0 / TARGET_SAMPLE_HZ, dtype=np.float64)
+    if len(grid) < 200:
+        raise ModelInferenceError("Three-IMU inference needs at least 200 synchronized samples.")
+
+    # Calibration was fitted in the historical +/-4 g, +/-2000 dps raw-count scale.
+    # Convert physical app values back into that virtual count scale so runtime
+    # coefficients stay identical even when acquisition firmware uses another range.
+    accel_g_per_count = 4.0 / 32768.0
+    gyro_dps_per_count = 2000.0 / 32768.0
+    raw: dict[str, Any] = {}
+    for role in ("L", "R", "C"):
+        times, values, _info = prepared[role]
+        matrix = np.column_stack(
+            [np.interp(grid, times, values[:, column]) for column in range(6)]
+        )
+        matrix[:, :3] /= accel_g_per_count
+        matrix[:, 3:] /= gyro_dps_per_count
+        raw[role] = matrix
+
+    imu = IMUSynchronized(
+        t=grid - grid[0],
+        raw=raw,
+        clock_quality={},
+        source=str(session_data.get("session_id") or "finalized_session"),
+    )
+    flat_input = np.concatenate([raw[role] for role in ("L", "R", "C")], axis=1)
+    preprocess = {
+        "source_hz": source_hz,
+        "target_hz": TARGET_SAMPLE_HZ,
+        "aligned_samples": len(grid),
+        "model_steps": len(grid),
+        "duration_s": float(imu.t[-1]),
+        "resampled": abs(source_hz - TARGET_SAMPLE_HZ) > 1e-6,
+        "missing_samples": int(session_data.get("total_missing_samples", 0) or 0),
+        "warnings": list(dict.fromkeys([
+            *warnings,
+            "Three-IMU v2-v5 runtime uses L/R/C only; C3D is never used for inference.",
+        ])),
+        "time_s": imu.t.tolist(),
+        "overlap_start_s": start,
+        "time_basis": prepared["L"][2]["time_basis"],
+        "clock_evidence": session_data.get("analysis_timing", {}),
+        "scale_provenance": session_data.get("scale_provenance", {"status": "physical_to_virtual_calibration_counts"}),
+        "quality_flags": [[] for _ in grid],
+        "input_gap_policy": {"large_gap": "reject_upstream", "small_gap": "linear_interpolation"},
+        "physical_sync_verified": False,
+    }
+    return imu, preprocess, flat_input
+
+
+def _run_three_imu_model(spec: ModelSpec, session_data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    import numpy as np
+
+    from .biwheel3d_runtime.three_imu_odometry_v2 import ThreeIMUCalibration, estimate_trajectory
+
+    imu, preprocess, model_input = _prepare_three_imu_session(session_data)
+    try:
+        config = json.loads(spec.checkpoint.read_text(encoding="utf-8"))
+        calibration_json = config["calibration"]
+        calibration = ThreeIMUCalibration(
+            speed_gain_mps_per_count=float(calibration_json["speed_gain_mps_per_count"]),
+            center_yaw_gain_radps_per_count=float(calibration_json["center_yaw_gain_radps_per_count"]),
+            wheel_yaw_gain_radps_per_count=float(calibration_json["wheel_yaw_gain_radps_per_count"]),
+            calibration_trials=0,
+            provenance="frozen_runtime_config",
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ModelInferenceError(f"Invalid three-IMU runtime config: {spec.checkpoint}") from exc
+
+    if spec.kind == "three_imu_v5":
+        from .biwheel3d_runtime.three_imu_odometry_v5 import (
+            V5MotionExpertModel,
+            estimate_trajectory_v5,
+        )
+
+        model_dict = config.get("model")
+        model = V5MotionExpertModel(**model_dict) if model_dict else None
+        estimate = estimate_trajectory_v5(imu, calibration, model=model)
+        runtime_source = "three_imu_odometry_v5"
+    elif spec.kind == "three_imu_v4":
+        from .biwheel3d_runtime.three_imu_odometry_v4 import (
+            GenericResidualModel,
+            estimate_trajectory_v4,
+        )
+
+        model_dict = config.get("model")
+        model = GenericResidualModel(**model_dict) if model_dict else None
+        estimate = estimate_trajectory_v4(imu, calibration, model=model)
+        runtime_source = "three_imu_odometry_v4"
+    elif spec.kind == "three_imu_v3":
+        from .biwheel3d_runtime.three_imu_odometry_v3 import estimate_trajectory_v3
+
+        protocol = str(session_data.get("protocol") or session_data.get("topic") or "")
+        estimate = estimate_trajectory_v3(imu, calibration, protocol=protocol)
+        runtime_source = "three_imu_odometry_v3"
+    else:
+        estimate = estimate_trajectory(imu, calibration)
+        runtime_source = "three_imu_odometry_v2"
+
+    xy = np.asarray(estimate.xy, dtype=np.float64)
+    path_length = float(np.linalg.norm(np.diff(xy, axis=0), axis=1).sum())
+    model_result = {
+        "xy": xy,
+        "signed_speed_mps": np.asarray(estimate.speed, dtype=float).tolist(),
+        "yaw_rad": np.asarray(estimate.heading, dtype=float).tolist(),
+        "yaw_rate_radps": np.asarray(estimate.yaw_rate, dtype=float).tolist(),
+        "xy_frame": "initial_chair_heading",
+        "yaw_frame": "initial_chair_heading",
+        "net_yaw_deg": float(np.degrees(estimate.heading[-1] - estimate.heading[0])),
+        "yaw_source": "three_imu_center_wheel_fusion",
+        "yaw_delay_frames": 0,
+        "yaw_delay_pad": "none",
+        "gyro_scale": 1.0,
+        "chassis_yaw_scale": 1.0,
+        "wheel_radius_m": CURRENT_BEST_WHEEL_RADIUS_M,
+        "track_width_m": CURRENT_BEST_TRACK_WIDTH_M,
+        "recipe": spec.label,
+        "runtime_source": runtime_source,
+        "warnings": [
+            f"{spec.label}: deterministic L/R/C IMU odometry; runtime C3D disabled.",
+            f"Path estimate before display metrics: {path_length:.3f} m.",
+        ],
+        "three_imu_quality": dict(estimate.quality),
+    }
+    return model_result, preprocess, model_input
+
+
 def run_session_model(
     repo_root: Path,
     spec: ModelSpec,
@@ -1462,19 +1716,30 @@ def run_session_model(
     from .analysis_contract import file_identity
 
     checkpoint_before = file_identity(spec.checkpoint)
-    windows, preprocess = prepare_dual_windows(session_data)
-    if spec.kind == "onnx":
-        model_result = _run_onnx_model(spec, windows, np)
-    elif spec.kind == "recipe":
-        model_result = _run_recipe_model(spec, windows, session_data, np)
-    elif spec.kind == "pytorch_residual":
-        model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
-    elif spec.kind == "pytorch_residual_slalom_course":
-        model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
-    elif spec.kind == "unified_hybrid":
-        model_result = _run_unified_hybrid_model(spec, windows, session_data, np)
+    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5"}:
+        model_result, preprocess, model_input = _run_three_imu_model(spec, session_data)
+        model_input_layout = (
+            "little-endian float32 (T,18), virtual calibration counts; "
+            "L/R/C channels [ax,ay,az,gx,gy,gz]"
+        )
     else:
-        raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
+        windows, preprocess = prepare_dual_windows(session_data)
+        model_input = windows
+        model_input_layout = (
+            "little-endian float32 (T,5,12), g->m/s2, dps->rad/s"
+        )
+        if spec.kind == "onnx":
+            model_result = _run_onnx_model(spec, windows, np)
+        elif spec.kind == "recipe":
+            model_result = _run_recipe_model(spec, windows, session_data, np)
+        elif spec.kind == "pytorch_residual":
+            model_result = _run_pytorch_residual_model(spec, windows, session_data, np)
+        elif spec.kind == "pytorch_residual_slalom_course":
+            model_result = _run_pytorch_slalom_course_model(spec, windows, session_data, np)
+        elif spec.kind == "unified_hybrid":
+            model_result = _run_unified_hybrid_model(spec, windows, session_data, np)
+        else:
+            raise ModelInferenceError(f"Unsupported model kind: {spec.kind}")
 
     if file_identity(spec.checkpoint) != checkpoint_before:
         raise ModelInferenceError(
@@ -1498,9 +1763,9 @@ def run_session_model(
             "model_sha256": checkpoint_before,
             "session_id": str(session_data.get("session_id", "")),
             "model_input_sha256": hashlib.sha256(
-                np.asarray(windows, dtype="<f4").tobytes()
+                np.asarray(model_input, dtype="<f4").tobytes()
             ).hexdigest(),
-            "model_input_layout": "little-endian float32 (T,5,12), g->m/s2, dps->rad/s",
+            "model_input_layout": model_input_layout,
             "implementation_sha256": {
                 p.name: file_identity(p)
                 for p in [

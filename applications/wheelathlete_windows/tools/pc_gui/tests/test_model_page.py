@@ -133,12 +133,13 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
 
     assert model.model_combo.count() >= 1
     assert model.model_combo.itemText(0) == "Kinematic Trajectory (XY + Yaw)"
-    assert model.model_combo.currentIndex() == 0
+    model.model_combo.setCurrentIndex(0)
+    _APP.processEvents()
     assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
     assert "recipe ready" in model.runtime_label.text()
     assert "biwheel3d_dual_hub_v1" in model.model_detail.text()
-    assert not model.model_detail.isHidden()
-    assert not model.runtime_label.isHidden()
+    assert model.model_detail.isHidden()
+    assert model.runtime_label.isHidden()
     assert not model.browse_model_button.isHidden()
     assert "ONNX" in model.browse_model_button.toolTip()
 
@@ -182,3 +183,312 @@ def test_model_page_surfaces_slalom_course_constraint_state():
     assert "10 turn event(s)" in model.status_label.toolTip()
     assert "position closure=yes" in model.status_label.toolTip()
     _close(controller, window)
+
+
+def test_model_page_session_search_and_imu_tagging():
+    controller, window = _window()
+    model = window.model
+
+    # Demo sessions have 3 IMUs -> should be tagged [3-IMU]
+    assert model.session_combo.count() >= 3
+    assert "[3-IMU]" in model.session_combo.itemText(0)
+
+    # Add a 2-IMU session
+    two_imu_sess = {
+        "session_id": "demo_two_imu_01",
+        "topic": "Sprint",
+        "trial_number": 99,
+        "athlete": "Athlete Two",
+        "quality": "GOOD",
+        "sample_counts": {"L": 500, "R": 500, "C": 0},
+    }
+    controller.sessions.append(two_imu_sess)
+    controller.sessions_changed.emit(list(controller.sessions))
+    _APP.processEvents()
+
+    # Verify [2-IMU] tag appears
+    found_2imu = any(
+        "[2-IMU]" in model.session_combo.itemText(i)
+        and "Trial 99" in model.session_combo.itemText(i)
+        for i in range(model.session_combo.count())
+    )
+    assert found_2imu
+
+    # Test filtering recordings
+    model.session_search.setText("Trial 99")
+    _APP.processEvents()
+    assert model.session_combo.count() == 1
+    assert "Trial 99" in model.session_combo.itemText(0)
+
+    # Test select_session resets filter if needed
+    success = model.select_session("demo_endurance_01")
+    _APP.processEvents()
+    assert success
+    assert str(model.session_combo.currentData()) == "demo_endurance_01"
+    assert model.session_search.text() == ""  # Search query cleared to reveal target
+
+    _close(controller, window)
+
+
+def test_model_page_warns_on_3imu_model_with_2imu_recording():
+    controller, window = _window()
+    model = window.model
+
+    # Add 2-IMU session
+    two_imu_sess = {
+        "session_id": "test_2imu_sess",
+        "topic": "Sprint",
+        "trial_number": 5,
+        "athlete": "Athlete X",
+        "quality": "GOOD",
+        "sample_counts": {"L": 200, "R": 200, "C": 0},
+    }
+    controller.sessions = [two_imu_sess]
+    controller.sessions_changed.emit(list(controller.sessions))
+    _APP.processEvents()
+
+    model.select_session("test_2imu_sess")
+    _APP.processEvents()
+
+    # Universal model: Kinematic Trajectory (XY + Yaw) -> Enabled
+    for idx in range(model.model_combo.count()):
+        spec = model.model_combo.itemData(idx)
+        if hasattr(spec, "label") and "Kinematic" in spec.label:
+            model.model_combo.setCurrentIndex(idx)
+            break
+    _APP.processEvents()
+    assert model.generate_button.isEnabled()
+
+    # 3-IMU model: IMU v4 (Active) -> Disabled with warning
+    for idx in range(model.model_combo.count()):
+        spec = model.model_combo.itemData(idx)
+        if hasattr(spec, "label") and ("v4" in spec.label or "v3" in spec.label):
+            model.model_combo.setCurrentIndex(idx)
+            break
+    _APP.processEvents()
+    assert not model.generate_button.isEnabled()
+    assert "Requires Wheel C" in model.runtime_label.text()
+    assert "2 IMUs only" in model.runtime_label.text()
+
+    _close(controller, window)
+
+
+def test_results_page_has_model_actions_and_expand_all():
+    controller, window = _window()
+    results = window.results
+    window.stack.setCurrentWidget(results)
+    _APP.processEvents()
+
+    # Test expand all / collapse all toggle button
+    assert hasattr(results, "expand_all_btn")
+    assert results._topic_cards
+    # Initially collapsed
+    first_card = results._topic_cards[0]
+    initial_expanded = bool(first_card.property("expanded"))
+    results.expand_all_btn.click()
+    _APP.processEvents()
+    assert bool(first_card.property("expanded")) != initial_expanded
+    assert not first_card.table_container.isHidden()
+
+    # Test open in MODEL from SessionPreviewDrawer
+    drawer = results.preview_drawer
+    drawer.load_session("demo_sprint_01")
+    _APP.processEvents()
+    assert drawer.open_model_btn.isVisible()
+    drawer.open_model_btn.click()
+    _APP.processEvents()
+
+    # Verify switched to MODEL tab with demo_sprint_01 selected
+    assert window.stack.currentWidget() is window.model
+    assert str(window.model.session_combo.currentData()) == "demo_sprint_01"
+
+    _close(controller, window)
+
+
+def test_model_page_auto_detection():
+    controller, window = _window()
+    model = window.model
+
+    # Add both 3-IMU and 2-IMU sessions
+    controller.sessions = [
+        {
+            "session_id": "sess_3imu",
+            "topic": "Sprint 3IMU",
+            "trial_number": 1,
+            "athlete": "Athlete A",
+            "quality": "GOOD",
+            "sample_counts": {"L": 200, "R": 200, "C": 200},
+        },
+        {
+            "session_id": "sess_2imu",
+            "topic": "Sprint 2IMU",
+            "trial_number": 2,
+            "athlete": "Athlete B",
+            "quality": "GOOD",
+            "sample_counts": {"L": 200, "R": 200, "C": 0},
+        },
+    ]
+    controller.sessions_changed.emit(list(controller.sessions))
+    _APP.processEvents()
+
+    # Selecting 3-IMU session -> auto-matches to the validated active v3 model.
+    model.select_session("sess_3imu")
+    _APP.processEvents()
+    spec = model.model_combo.currentData()
+    assert spec is not None
+    assert "C" in spec.required_sensor_roles
+    assert "v3" in spec.key.lower()
+
+    # Selecting 2-IMU session -> auto-matches to 2-IMU dual-hub baseline
+    model.select_session("sess_2imu")
+    _APP.processEvents()
+    spec = model.model_combo.currentData()
+    assert spec is not None
+    assert "C" not in spec.required_sensor_roles
+
+    _close(controller, window)
+
+
+def test_model_page_comparison_overlay():
+    controller, window = _window()
+    model = window.model
+
+    assert hasattr(model, "compare_checkbox")
+    assert model.compare_checkbox.accessibleName() == "modelCompareCheckbox"
+    assert model.comparison_series.count() == 0
+
+    result = _sample_result()
+    result["comparison_xy"] = [(0.0, 0.0), (0.48, 0.09), (0.98, 0.38), (1.38, 0.78)]
+    result["comparison_label"] = "Kinematic Trajectory (XY + Yaw)"
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+
+    assert model.comparison_series.count() == 4
+    assert model.chart.legend().isVisible()
+    assert "Dual-Hub 2-IMU" in model.comparison_series.name()
+
+    model._invalidate_analysis()
+    _APP.processEvents()
+    assert model.comparison_series.count() == 0
+    assert not model.chart.legend().isVisible()
+
+    _close(controller, window)
+
+
+def test_model_page_csv_export(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    controller, window = _window()
+    model = window.model
+
+    assert hasattr(model, "export_csv_button")
+    assert model.export_csv_button.accessibleName() == "exportTrajectoryCsvButton"
+    assert not model.export_csv_button.isEnabled()
+
+    result = _sample_result()
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+
+    assert model.export_csv_button.isEnabled()
+
+    target_file = str(tmp_path / "exported_trajectory.csv")
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *args, **kwargs: (target_file, "CSV files (*.csv)")
+    )
+
+    model.export_trajectory_csv()
+    _APP.processEvents()
+
+    assert os.path.isfile(target_file)
+    with open(target_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "time_s,x_m,y_m,signed_speed_mps" in content
+    assert "1.4" in content  # points from sample result
+
+    model._invalidate_analysis()
+    _APP.processEvents()
+    assert not model.export_csv_button.isEnabled()
+
+    _close(controller, window)
+
+
+def test_model_page_image_export(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    controller, window = _window()
+    model = window.model
+
+    assert hasattr(model, "export_image_button")
+    assert model.export_image_button.accessibleName() == "exportTrajectoryImageButton"
+    assert not model.export_image_button.isEnabled()
+
+    result = _sample_result()
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+
+    assert model.export_image_button.isEnabled()
+
+    target_file = str(tmp_path / "trajectory_snapshot.png")
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (target_file, "PNG Image (*.png)"),
+    )
+
+    model.export_trajectory_image()
+    _APP.processEvents()
+
+    assert os.path.isfile(target_file)
+    assert os.path.getsize(target_file) > 0
+
+    model._invalidate_analysis()
+    _APP.processEvents()
+    assert not model.export_image_button.isEnabled()
+
+    _close(controller, window)
+
+
+def test_model_page_multi_model_and_c3d_comparison():
+    controller, window = _window()
+    model = window.model
+
+    assert hasattr(model, "comp_v5")
+    assert hasattr(model, "comp_v4")
+    assert hasattr(model, "comp_v3")
+    assert hasattr(model, "comp_v2")
+    assert hasattr(model, "comp_c3d")
+    assert hasattr(model, "import_c3d_button")
+
+    result = _sample_result()
+    result["comp_dual_hub_xy"] = [(0.0, 0.0), (0.5, 0.0), (1.0, 0.0)]
+    result["comp_v5_xy"] = [(0.0, 0.0), (0.50, 0.01), (1.00, 0.03)]
+    result["comp_v4_xy"] = [(0.0, 0.0), (0.49, 0.02), (0.99, 0.05)]
+    result["comp_v3_xy"] = [(0.0, 0.0), (0.47, 0.04), (0.95, 0.08)]
+    result["comp_v2_xy"] = [(0.0, 0.0), (0.46, 0.05), (0.92, 0.10)]
+    result["ground_truth_xy"] = [(0.0, 0.0), (0.495, 0.01), (0.995, 0.02)]
+
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+
+    assert model.comparison_series.count() == 3
+    assert model.comp_v5_series.count() == 3
+    assert model.comp_v4_series.count() == 3
+    assert model.comp_v3_series.count() == 3
+    assert model.comp_v2_series.count() == 3
+    assert model.ground_truth_series.count() == 3
+    assert model.chart.legend().isVisible()
+
+    # Toggle one off
+    model.comp_v2.setChecked(False)
+    _APP.processEvents()
+    assert model.comp_v2_series.count() == 0
+    assert model.comp_v4_series.count() == 3
+
+    model._invalidate_analysis()
+    _APP.processEvents()
+    assert model.comp_v5_series.count() == 0
+    assert model.comp_v4_series.count() == 0
+    assert model.ground_truth_series.count() == 0
+
+    _close(controller, window)
+

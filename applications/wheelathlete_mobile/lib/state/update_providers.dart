@@ -97,6 +97,9 @@ class MobileUpdateNotifier extends Notifier<MobileUpdateState> {
     try {
       final manifest = await ref.read(mobileUpdateServiceProvider).check();
       final available = mobileUpdateAvailable(manifest);
+      final isAndroid = !kIsWeb && Platform.isAndroid;
+      final missingMobilePackage =
+          isAndroid ? manifest.android == null : manifest.ios == null;
       state = MobileUpdateState(
         status: available
             ? MobileUpdateStatus.available
@@ -104,7 +107,9 @@ class MobileUpdateNotifier extends Notifier<MobileUpdateState> {
         manifest: manifest,
         message: available
             ? 'WheelAthlete ${manifest.version} is available'
-            : 'WheelAthlete is up to date',
+            : (missingMobilePackage
+                ? 'Latest release (v${manifest.version}) does not publish mobile APKs. App is up to date.'
+                : 'WheelAthlete is up to date'),
       );
     } on Object catch (error) {
       state = state.copyWith(
@@ -125,8 +130,16 @@ class MobileUpdateNotifier extends Notifier<MobileUpdateState> {
     }
     final service = ref.read(mobileUpdateServiceProvider);
     if (Platform.isIOS) {
+      final ios = manifest.ios;
+      if (ios == null) {
+        state = state.copyWith(
+          status: MobileUpdateStatus.current,
+          message: 'No iOS update available in release ${manifest.version}',
+        );
+        return;
+      }
       try {
-        await service.openIosStore(manifest.ios);
+        await service.openIosStore(ios);
         state = state.copyWith(
           status: MobileUpdateStatus.storeOpened,
           message: 'Opened the App Store/TestFlight update page',
@@ -147,6 +160,15 @@ class MobileUpdateNotifier extends Notifier<MobileUpdateState> {
       return;
     }
 
+    final android = manifest.android;
+    if (android == null) {
+      state = state.copyWith(
+        status: MobileUpdateStatus.current,
+        message: 'No Android update available in release ${manifest.version}',
+      );
+      return;
+    }
+
     _busy = true;
     state = state.copyWith(
       status: MobileUpdateStatus.downloading,
@@ -155,7 +177,7 @@ class MobileUpdateNotifier extends Notifier<MobileUpdateState> {
     );
     try {
       final apk = await service.downloadAndroidApk(
-        manifest.android,
+        android,
         onProgress: (progress) {
           state = state.copyWith(
             status: MobileUpdateStatus.downloading,

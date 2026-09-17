@@ -10,6 +10,10 @@ from tools.pc_gui.model_inference import (  # noqa: E402
     BIWHEEL3D_FEATURE_DIM,
     CURRENT_BEST_KEY,
     CURRENT_BEST_RECIPE_NAME,
+    THREE_IMU_V2_KEY,
+    THREE_IMU_V3_KEY,
+    THREE_IMU_V4_KEY,
+    THREE_IMU_V5_KEY,
     ModelInferenceError,
     ModelSpec,
     active_research_dataset_root,
@@ -140,14 +144,44 @@ def test_feature_extractor_matches_mobile_python_reference_fixture():
     assert np.max(np.abs(actual - expected)) < 1e-5
 
 
-def test_discover_current_best_recipe_without_user_library(monkeypatch, tmp_path):
+def test_discovery_exposes_only_active_v3_and_v2_rollback(monkeypatch, tmp_path):
     monkeypatch.setenv("WHEELATHLETE_MODEL_DIR", str(tmp_path))
-    models = discover_compatible_models(tmp_path)
-    assert len(models) == 1
-    assert models[0].key == CURRENT_BEST_KEY
-    assert models[0].checkpoint.name == CURRENT_BEST_RECIPE_NAME
-    assert models[0].label == "Kinematic Trajectory (XY + Yaw)"
-    assert models[0].kind == "recipe"
+    models = discover_compatible_models(REPO_ROOT, lifecycle_only=True)
+    assert [model.key for model in models] == [THREE_IMU_V3_KEY, THREE_IMU_V2_KEY]
+    assert models[0].kind == "three_imu_v3"
+    assert models[0].label == "IMU v3 (Active)"
+    assert models[1].kind == "three_imu_v2"
+    assert models[1].label == "IMU v2 (Rollback)"
+    assert models[0].required_sensor_roles == ("L", "R", "C")
+    assert models[1].required_sensor_roles == ("L", "R", "C")
+
+    research = {model.key: model for model in discover_compatible_models(REPO_ROOT)}
+    assert research[THREE_IMU_V4_KEY].label == "IMU v4 (Research - Rejected)"
+    assert research[THREE_IMU_V5_KEY].label == "IMU v5 (Research - Development Candidate)"
+    assert research[THREE_IMU_V5_KEY].kind == "three_imu_v5"
+    assert research[THREE_IMU_V5_KEY].experimental
+
+
+def test_custom_recipe_uses_its_own_label_without_current_best_short_circuit(tmp_path):
+    recipe = tmp_path / "custom-recipe.json"
+    recipe.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "model_type": "biwheel3d_xy_yaw_recipe",
+                "model_id": "biwheel3d:custom_course",
+                "label": "Custom Course Recipe",
+                "description": "Synthetic custom recipe for regression coverage.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    spec = custom_model_spec(recipe)
+
+    assert spec.key == "biwheel3d:custom_course"
+    assert spec.label == "Custom Course Recipe"
+    assert spec.kind == "recipe"
 
 
 def test_model_library_discovers_onnx_and_recipe(monkeypatch, tmp_path):
@@ -639,26 +673,6 @@ def test_optional_research_registry_discovers_slalom_course_model(
     assert matches[0].course_config == (model_dir / "course.json").resolve()
 
 
-def test_discover_and_run_unified_hybrid_model():
-    pytest.importorskip("scipy")
+def test_archived_unified_hybrid_model_is_not_discovered():
     models = discover_compatible_models(REPO_ROOT)
-    hybrid_spec = next((spec for spec in models if spec.kind == "unified_hybrid"), None)
-    assert hybrid_spec is not None, "Unified Hybrid model must be discovered from research registry"
-    assert hybrid_spec.label == "Hybrid v1"
-    assert "Unified 5-method hybrid" in hybrid_spec.description
-
-    ready, detail = model_spec_runtime_status(hybrid_spec)
-    assert ready, detail
-
-    result = run_session_model(REPO_ROOT, hybrid_spec, _straight_session())
-    assert result["model_kind"] == "unified_hybrid"
-    assert result["runtime_source"] == "unified_hybrid_v1"
-    assert result["point_count"] == 120
-    assert result["path_length_m"] > 5.0
-    assert result["net_yaw_deg"] is not None
-    assert result["analysis"]["metadata"]["model_key"] == hybrid_spec.key
-    assert len(result["analysis"]["samples"]) == 120
-    first_sample = result["analysis"]["samples"][0]
-    assert first_sample["signed_speed_mps"] is not None
-    assert first_sample["yaw_rad"] is not None
-    assert first_sample["yaw_rate_radps"] is not None
+    assert all(spec.kind != "unified_hybrid" for spec in models)

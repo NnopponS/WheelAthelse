@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/update/mobile_update_service.dart';
@@ -45,10 +45,34 @@ void main() {
     final manifest = parseMobileUpdateManifest(manifestBytes());
     expect(manifest.version, '1.8.2');
     expect(manifest.channel, 'stable');
-    expect(manifest.android.build, 11);
-    expect(manifest.android.url.path, endsWith('.apk'));
-    expect(manifest.android.sha256, 'a' * 64);
-    expect(manifest.ios.storeManaged, isTrue);
+    expect(manifest.android!.build, 11);
+    expect(manifest.android!.url.path, endsWith('.apk'));
+    expect(manifest.android!.sha256, 'a' * 64);
+    expect(manifest.ios!.storeManaged, isTrue);
+  });
+
+  test('gracefully handles manifests without mobile platforms (e.g. desktop-only release)', () {
+    final desktopOnly = <String, Object?>{
+      'schema': 1,
+      'version': '1.8.2',
+      'channel': 'stable',
+      'release_url': 'https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.2',
+      'notes': 'Windows release only',
+      'platforms': <String, Object?>{
+        'windows': <String, Object?>{
+          'version': '1.8.2',
+          'url': 'https://github.com/NnopponS/WheelAthelse/releases/download/v1.8.2/WheelAthleteSetup-1.8.2.exe',
+          'sha256': 'b' * 64,
+          'size': 654321,
+        },
+      },
+    };
+    final manifest = parseMobileUpdateManifest(utf8.encode(jsonEncode(desktopOnly)));
+    expect(manifest.version, '1.8.2');
+    expect(manifest.android, isNull);
+    expect(manifest.ios, isNull);
+    expect(mobileUpdateAvailableFor(manifest, platform: MobileUpdatePlatform.android), isFalse);
+    expect(mobileUpdateAvailableFor(manifest, platform: MobileUpdatePlatform.ios), isFalse);
   });
 
   test('Android update requires non-decreasing semver and higher build', () {

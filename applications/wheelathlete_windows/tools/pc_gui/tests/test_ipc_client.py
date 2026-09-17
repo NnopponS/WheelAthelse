@@ -79,3 +79,24 @@ def test_large_response_is_handled_by_client():
     client._handle_message(_message("response", large_payload, "req-large"))
     assert len(results) == 1
     assert len(results[0]["sessions"]) == 150
+
+
+def test_command_timeout_fails_pending_request_once():
+    client = DaemonClient(auto_reconnect=False, command_timeout_ms=10)
+    client._set_ready(True)
+    client._write_message = lambda *_args, **_kwargs: None
+    errors: list[str] = []
+    failed: list[tuple[str, str]] = []
+    client.command_failed.connect(lambda command, message: failed.append((command, message)))
+
+    request_id = client.send_command("status", {}, on_error=errors.append)
+    pending = client._pending[request_id]
+    assert pending.timer is not None
+    assert pending.timer.isActive()
+    assert pending.timer.interval() == 10
+    client._expire_pending(request_id)
+
+    assert request_id not in client._pending
+    assert len(errors) == 1
+    assert "timed out" in errors[0]
+    assert failed == [("status", errors[0])]

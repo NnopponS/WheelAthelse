@@ -206,6 +206,29 @@ class KinematicAnalysis {
           'descriptive experimental estimates; time-weighted means; no independent accuracy claim',
     };
   }
+
+  Map<String, dynamic> get summary {
+    if (samples.isEmpty) return const {};
+    final stats = windowStatistics(samples.first.timeS, samples.last.timeS);
+    final metrics = stats['metrics'] as Map<String, dynamic>? ?? {};
+    final speedStats = metrics['speed_mps'] as Map<String, dynamic>? ?? {};
+    final yawRateStats = metrics['yaw_rate_radps'] as Map<String, dynamic>? ?? {};
+    final netYawRad = stats['net_yaw_rad'] as double?;
+    final maxYawRateRadps = yawRateStats['max'] as double?;
+    final minYawRateRadps = yawRateStats['min'] as double?;
+    final peakYawRateRadps = (maxYawRateRadps != null && minYawRateRadps != null)
+        ? math.max(maxYawRateRadps.abs(), minYawRateRadps.abs())
+        : (maxYawRateRadps?.abs() ?? minYawRateRadps?.abs());
+
+    return {
+      ...stats,
+      'distance_m': stats['path_length_m'],
+      'net_yaw_deg': netYawRad != null ? netYawRad * 180.0 / math.pi : null,
+      'mean_speed_mps': speedStats['mean'],
+      'peak_speed_mps': speedStats['max'],
+      'max_yaw_rate_degps': peakYawRateRadps != null ? peakYawRateRadps * 180.0 / math.pi : null,
+    };
+  }
 }
 
 /// Same seven-sample local-linear derivative as the Python offline contract.

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "model_id": "biwheel3d:three_imu_odometry_v3",
+  "lifecycle": "active",
+  "label": "IMU v3 (Active)",
+  "runtime_kind": "three_imu_v3",
+  "required_sensor_roles": ["L", "R", "C"],
+  "sample_rate_hz": 100.0,
+  "virtual_accel_g_per_count": 0.0001220703125,
+  "virtual_gyro_dps_per_count": 0.06103515625,
+  "calibration": {
+    "speed_gain_mps_per_count": 0.00036667813788388156,
+    "center_yaw_gain_radps_per_count": 0.0012225753213320908,
+    "wheel_yaw_gain_radps_per_count": 0.00074187090529952
+  },
+  "speed_residual_coeff": [-0.014320348224285954, 0.006846928718115279, 0.0022071298062501785, 0.002952664916172703, 0.00026493317191811746],
+  "disagreement_threshold_deg_s": 11.859769292747137,
+  "short_path_m": [4.0, 12.0],
+  "short_abs_yaw_max_rad": 1.0,
+  "speed_residual_max_fraction": 0.12,
+  "runtime_uses_c3d": false,
+  "source": "BiWheel3D/results/three_imu_v3_under2/model.json"
+}

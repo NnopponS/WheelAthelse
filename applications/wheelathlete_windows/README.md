@@ -2,7 +2,7 @@
 
 The **WheelAthlete Windows Research Application** is the reliability-first Windows acquisition and research client. It uses a PySide6 operator interface and a separate Python acquisition daemon so BLE capture and authoritative raw-data recording remain isolated from UI rendering and optional analysis workloads.
 
-Current package version: `1.8.2`
+Current package version: `1.8.3`
 
 ## Architecture
 
@@ -26,6 +26,15 @@ When the optional local `BiWheel3D/registry/models.json` exists, the source app 
 cd applications\wheelathlete_windows
 run_wheelathlete_windows.bat
 ```
+
+The source launcher is self-bootstrapping on a migrated/development Windows PC. It creates an ignored local `.venv`, prefers `uv` to provision Python 3.12, installs the GUI/model runtime requirements when missing, and then starts the normal PySide6 GUI plus acquisition daemon. `Setup.exe` is therefore not required for source-mode development or local research use, although the signed installer remains the supported public install/update/trust path.
+
+Source mode uses the same user-data layout as the installed app:
+
+- recordings: `%USERPROFILE%\Documents\WheelAthlete\PC Sessions`
+- models: `%USERPROFILE%\Documents\WheelAthlete\Model`
+- logs: `%USERPROFILE%\Documents\WheelAthlete\Logs`
+- GUI settings: `%USERPROFILE%\Documents\WheelAthlete\gui_settings.json`
 
 Demo UI without physical boards:
 

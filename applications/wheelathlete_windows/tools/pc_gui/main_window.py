@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import math
+import shutil
 import sys
 import time
 import winsound
@@ -70,6 +73,9 @@ from PySide6.QtWidgets import (
 
 from .controller import BaseController
 from .model_inference import (
+    CURRENT_BEST_KEY,
+    THREE_IMU_V3_KEY,
+    THREE_IMU_V4_KEY,
     ModelSpec,
     active_research_dataset_root,
     custom_model_spec,
@@ -79,7 +85,13 @@ from .model_inference import (
     model_spec_runtime_status,
     run_processed_trial_model,
     run_session_model,
+    _three_imu_spec,
 )
+try:
+    from .biwheel3d_runtime.three_imu_odometry_v2 import load_c3d_reference, _local_reference
+except Exception:
+    load_c3d_reference = None  # type: ignore
+    _local_reference = None  # type: ignore
 from .analysis_timeline import AnalysisTimeline
 from .state import AppViewState
 from .update_controller import UpdateController, UpdateViewState
@@ -577,23 +589,44 @@ def _button(
 
 
 def _table_action_button(
-    text: str, name: str, callback, *, active: bool = False
+    text: str,
+    name: str,
+    callback,
+    *,
+    active: bool = False,
+    model_callback=None,
 ) -> QWidget:
     container = QWidget()
     container.setStyleSheet("background: transparent;")
     layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 2, 0, 2)
-    layout.setSpacing(0)
+    layout.setSpacing(4)
     layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
     btn = QPushButton(text)
     btn.setObjectName(name)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setFixedHeight(26)
-    btn.setFixedWidth(82)
+    btn.setFixedWidth(70 if model_callback else 82)
     if active:
         btn.setProperty("active", "true")
     btn.clicked.connect(callback)
     layout.addWidget(btn)
+
+    if model_callback is not None:
+        m_btn = QPushButton("Model")
+        m_btn.setObjectName("modelRowBtn")
+        m_btn.setAccessibleName("modelRowBtn")
+        m_btn.setToolTip("Analyze this trial directly in MODEL")
+        m_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        m_btn.setFixedHeight(26)
+        m_btn.setFixedWidth(54)
+        m_btn.setStyleSheet(
+            "QPushButton#modelRowBtn { background-color: #0f766e; color: #ffffff; border-radius: 4px; font-weight: 600; font-size: 11px; padding: 2px 4px; border: none; } "
+            "QPushButton#modelRowBtn:hover { background-color: #115e59; }"
+        )
+        m_btn.clicked.connect(model_callback)
+        layout.addWidget(m_btn)
+
     return container
 
 
@@ -1246,7 +1279,7 @@ class AcquisitionPage(QWidget):
     def _countdown_tick(self) -> None:
         self._countdown_remaining -= 1
         if self._countdown_remaining > 0:
-            self.countdown_label.setText(f"Starting in {self._countdown_remaining} s")
+            self.countdown_label.setText(f"Hold still for calibration… {self._countdown_remaining} s")
             _play_tone(700, 120)
             return
         self._countdown_timer.stop()
@@ -1322,7 +1355,7 @@ class AcquisitionPage(QWidget):
             self._record_clock_timer.stop()
             self._countdown_started = True
             self._countdown_remaining = state.countdown
-            self.countdown_label.setText(f"Starting in {state.countdown} s")
+            self.countdown_label.setText(f"Hold still for calibration… {state.countdown} s")
             _play_tone(700, 120)
             self._schedule_start_cue(
                 target_pc_ns=state.recording_target_pc_ns,
@@ -1396,6 +1429,7 @@ class SessionPreviewDrawer(Card):
     """Real-time multi-axis waveform previewer with signal loss and gap detection."""
 
     closed = Signal()
+    model_requested = Signal(str)
 
     def __init__(
         self, controller: BaseController, parent: QWidget | None = None
@@ -1418,8 +1452,15 @@ class SessionPreviewDrawer(Card):
         )
         self.meta_label.setObjectName("mutedText")
 
+        self.open_model_btn = _button(
+            "Open in MODEL", "openModelPreviewBtn", primary=True
+        )
+        self.open_model_btn.setAccessibleName("openModelPreviewBtn")
+        self.open_model_btn.setToolTip("Open this trial directly in MODEL tab for trajectory analysis")
+        self.open_model_btn.setEnabled(False)
+        self.open_model_btn.clicked.connect(self._open_in_model)
         self.export_csv_btn = _button(
-            "Export this CSV", "exportPreviewCsvBtn", primary=True
+            "Export this CSV", "exportPreviewCsvBtn"
         )
         self.export_csv_btn.setEnabled(False)
         self.close_btn = _button("Close Preview", "closePreviewBtn")
@@ -1427,6 +1468,7 @@ class SessionPreviewDrawer(Card):
         header.addWidget(self.title)
         header.addSpacing(10)
         header.addWidget(self.meta_label, 1)
+        header.addWidget(self.open_model_btn)
         header.addWidget(self.export_csv_btn)
         header.addWidget(self.close_btn)
         layout.addLayout(header)
@@ -1598,8 +1640,13 @@ class SessionPreviewDrawer(Card):
         self.export_csv_btn.clicked.connect(self._export_current)
 
     def _close_requested(self) -> None:
+        self.open_model_btn.setEnabled(False)
         self.hide()
         self.closed.emit()
+
+    def _open_in_model(self) -> None:
+        if self._current_session_id:
+            self.model_requested.emit(self._current_session_id)
 
     def _export_current(self) -> None:
         if not self._current_session_id:
@@ -1634,6 +1681,7 @@ class SessionPreviewDrawer(Card):
             f"Rate: {rate_hz} Hz   •   Duration: {duration_s:.1f} s   •   ID: {session_id}"
         )
         self.export_csv_btn.setEnabled(True)
+        self.open_model_btn.setEnabled(True)
 
         gaps = data.get("gaps", [])
         total_missing = data.get("total_missing_samples", 0)
@@ -1778,6 +1826,7 @@ class TopicCard(Card):
 
     selection_changed = Signal()
     preview_requested = Signal(str)
+    model_requested = Signal(str)
     metadata_changed = Signal(str, str, int, str)
     topic_rename_requested = Signal(str, str)
 
@@ -1879,7 +1928,7 @@ class TopicCard(Card):
                 "L samples",
                 "R samples",
                 "C samples",
-                "Preview",
+                "Actions",
             ]
         )
         self.table.verticalHeader().setVisible(False)
@@ -1932,7 +1981,7 @@ class TopicCard(Card):
         self.table.horizontalHeader().setSectionResizeMode(
             9, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(9, 110)
+        self.table.setColumnWidth(9, 140)
         self.table.horizontalHeaderItem(9).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
@@ -2006,6 +2055,7 @@ class TopicCard(Card):
                 "previewTableBtn",
                 lambda _=None, s=sess_id: self.preview_requested.emit(s),
                 active=is_active,
+                model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
             )
             self.table.setCellWidget(row, 9, action_widget)
 
@@ -2025,6 +2075,7 @@ class TopicCard(Card):
                     "previewTableBtn",
                     lambda _=None, s=sess_id: self.preview_requested.emit(s),
                     active=is_active,
+                    model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
                 )
                 self.table.setCellWidget(row, 9, action_widget)
 
@@ -2319,6 +2370,7 @@ class ResultsPage(QWidget):
 
         self.select_all_btn = _button("Select all recordings", "selectAllButton")
         self.deselect_all_btn = _button("Clear selection", "deselectAllButton")
+        self.expand_all_btn = _button("Expand all", "expandAllButton")
 
         self.model_button = _button("Open in MODEL", "openModelButton")
         self.model_button.setAccessibleName("openSelectedInModel")
@@ -2334,6 +2386,7 @@ class ResultsPage(QWidget):
         filter_layout.addWidget(self.search, 2)
         filter_layout.addWidget(self.topic_filter, 1)
         filter_layout.addWidget(self.trial_filter, 1)
+        filter_layout.addWidget(self.expand_all_btn)
         filter_layout.addWidget(self.select_all_btn)
         filter_layout.addWidget(self.deselect_all_btn)
         filter_layout.addWidget(self.model_button)
@@ -2383,7 +2436,7 @@ class ResultsPage(QWidget):
                 "L samples",
                 "R samples",
                 "C samples",
-                "Preview",
+                "Actions",
             ]
         )
         self.table.verticalHeader().setVisible(False)
@@ -2432,7 +2485,7 @@ class ResultsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             10, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(10, 110)
+        self.table.setColumnWidth(10, 140)
         self.table.horizontalHeaderItem(10).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
@@ -2463,6 +2516,7 @@ class ResultsPage(QWidget):
         self.trial_filter.currentTextChanged.connect(self._filter)
         self.select_all_btn.clicked.connect(self._select_all)
         self.deselect_all_btn.clicked.connect(self._deselect_all)
+        self.expand_all_btn.clicked.connect(self._toggle_expand_all)
         self.refresh_button.clicked.connect(controller.refresh_sessions)
         self.change_folder_button.clicked.connect(self._change_folder)
         self.open_folder_button.clicked.connect(self._open_folder)
@@ -2471,6 +2525,7 @@ class ResultsPage(QWidget):
         self.delete_button.clicked.connect(self._delete_selected)
         self.table.itemChanged.connect(self._on_table_item_changed)
         self.preview_drawer.closed.connect(self._on_preview_closed)
+        self.preview_drawer.model_requested.connect(self.model_requested.emit)
 
         self._active_session_id = ""
         controller.sessions_changed.connect(self.update_sessions)
@@ -2602,6 +2657,7 @@ class ResultsPage(QWidget):
                 "previewTableBtn",
                 lambda _=None, s=sess_id: self.preview_session(s),
                 active=is_active,
+                model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
             )
             self.table.setCellWidget(row, 10, action_widget)
 
@@ -2659,6 +2715,7 @@ class ResultsPage(QWidget):
                 card = TopicCard(topic_name, topic_sessions, self.topic_container)
                 card.selection_changed.connect(lambda c=card: self._on_topic_card_selection_changed(c))
                 card.preview_requested.connect(self.preview_session)
+                card.model_requested.connect(self.model_requested.emit)
                 card.metadata_changed.connect(self._save_inline_metadata)
                 card.topic_rename_requested.connect(self._rename_topic_group)
                 if self._active_session_id:
@@ -2708,6 +2765,7 @@ class ResultsPage(QWidget):
                         "previewTableBtn",
                         lambda _=None, s=sess_id: self.preview_session(s),
                         active=is_active,
+                        model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
                     )
                     self.table.setCellWidget(row, 10, action_widget)
 
@@ -2942,6 +3000,12 @@ class ResultsPage(QWidget):
             return
         self.model_requested.emit(session_id)
 
+    def _toggle_expand_all(self) -> None:
+        any_collapsed = any(not card.property("expanded") for card in self._topic_cards)
+        for card in self._topic_cards:
+            card.set_expanded(any_collapsed)
+        self.expand_all_btn.setText("Collapse all" if any_collapsed else "Expand all")
+
     def _select_all(self) -> None:
         self._selected_ids = {str(item["session_id"]) for item in self._sessions}
         self._sync_selection_widgets()
@@ -3026,6 +3090,19 @@ class ResultsPage(QWidget):
 SessionsPage = ResultsPage
 
 
+def _is_three_imu_session(session: dict[str, Any]) -> bool:
+    counts = session.get("sample_counts")
+    if isinstance(counts, dict):
+        return int(counts.get("C", 0) or 0) > 0
+    boards = session.get("boards")
+    if isinstance(boards, dict) and "C" in boards:
+        return True
+    sensors = session.get("sensors") or session.get("sensor_roles") or session.get("roles")
+    if isinstance(sensors, (list, tuple, set)) and "C" in sensors:
+        return True
+    return False
+
+
 class ModelPage(QWidget):
     """Experimental offline BiWheel3D trajectory analysis for finalized recordings."""
 
@@ -3042,6 +3119,10 @@ class ModelPage(QWidget):
         self._analysis_result = None
         self._research_trial_path: Path | None = None
         self._trajectory_bounds: tuple[float, float, float, float] | None = None
+        self._all_sessions: list[dict[str, Any]] = []
+        self._research_items: list[tuple[str, dict[str, Any]]] = []
+        self._loaded_c3d_points: list[tuple[float, float]] | None = None
+        self._loaded_c3d_name: str = ""
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 10, 16, 10)
@@ -3068,6 +3149,17 @@ class ModelPage(QWidget):
         self.session_combo.setAccessibleName("modelSessionCombo")
         self.session_combo.setMinimumWidth(240)
 
+        self.session_search = QLineEdit()
+        self.session_search.setPlaceholderText("Filter recordings…")
+        self.session_search.setAccessibleName("modelSessionFilter")
+        self.session_search.setClearButtonEnabled(True)
+        self.session_search.setMinimumWidth(110)
+
+        session_row = QHBoxLayout()
+        session_row.setSpacing(6)
+        session_row.addWidget(self.session_combo, 2)
+        session_row.addWidget(self.session_search, 1)
+
         self.browse_model_button = _button(
             "Browse model…", "browseModelCheckpointButton"
         )
@@ -3091,20 +3183,94 @@ class ModelPage(QWidget):
         self.model_detail = QLabel("")
         self.model_detail.setObjectName("mutedText")
         self.model_detail.setWordWrap(True)
+        self.model_detail.hide()
         self.runtime_label = QLabel("")
         self.runtime_label.setObjectName("mutedText")
         self.runtime_label.setWordWrap(True)
+        self.runtime_label.hide()
+
+        options_row = QHBoxLayout()
+        options_row.setSpacing(8)
+
+        compare_label = QLabel("Compare:")
+        compare_label.setObjectName("mutedText")
+        options_row.addWidget(compare_label)
+
+        self.comp_dual_hub = QCheckBox("Dual-Hub 2-IMU")
+        self.comp_dual_hub.setObjectName("modelCompareCheckbox")
+        self.comp_dual_hub.setAccessibleName("modelCompareCheckbox")
+        self.comp_dual_hub.setToolTip(
+            "Overlay Dual-Hub (2-IMU) kinematic baseline in Amber dash-dot line"
+        )
+        self.compare_checkbox = self.comp_dual_hub
+        options_row.addWidget(self.comp_dual_hub)
+
+        self.comp_v5 = QCheckBox("3-IMU v5")
+        self.comp_v5.setObjectName("compV5Checkbox")
+        self.comp_v5.setAccessibleName("compV5Checkbox")
+        self.comp_v5.setToolTip("Overlay research-only 3-IMU v5 trajectory")
+        options_row.addWidget(self.comp_v5)
+
+        self.comp_v4 = QCheckBox("3-IMU v4")
+        self.comp_v4.setObjectName("compV4Checkbox")
+        self.comp_v4.setAccessibleName("compV4Checkbox")
+        self.comp_v4.setToolTip("Overlay 3-IMU v4 trajectory in Teal line")
+        options_row.addWidget(self.comp_v4)
+
+        self.comp_v3 = QCheckBox("3-IMU v3")
+        self.comp_v3.setObjectName("compV3Checkbox")
+        self.comp_v3.setAccessibleName("compV3Checkbox")
+        self.comp_v3.setToolTip("Overlay 3-IMU v3 trajectory in Blue dotted line")
+        options_row.addWidget(self.comp_v3)
+
+        self.comp_v2 = QCheckBox("3-IMU v2")
+        self.comp_v2.setObjectName("compV2Checkbox")
+        self.comp_v2.setAccessibleName("compV2Checkbox")
+        self.comp_v2.setToolTip("Overlay 3-IMU v2 trajectory in Purple dash-dot line")
+        options_row.addWidget(self.comp_v2)
+
+        self.comp_c3d = QCheckBox("C3D GT")
+        self.comp_c3d.setObjectName("compC3DCheckbox")
+        self.comp_c3d.setAccessibleName("compC3DCheckbox")
+        self.comp_c3d.setToolTip("Overlay C3D optical Ground Truth in Slate dashed line")
+        options_row.addWidget(self.comp_c3d)
+
+        self.import_c3d_button = _button("Import C3D…", "importC3dButton")
+        self.import_c3d_button.setAccessibleName("importC3dButton")
+        self.import_c3d_button.setToolTip(
+            "Import external C3D file for comparison (saved to Documents/WheelAthlete/C3D)"
+        )
+        options_row.addWidget(self.import_c3d_button)
+
+        options_row.addStretch()
+
+        self.export_image_button = _button(
+            "Export trajectory image…", "exportTrajectoryImageButton"
+        )
+        self.export_image_button.setAccessibleName("exportTrajectoryImageButton")
+        self.export_image_button.setEnabled(False)
+        self.export_image_button.setToolTip("Export 2D planar trajectory chart as PNG image")
+        options_row.addWidget(self.export_image_button)
+
+        self.export_csv_button = _button(
+            "Export trajectory CSV…", "exportTrajectoryCsvButton"
+        )
+        self.export_csv_button.setAccessibleName("exportTrajectoryCsvButton")
+        self.export_csv_button.setEnabled(False)
+        self.export_csv_button.setToolTip("Export trajectory coordinates, speed, and heading to CSV")
+        options_row.addWidget(self.export_csv_button)
 
         controls_layout.addWidget(model_label, 0, 0)
         controls_layout.addWidget(self.model_combo, 0, 1)
         controls_layout.addWidget(self.browse_model_button, 0, 2)
         controls_layout.addWidget(self.refresh_models_button, 0, 3)
         controls_layout.addWidget(session_label, 1, 0)
-        controls_layout.addWidget(self.session_combo, 1, 1)
+        controls_layout.addLayout(session_row, 1, 1)
         controls_layout.addWidget(self.browse_research_button, 1, 2)
         controls_layout.addWidget(self.generate_button, 1, 3)
         controls_layout.addWidget(self.model_detail, 2, 0, 1, 4)
         controls_layout.addWidget(self.runtime_label, 3, 0, 1, 4)
+        controls_layout.addLayout(options_row, 4, 0, 1, 4)
         controls_layout.setColumnStretch(1, 2)
         root.addWidget(controls)
 
@@ -3149,11 +3315,49 @@ class ModelPage(QWidget):
         self.trajectory_series = QLineSeries()
         self.trajectory_series.setName("Estimated path")
         self.trajectory_series.setPen(QPen(QColor("#0f766e"), 2.4))
-        self.ground_truth_series = QLineSeries()
-        self.ground_truth_series.setName("C3D GT (full-cache diagnostic)")
-        self.ground_truth_series.setPen(
-            QPen(QColor("#64748b"), 1.8, Qt.PenStyle.DashLine)
+
+        self.comparison_series = QLineSeries()
+        self.comparison_series.setName("Dual-Hub (2-IMU)")
+        self.comparison_series.setPen(
+            QPen(QColor("#f59e0b"), 2.0, Qt.PenStyle.DashDotLine)
         )
+        self.comparison_series.setVisible(False)
+
+        self.comp_v5_series = QLineSeries()
+        self.comp_v5_series.setName("3-IMU v5")
+        self.comp_v5_series.setPen(
+            QPen(QColor("#16a34a"), 2.2, Qt.PenStyle.SolidLine)
+        )
+        self.comp_v5_series.setVisible(False)
+
+        self.comp_v4_series = QLineSeries()
+        self.comp_v4_series.setName("3-IMU v4")
+        self.comp_v4_series.setPen(
+            QPen(QColor("#0d9488"), 2.0, Qt.PenStyle.SolidLine)
+        )
+        self.comp_v4_series.setVisible(False)
+
+        self.comp_v3_series = QLineSeries()
+        self.comp_v3_series.setName("3-IMU v3")
+        self.comp_v3_series.setPen(
+            QPen(QColor("#2563eb"), 2.0, Qt.PenStyle.DotLine)
+        )
+        self.comp_v3_series.setVisible(False)
+
+        self.comp_v2_series = QLineSeries()
+        self.comp_v2_series.setName("3-IMU v2")
+        self.comp_v2_series.setPen(
+            QPen(QColor("#9333ea"), 2.0, Qt.PenStyle.DashDotLine)
+        )
+        self.comp_v2_series.setVisible(False)
+
+        self.ground_truth_series = QLineSeries()
+        self.ground_truth_series.setName("C3D Ground Truth")
+        self.ground_truth_series.setPen(
+            QPen(QColor("#334155"), 2.0, Qt.PenStyle.DashLine)
+        )
+        self.ground_truth_series.setVisible(False)
+
         self.start_series = QScatterSeries()
         self.start_series.setName("Start")
         self.start_series.setMarkerSize(10.0)
@@ -3168,8 +3372,14 @@ class ModelPage(QWidget):
         self.window_series = QLineSeries()
         self.window_series.setName("Window")
         self.window_series.setPen(QPen(QColor("#ea580c"), 3.0, Qt.PenStyle.DashLine))
+        self.window_series.setVisible(False)
         for series in (
             self.trajectory_series,
+            self.comparison_series,
+            self.comp_v5_series,
+            self.comp_v4_series,
+            self.comp_v3_series,
+            self.comp_v2_series,
             self.ground_truth_series,
             self.start_series,
             self.end_series,
@@ -3190,6 +3400,11 @@ class ModelPage(QWidget):
         self.chart.addAxis(self.axis_y, Qt.AlignmentFlag.AlignLeft)
         for series in (
             self.trajectory_series,
+            self.comparison_series,
+            self.comp_v5_series,
+            self.comp_v4_series,
+            self.comp_v3_series,
+            self.comp_v2_series,
             self.ground_truth_series,
             self.start_series,
             self.end_series,
@@ -3232,10 +3447,22 @@ class ModelPage(QWidget):
         self.refresh_models_button.clicked.connect(self.refresh_models)
         self.browse_research_button.clicked.connect(self.browse_research_trial)
         self.generate_button.clicked.connect(self.generate_trajectory)
+        self.export_csv_button.clicked.connect(self.export_trajectory_csv)
+        self.export_image_button.clicked.connect(self.export_trajectory_image)
+        self.import_c3d_button.clicked.connect(self.import_c3d_file)
+        self.comp_dual_hub.toggled.connect(self._on_comparison_toggled)
+        self.comp_v5.toggled.connect(self._on_comparison_toggled)
+        self.comp_v4.toggled.connect(self._on_comparison_toggled)
+        self.comp_v3.toggled.connect(self._on_comparison_toggled)
+        self.comp_v2.toggled.connect(self._on_comparison_toggled)
+        self.comp_c3d.toggled.connect(self._on_comparison_toggled)
         self.analysis_ready.connect(self._on_analysis_ready)
         self.analysis_failed.connect(self._on_analysis_failed)
         controller.sessions_changed.connect(self.update_sessions)
+        self.session_search.textChanged.connect(self._on_session_search_changed)
+        self.session_combo.currentIndexChanged.connect(self._auto_match_model_for_session)
         self.session_combo.currentIndexChanged.connect(self._invalidate_analysis)
+        self.session_combo.currentIndexChanged.connect(self._update_model_detail)
         self.model_combo.currentIndexChanged.connect(self._invalidate_analysis)
 
         self.refresh_models()
@@ -3262,6 +3489,7 @@ class ModelPage(QWidget):
                     self.model_combo.setCurrentIndex(index)
                     break
         self.model_combo.blockSignals(False)
+        self._auto_match_model_for_session()
         ready, detail = model_runtime_status(self.repo_root)
         if not ready:
             self.runtime_label.setText("Unavailable · " + detail)
@@ -3269,9 +3497,25 @@ class ModelPage(QWidget):
 
     def update_sessions(self, sessions: list[dict[str, Any]]) -> None:
         current_id = str(self.session_combo.currentData() or "")
+        self._all_sessions = [dict(s) for s in sessions if s.get("session_id")]
+        self._repopulate_session_combo()
+        if current_id:
+            self.select_session(current_id)
+        if current_id != str(self.session_combo.currentData() or ""):
+            self._invalidate_analysis()
+        self._auto_match_model_for_session()
+        self._update_model_detail()
+
+    def _on_session_search_changed(self, _text: str) -> None:
+        self._repopulate_session_combo()
+
+    def _repopulate_session_combo(self) -> None:
+        current_data = self.session_combo.currentData()
+        query = self.session_search.text().strip().lower()
         self.session_combo.blockSignals(True)
         self.session_combo.clear()
-        for session in sessions:
+
+        for session in self._all_sessions:
             session_id = str(session.get("session_id") or "")
             if not session_id:
                 continue
@@ -3279,32 +3523,113 @@ class ModelPage(QWidget):
             trial = session.get("trial_number", "—")
             athlete = str(session.get("athlete") or "Athlete")
             quality = str(session.get("quality") or "UNKNOWN")
-            self.session_combo.addItem(
-                f"{topic} · Trial {trial} · {athlete} · {quality}",
-                session_id,
-            )
-        if current_id:
-            self.select_session(current_id)
+            is_3imu = _is_three_imu_session(session)
+            tag = "[3-IMU]" if is_3imu else "[2-IMU]"
+            display_text = f"{tag} {topic} · Trial {trial} · {athlete} · {quality}"
+            if query:
+                haystack = f"{display_text} {session_id}".lower()
+                if query not in haystack:
+                    continue
+            self.session_combo.addItem(display_text, session_id)
+
+        for label, payload in self._research_items:
+            if query:
+                haystack = f"{label} {payload.get('path', '')}".lower()
+                if query not in haystack:
+                    continue
+            self.session_combo.addItem(label, payload)
+
+        if current_data is not None:
+            for index in range(self.session_combo.count()):
+                if self.session_combo.itemData(index) == current_data:
+                    self.session_combo.setCurrentIndex(index)
+                    break
+
         self.session_combo.blockSignals(False)
-        if current_id != str(self.session_combo.currentData() or ""):
-            self._invalidate_analysis()
-        spec = self.model_combo.currentData()
-        ready = False
-        if isinstance(spec, ModelSpec):
-            ready, _ = model_spec_runtime_status(spec)
-        self.generate_button.setEnabled(
-            ready and self.session_combo.count() > 0 and not self._running
-        )
 
     def select_session(self, session_id: str) -> bool:
         for index in range(self.session_combo.count()):
-            if str(self.session_combo.itemData(index) or "") == session_id:
+            data = self.session_combo.itemData(index)
+            if str(data or "") == session_id or (
+                isinstance(data, dict) and str(data.get("path") or "") == session_id
+            ):
                 self.session_combo.setCurrentIndex(index)
+                self._auto_match_model_for_session()
+                self._update_model_detail()
                 return True
+        if self.session_search.text():
+            self.session_search.clear()
+            for index in range(self.session_combo.count()):
+                data = self.session_combo.itemData(index)
+                if str(data or "") == session_id or (
+                    isinstance(data, dict) and str(data.get("path") or "") == session_id
+                ):
+                    self.session_combo.setCurrentIndex(index)
+                    self._auto_match_model_for_session()
+                    self._update_model_detail()
+                    return True
         return False
+
+    def _auto_match_model_for_session(self) -> None:
+        current_data = self.session_combo.currentData()
+        if current_data is None:
+            return
+
+        is_3imu = False
+        if isinstance(current_data, str) and current_data:
+            sess = next(
+                (
+                    s
+                    for s in self._all_sessions
+                    if str(s.get("session_id") or "") == current_data
+                ),
+                None,
+            )
+            if sess is not None:
+                is_3imu = _is_three_imu_session(sess)
+
+        current_spec = self.model_combo.currentData()
+        if isinstance(current_spec, ModelSpec):
+            if is_3imu and "C" in current_spec.required_sensor_roles:
+                return
+            if not is_3imu and "C" not in current_spec.required_sensor_roles:
+                return
+
+        target_key = THREE_IMU_V3_KEY if is_3imu else CURRENT_BEST_KEY
+
+        target_index = -1
+        for index in range(self.model_combo.count()):
+            spec = self.model_combo.itemData(index)
+            if isinstance(spec, ModelSpec) and spec.key == target_key:
+                target_index = index
+                break
+
+        if target_index == -1:
+            for index in range(self.model_combo.count()):
+                spec = self.model_combo.itemData(index)
+                if isinstance(spec, ModelSpec):
+                    if is_3imu and "C" in spec.required_sensor_roles:
+                        target_index = index
+                        break
+                    elif not is_3imu and "C" not in spec.required_sensor_roles:
+                        target_index = index
+                        break
+
+        if target_index >= 0 and target_index != self.model_combo.currentIndex():
+            self.model_combo.setCurrentIndex(target_index)
 
     def _update_model_detail(self) -> None:
         spec = self.model_combo.currentData()
+        current_data = self.session_combo.currentData()
+        session_is_2imu = False
+        if isinstance(current_data, str) and current_data:
+            sess = next(
+                (s for s in self._all_sessions if str(s.get("session_id") or "") == current_data),
+                None,
+            )
+            if sess is not None and not _is_three_imu_session(sess):
+                session_is_2imu = True
+
         if isinstance(spec, ModelSpec):
             outputs = ", ".join(name for name, _unit in spec.output_capabilities) or "legacy contract"
             maturity = "Experimental" if spec.experimental else "Supported"
@@ -3324,8 +3649,16 @@ class ModelPage(QWidget):
                 f"{desc_text}{technical}  ·  {spec.checkpoint}"
             )
             ready, detail = model_spec_runtime_status(spec)
+            role_mismatch = session_is_2imu and ("C" in spec.required_sensor_roles)
+            if role_mismatch:
+                ready = False
+                detail = "⚠️ Requires Wheel C · Recording has 2 IMUs only. Choose 'Kinematic Trajectory (XY + Yaw)' or 'Mobile M4'"
+                self.generate_button.setToolTip("Selected model requires 3 IMUs (Wheel C), but this recording only has Left and Right wheels.")
+            else:
+                self.generate_button.setToolTip("")
+
             self.runtime_label.setText(
-                ("Ready · " if ready else "Unavailable · ") + detail
+                ("Ready · " if ready else "Unavailable · " if not role_mismatch else "") + detail
             )
             self.model_combo.setToolTip(
                 f"{spec.description}\n{technical}\n{spec.checkpoint}\n"
@@ -3341,6 +3674,9 @@ class ModelPage(QWidget):
             self.runtime_label.setText(f"Model folder · {model_library_root()}")
             self.model_combo.setToolTip(f"Model folder: {model_library_root()}")
             self.generate_button.setEnabled(False)
+            self.generate_button.setToolTip("")
+        self.model_detail.hide()
+        self.runtime_label.hide()
 
     def browse_model(self) -> None:
         current = self.model_combo.currentData()
@@ -3418,14 +3754,10 @@ class ModelPage(QWidget):
         label = f"Research NPZ · {trial.meta.trial_id} · {trial.meta.condition} · " + (
             "C3D GT" if trial.meta.has_gt else "IMU only"
         )
-        for index in range(self.session_combo.count()):
-            existing = self.session_combo.itemData(index)
-            if isinstance(existing, dict) and existing.get("path") == str(path):
-                self.session_combo.setCurrentIndex(index)
-                break
-        else:
-            self.session_combo.addItem(label, payload)
-            self.session_combo.setCurrentIndex(self.session_combo.count() - 1)
+        if not any(item[1].get("path") == str(path) for item in self._research_items):
+            self._research_items.append((label, payload))
+        self._repopulate_session_combo()
+        self.select_session(str(path))
         self.status_label.setText(
             "Selected read-only research NPZ. C3D overlay, when available, is a full-cache diagnostic rather than the support-masked validation score."
         )
@@ -3448,6 +3780,14 @@ class ModelPage(QWidget):
             return
 
         recording_label = self.session_combo.currentText().strip() or session_id
+        compare_dual = self.comp_dual_hub.isChecked()
+        compare_v5 = self.comp_v5.isChecked()
+        compare_v4 = self.comp_v4.isChecked()
+        compare_v3 = self.comp_v3.isChecked()
+        compare_v2 = self.comp_v2.isChecked()
+        compare_c3d = self.comp_c3d.isChecked()
+        loaded_c3d = list(self._loaded_c3d_points) if self._loaded_c3d_points else None
+
         self._invalidate_analysis()
         generation = self._generation
         self._set_running(True)
@@ -3461,9 +3801,129 @@ class ModelPage(QWidget):
                     result = run_processed_trial_model(
                         self.repo_root, spec, research_path
                     )
+                    if compare_dual:
+                        dual_spec = next(
+                            (s for s in self._models if s.key == CURRENT_BEST_KEY),
+                            None,
+                        )
+                        if dual_spec is not None and dual_spec.key != spec.key:
+                            try:
+                                cres = run_processed_trial_model(
+                                    self.repo_root, dual_spec, research_path
+                                )
+                                result["comp_dual_hub_xy"] = cres.get("xy")
+                                result["comparison_xy"] = cres.get("xy")
+                            except Exception:
+                                pass
+                    if compare_v5 and getattr(spec, "model_version", None) != 5:
+                        try:
+                            v5_spec = _three_imu_spec(5)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v5_spec, research_path
+                            )
+                            result["comp_v5_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v4 and getattr(spec, "model_version", None) != 4:
+                        try:
+                            v4_spec = _three_imu_spec(4)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v4_spec, research_path
+                            )
+                            result["comp_v4_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v3 and getattr(spec, "model_version", None) != 3:
+                        try:
+                            v3_spec = _three_imu_spec(3)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v3_spec, research_path
+                            )
+                            result["comp_v3_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v2 and getattr(spec, "model_version", None) != 2:
+                        try:
+                            v2_spec = _three_imu_spec(2)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v2_spec, research_path
+                            )
+                            result["comp_v2_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_c3d and loaded_c3d:
+                        result["ground_truth_xy"] = loaded_c3d
                 else:
                     session_data = self.controller.load_session_data(session_id)
                     result = run_session_model(self.repo_root, spec, session_data)
+                    if compare_dual:
+                        dual_spec = next(
+                            (s for s in self._models if s.key == CURRENT_BEST_KEY),
+                            next(
+                                (
+                                    s
+                                    for s in self._models
+                                    if "C" not in s.required_sensor_roles
+                                ),
+                                None,
+                            ),
+                        )
+                        if dual_spec is not None and dual_spec.key != spec.key:
+                            try:
+                                comp_res = run_session_model(
+                                    self.repo_root, dual_spec, session_data
+                                )
+                                result["comp_dual_hub_xy"] = comp_res.get("xy")
+                                result["comparison_xy"] = comp_res.get("xy")
+                                result["comparison_label"] = dual_spec.label
+                            except Exception:
+                                pass
+                    if compare_v5 and getattr(spec, "model_version", None) != 5:
+                        try:
+                            v5_spec = _three_imu_spec(5)
+                            cres = run_session_model(
+                                self.repo_root, v5_spec, session_data
+                            )
+                            result["comp_v5_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v4 and getattr(spec, "model_version", None) != 4:
+                        try:
+                            v4_spec = _three_imu_spec(4)
+                            cres = run_session_model(
+                                self.repo_root, v4_spec, session_data
+                            )
+                            result["comp_v4_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v3 and getattr(spec, "model_version", None) != 3:
+                        try:
+                            v3_spec = _three_imu_spec(3)
+                            cres = run_session_model(
+                                self.repo_root, v3_spec, session_data
+                            )
+                            result["comp_v3_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v2 and getattr(spec, "model_version", None) != 2:
+                        try:
+                            v2_spec = _three_imu_spec(2)
+                            cres = run_session_model(
+                                self.repo_root, v2_spec, session_data
+                            )
+                            result["comp_v2_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_c3d:
+                        if loaded_c3d:
+                            result["ground_truth_xy"] = loaded_c3d
+                        else:
+                            _, c3d_pts = self._find_matching_c3d(
+                                session_data, session_id
+                            )
+                            if c3d_pts:
+                                result["ground_truth_xy"] = c3d_pts
+
                 result["recording_label"] = recording_label
             except Exception as exc:  # worker boundary: surface a readable UI error
                 try:
@@ -3489,6 +3949,19 @@ class ModelPage(QWidget):
         self.browse_model_button.setEnabled(not running)
         self.refresh_models_button.setEnabled(not running)
         self.browse_research_button.setEnabled(not running)
+        self.comp_dual_hub.setEnabled(not running)
+        self.comp_v5.setEnabled(not running)
+        self.comp_v4.setEnabled(not running)
+        self.comp_v3.setEnabled(not running)
+        self.comp_v2.setEnabled(not running)
+        self.comp_c3d.setEnabled(not running)
+        self.import_c3d_button.setEnabled(not running)
+        self.export_csv_button.setEnabled(
+            not running and self._analysis_result is not None
+        )
+        self.export_image_button.setEnabled(
+            not running and self._analysis_result is not None
+        )
         if running:
             self.generate_button.setEnabled(False)
             self.generate_button.setText("Generating…")
@@ -3502,16 +3975,26 @@ class ModelPage(QWidget):
 
     def _on_analysis_failed(self, message) -> None:
         self._set_running(False)
+        self.export_csv_button.setEnabled(False)
         if isinstance(message, dict):
             if message.get("generation") != self._generation:
                 return
             message = message.get("message", "Analysis failed")
+        self.chart.setTitle(f"Analysis failed · {message}")
         self.status_label.setText(f"MODEL error · {message}")
 
     def _apply_equal_aspect_ranges(self) -> None:
         """Render trajectory on a square plot with identical X/Y numeric scale."""
         if self._trajectory_bounds is None:
             return
+
+        x_min, x_max, y_min, y_max = self._trajectory_bounds
+        center_x = (x_min + x_max) / 2.0
+        center_y = (y_min + y_max) / 2.0
+        span = max(x_max - x_min, y_max - y_min, 0.5) * 1.16
+        half = span / 2.0
+        self.axis_x.setRange(center_x - half, center_x + half)
+        self.axis_y.setRange(center_y - half, center_y + half)
 
         # Let Qt calculate the natural plot area first, then inscribe a centered
         # square inside it. Equal axis spans on a square plot guarantee true 1:1
@@ -3532,16 +4015,13 @@ class ModelPage(QWidget):
         )
         self.chart.setPlotArea(square)
 
-        x_min, x_max, y_min, y_max = self._trajectory_bounds
-        center_x = (x_min + x_max) / 2.0
-        center_y = (y_min + y_max) / 2.0
-        span = max(x_max - x_min, y_max - y_min, 0.5) * 1.16
-        half = span / 2.0
-        self.axis_x.setRange(center_x - half, center_x + half)
-        self.axis_y.setRange(center_y - half, center_y + half)
-
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if self._trajectory_bounds is not None:
+            QTimer.singleShot(0, self._apply_equal_aspect_ranges)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
         if self._trajectory_bounds is not None:
             QTimer.singleShot(0, self._apply_equal_aspect_ranges)
 
@@ -3566,32 +4046,34 @@ class ModelPage(QWidget):
         display_points = points[::stride]
         if display_points[-1] != points[-1]:
             display_points.append(points[-1])
-        qpoints = [QPointF(float(x), float(y)) for x, y in display_points]
-        self.trajectory_series.replace(qpoints)
-        gt_points = list(result.get("ground_truth_xy") or [])
-        if gt_points:
-            gt_stride = max(1, len(gt_points) // 5000)
-            gt_display = gt_points[::gt_stride]
-            if gt_display[-1] != gt_points[-1]:
-                gt_display.append(gt_points[-1])
-            self.ground_truth_series.replace(
-                [QPointF(float(x), float(y)) for x, y in gt_display]
-            )
-            self.chart.legend().setVisible(True)
-        else:
-            self.ground_truth_series.clear()
-            self.chart.legend().setVisible(False)
-        self.start_series.clear()
-        self.end_series.clear()
-        self.start_series.append(qpoints[0])
-        self.end_series.append(qpoints[-1])
+        if result.get("comparison_xy") or result.get("comp_dual_hub_xy"):
+            self.comp_dual_hub.blockSignals(True)
+            self.comp_dual_hub.setChecked(True)
+            self.comp_dual_hub.blockSignals(False)
+        if result.get("ground_truth_xy"):
+            self.comp_c3d.blockSignals(True)
+            self.comp_c3d.setChecked(True)
+            self.comp_c3d.blockSignals(False)
+        if result.get("comp_v5_xy"):
+            self.comp_v5.blockSignals(True)
+            self.comp_v5.setChecked(True)
+            self.comp_v5.blockSignals(False)
+        if result.get("comp_v4_xy"):
+            self.comp_v4.blockSignals(True)
+            self.comp_v4.setChecked(True)
+            self.comp_v4.blockSignals(False)
+        if result.get("comp_v3_xy"):
+            self.comp_v3.blockSignals(True)
+            self.comp_v3.setChecked(True)
+            self.comp_v3.blockSignals(False)
+        if result.get("comp_v2_xy"):
+            self.comp_v2.blockSignals(True)
+            self.comp_v2.setChecked(True)
+            self.comp_v2.blockSignals(False)
 
-        xs = [float(point[0]) for point in points]
-        ys = [float(point[1]) for point in points]
-        if gt_points:
-            xs.extend(float(point[0]) for point in gt_points)
-            ys.extend(float(point[1]) for point in gt_points)
-        self._trajectory_bounds = (min(xs), max(xs), min(ys), max(ys))
+        self._update_all_series()
+        self.export_csv_button.setEnabled(True)
+        self.export_image_button.setEnabled(True)
 
         model_label = str(result.get("model_label") or "Model")
         session_id = str(result.get("session_id") or "")
@@ -3708,7 +4190,7 @@ class ModelPage(QWidget):
                 )
             self.status_label.setText(
                 f"Experimental offline estimate | {len(points):,} samples{suffix} | "
-                "solid: estimate; gray dashed: C3D GT when available; orange dashed: selected window. See quality details before interpreting."
+                "Compare models and C3D ground truth using options above."
             )
         else:
             self.status_label.setText(detail)
@@ -3721,6 +4203,11 @@ class ModelPage(QWidget):
         self.timeline.set_analysis(None)
         for series in (
             self.trajectory_series,
+            self.comparison_series,
+            self.comp_v5_series,
+            self.comp_v4_series,
+            self.comp_v3_series,
+            self.comp_v2_series,
             self.ground_truth_series,
             self.start_series,
             self.end_series,
@@ -3728,6 +4215,8 @@ class ModelPage(QWidget):
             self.window_series,
         ):
             series.clear()
+        self.export_csv_button.setEnabled(False)
+        self.export_image_button.setEnabled(False)
         self.chart.legend().setVisible(False)
         for label in (
             self.metric_model,
@@ -3758,6 +4247,374 @@ class ModelPage(QWidget):
         if display and display[-1] is not rows[-1]:
             display.append(rows[-1])
         self.window_series.replace([QPointF(row["x_m"], row["y_m"]) for row in display])
+
+    def export_trajectory_csv(self) -> None:
+        if not self._analysis_result:
+            return
+        session_id = str(self._analysis_result.get("session_id") or "trajectory")
+        default_dir = str(Path.home() / "Documents" / "WheelAthlete" / "Exports")
+        Path(default_dir).mkdir(parents=True, exist_ok=True)
+        default_file = str(Path(default_dir) / f"{session_id}_trajectory.csv")
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Trajectory CSV",
+            default_file,
+            "CSV files (*.csv);;All files (*.*)",
+        )
+        if not output:
+            return
+
+        analysis = self._analysis_result.get("analysis") or {}
+        samples = analysis.get("samples")
+        try:
+            with open(output, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "time_s",
+                    "x_m",
+                    "y_m",
+                    "signed_speed_mps",
+                    "speed_mps",
+                    "yaw_rad",
+                    "yaw_deg",
+                    "yaw_rate_radps",
+                ])
+                if samples:
+                    for s in samples:
+                        yaw_rad = s.get("yaw_rad")
+                        yaw_deg = math.degrees(yaw_rad) if yaw_rad is not None else ""
+                        writer.writerow([
+                            s.get("time_s", ""),
+                            f"{s['x_m']:.6f}" if s.get("x_m") is not None else "",
+                            f"{s['y_m']:.6f}" if s.get("y_m") is not None else "",
+                            f"{s['signed_speed_mps']:.4f}" if s.get("signed_speed_mps") is not None else "",
+                            f"{s['speed_mps']:.4f}" if s.get("speed_mps") is not None else "",
+                            f"{yaw_rad:.6f}" if yaw_rad is not None else "",
+                            f"{yaw_deg:.3f}" if yaw_deg != "" else "",
+                            f"{s['yaw_rate_radps']:.6f}" if s.get("yaw_rate_radps") is not None else "",
+                        ])
+                else:
+                    xy = self._analysis_result.get("xy") or []
+                    for i, (x, y) in enumerate(xy):
+                        writer.writerow([f"{i * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}", "", "", "", "", ""])
+            self.status_label.setText(f"Trajectory exported to {output}")
+        except Exception as exc:
+            self.status_label.setText(f"Failed to export CSV · {exc}")
+
+    def export_trajectory_image(self) -> None:
+        if not self._analysis_result:
+            return
+        session_id = str(self._analysis_result.get("session_id") or "trajectory")
+        safe_id = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in session_id
+        )
+        default_dir = str(Path.home() / "Documents" / "WheelAthlete" / "Exports")
+        Path(default_dir).mkdir(parents=True, exist_ok=True)
+        default_file = str(Path(default_dir) / f"{safe_id}_trajectory.png")
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Trajectory Image",
+            default_file,
+            "PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;All files (*.*)",
+        )
+        if not output:
+            return
+        pixmap = self.chart_view.grab()
+        if pixmap.save(output):
+            self.status_label.setText(
+                f"Exported trajectory image to {Path(output).name}."
+            )
+        else:
+            self.status_label.setText("Failed to save trajectory image.")
+
+    def import_c3d_file(self) -> None:
+        c3d_dir = Path.home() / "Documents" / "WheelAthlete" / "C3D"
+        c3d_dir.mkdir(parents=True, exist_ok=True)
+        chosen, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import C3D Ground Truth",
+            str(c3d_dir),
+            "C3D files (*.c3d);;All files (*.*)",
+        )
+        if not chosen:
+            return
+        src_path = Path(chosen)
+        dest_path = c3d_dir / src_path.name
+        try:
+            if src_path.resolve() != dest_path.resolve():
+                shutil.copy2(src_path, dest_path)
+            if load_c3d_reference is None or _local_reference is None:
+                raise RuntimeError("ezc3d / c3d loader is not available")
+            ref = load_c3d_reference(dest_path)
+            gt_xy, _ = _local_reference(ref)
+            points = [(float(x), float(y)) for x, y in gt_xy]
+            self._loaded_c3d_points = points
+            self._loaded_c3d_name = dest_path.name
+            self.comp_c3d.setChecked(True)
+            if self._analysis_result is not None:
+                self._analysis_result["ground_truth_xy"] = points
+                self._update_all_series()
+            self.status_label.setText(
+                f"Imported C3D reference: {dest_path.name} ({len(points):,} points). Saved copy to Documents/WheelAthlete/C3D."
+            )
+        except Exception as exc:
+            self.status_label.setText(f"Failed to load C3D: {exc}")
+
+    def _find_matching_c3d(
+        self, session_data: dict[str, Any] | None, session_id: str
+    ) -> tuple[Path | None, list[tuple[float, float]] | None]:
+        if load_c3d_reference is None or _local_reference is None:
+            return None, None
+        c3d_dir = Path.home() / "Documents" / "WheelAthlete" / "C3D"
+        c3d_dir.mkdir(parents=True, exist_ok=True)
+
+        topic = ""
+        trial_num = ""
+        if session_data:
+            topic = str(session_data.get("topic") or "").strip().lower()
+            trial_num = str(session_data.get("trial_number") or "").strip().lower()
+        if not topic or not trial_num:
+            parts = session_id.lower().replace("-", "_").split("_")
+            for part in parts:
+                if any(
+                    t in part
+                    for t in [
+                        "slup",
+                        "10x5up",
+                        "10x5",
+                        "pvcr",
+                        "pvar",
+                        "ospt",
+                        "os",
+                        "sp",
+                        "ar",
+                        "cw",
+                        "7_5",
+                    ]
+                ):
+                    topic = part
+                if "trial" in part:
+                    digits = "".join(filter(str.isdigit, part))
+                    if digits:
+                        trial_num = digits
+                elif part.isdigit() and not trial_num:
+                    trial_num = part
+
+        candidates: list[Path] = []
+        if topic and trial_num:
+            pad_trial = f"{int(trial_num):02d}" if trial_num.isdigit() else trial_num
+            for p in c3d_dir.glob("*.c3d"):
+                name = p.stem.lower()
+                if topic in name and (
+                    pad_trial in name
+                    or f"trial_{pad_trial}" in name
+                    or f"trial{trial_num}" in name
+                ):
+                    candidates.append(p)
+
+        if not candidates and topic and trial_num:
+            pad_trial = f"{int(trial_num):02d}" if trial_num.isdigit() else trial_num
+            biwheel_dir = self.repo_root / "BiWheel3D" / "data"
+            if biwheel_dir.is_dir():
+                for p in biwheel_dir.glob("**/*.c3d"):
+                    name = p.name.lower()
+                    parent_name = p.parent.name.lower()
+                    if (parent_name == topic or topic in name) and (
+                        f"trial_{pad_trial}" in name
+                        or f"trial_{trial_num}" in name
+                        or f"_{pad_trial}_" in name
+                    ):
+                        candidates.append(p)
+                        break
+
+        if candidates:
+            match_file = candidates[0]
+            dest_file = c3d_dir / f"{topic.upper()}_Trial{trial_num}.c3d"
+            if not dest_file.exists() or dest_file.stat().st_size == 0:
+                try:
+                    shutil.copy2(match_file, dest_file)
+                except Exception:
+                    dest_file = match_file
+            try:
+                ref = load_c3d_reference(dest_file)
+                gt_xy, _ = _local_reference(ref)
+                points = [(float(x), float(y)) for x, y in gt_xy]
+                return dest_file, points
+            except Exception:
+                pass
+
+        return None, None
+
+    def _on_comparison_toggled(self, *_):
+        if self._analysis_result is not None:
+            need_recompute = False
+            if self.comp_dual_hub.isChecked() and not (
+                self._analysis_result.get("comp_dual_hub_xy")
+                or self._analysis_result.get("comparison_xy")
+            ):
+                need_recompute = True
+            if self.comp_v5.isChecked() and not self._analysis_result.get("comp_v5_xy"):
+                need_recompute = True
+            if self.comp_v4.isChecked() and not self._analysis_result.get("comp_v4_xy"):
+                need_recompute = True
+            if self.comp_v3.isChecked() and not self._analysis_result.get("comp_v3_xy"):
+                need_recompute = True
+            if self.comp_v2.isChecked() and not self._analysis_result.get("comp_v2_xy"):
+                need_recompute = True
+            if self.comp_c3d.isChecked() and not self._analysis_result.get(
+                "ground_truth_xy"
+            ):
+                if self._loaded_c3d_points:
+                    self._analysis_result["ground_truth_xy"] = self._loaded_c3d_points
+                else:
+                    need_recompute = True
+
+            if need_recompute and not self._running:
+                self.generate_trajectory()
+            else:
+                self._update_all_series()
+
+    def _update_all_series(self) -> None:
+        if not self._analysis_result:
+            return
+        result = self._analysis_result
+        points = list(result.get("xy") or [])
+        if not points:
+            return
+
+        stride = max(1, len(points) // 5000)
+        display_points = points[::stride]
+        if display_points and display_points[-1] != points[-1]:
+            display_points.append(points[-1])
+        qpoints = [QPointF(float(x), float(y)) for x, y in display_points]
+        self.trajectory_series.replace(qpoints)
+        self.trajectory_series.setName(
+            str(result.get("model_label") or "Estimated path")
+        )
+
+        dh_pts = list(
+            result.get("comp_dual_hub_xy") or result.get("comparison_xy") or []
+        )
+        if dh_pts and self.comp_dual_hub.isChecked():
+            s = max(1, len(dh_pts) // 5000)
+            disp = dh_pts[::s]
+            if disp[-1] != dh_pts[-1]:
+                disp.append(dh_pts[-1])
+            self.comparison_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comparison_series.setName("Dual-Hub 2-IMU")
+            self.comparison_series.setVisible(True)
+        else:
+            self.comparison_series.clear()
+            self.comparison_series.setVisible(False)
+
+        v5_pts = list(result.get("comp_v5_xy") or [])
+        if v5_pts and self.comp_v5.isChecked():
+            s = max(1, len(v5_pts) // 5000)
+            disp = v5_pts[::s]
+            if disp[-1] != v5_pts[-1]:
+                disp.append(v5_pts[-1])
+            self.comp_v5_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v5_series.setName("3-IMU v5")
+            self.comp_v5_series.setVisible(True)
+        else:
+            self.comp_v5_series.clear()
+            self.comp_v5_series.setVisible(False)
+
+        v4_pts = list(result.get("comp_v4_xy") or [])
+        if v4_pts and self.comp_v4.isChecked():
+            s = max(1, len(v4_pts) // 5000)
+            disp = v4_pts[::s]
+            if disp[-1] != v4_pts[-1]:
+                disp.append(v4_pts[-1])
+            self.comp_v4_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v4_series.setName("3-IMU v4")
+            self.comp_v4_series.setVisible(True)
+        else:
+            self.comp_v4_series.clear()
+            self.comp_v4_series.setVisible(False)
+
+        v3_pts = list(result.get("comp_v3_xy") or [])
+        if v3_pts and self.comp_v3.isChecked():
+            s = max(1, len(v3_pts) // 5000)
+            disp = v3_pts[::s]
+            if disp[-1] != v3_pts[-1]:
+                disp.append(v3_pts[-1])
+            self.comp_v3_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v3_series.setName("3-IMU v3")
+            self.comp_v3_series.setVisible(True)
+        else:
+            self.comp_v3_series.clear()
+            self.comp_v3_series.setVisible(False)
+
+        v2_pts = list(result.get("comp_v2_xy") or [])
+        if v2_pts and self.comp_v2.isChecked():
+            s = max(1, len(v2_pts) // 5000)
+            disp = v2_pts[::s]
+            if disp[-1] != v2_pts[-1]:
+                disp.append(v2_pts[-1])
+            self.comp_v2_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v2_series.setName("3-IMU v2")
+            self.comp_v2_series.setVisible(True)
+        else:
+            self.comp_v2_series.clear()
+            self.comp_v2_series.setVisible(False)
+
+        gt_pts = list(result.get("ground_truth_xy") or [])
+        if gt_pts and self.comp_c3d.isChecked():
+            s = max(1, len(gt_pts) // 5000)
+            disp = gt_pts[::s]
+            if disp[-1] != gt_pts[-1]:
+                disp.append(gt_pts[-1])
+            self.ground_truth_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.ground_truth_series.setName("C3D Ground Truth")
+            self.ground_truth_series.setVisible(True)
+        else:
+            self.ground_truth_series.clear()
+            self.ground_truth_series.setVisible(False)
+
+        has_any_comp = (
+            (bool(dh_pts) and self.comp_dual_hub.isChecked())
+            or (bool(v5_pts) and self.comp_v5.isChecked())
+            or (bool(v4_pts) and self.comp_v4.isChecked())
+            or (bool(v3_pts) and self.comp_v3.isChecked())
+            or (bool(v2_pts) and self.comp_v2.isChecked())
+            or (bool(gt_pts) and self.comp_c3d.isChecked())
+        )
+        self.chart.legend().setVisible(has_any_comp)
+
+        self.start_series.clear()
+        self.end_series.clear()
+        if qpoints:
+            self.start_series.append(qpoints[0])
+            self.end_series.append(qpoints[-1])
+
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+        for extra in (
+            dh_pts if self.comp_dual_hub.isChecked() else [],
+            v5_pts if self.comp_v5.isChecked() else [],
+            v4_pts if self.comp_v4.isChecked() else [],
+            v3_pts if self.comp_v3.isChecked() else [],
+            v2_pts if self.comp_v2.isChecked() else [],
+            gt_pts if self.comp_c3d.isChecked() else [],
+        ):
+            for px, py in extra:
+                xs.append(float(px))
+                ys.append(float(py))
+        self._trajectory_bounds = (min(xs), max(xs), min(ys), max(ys))
+        self._apply_equal_aspect_ranges()
 
 
 class DiagnosticsPage(QWidget):
