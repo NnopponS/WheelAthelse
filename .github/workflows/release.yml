@@ -1,6 +1,9 @@
 name: WheelAthlete Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -33,7 +36,7 @@ jobs:
           ref = os.environ.get('GITHUB_REF_NAME', '')
           if ref != f'v{version}':
               raise SystemExit(
-                  f'Release workflow must be dispatched on exact tag v{version}; got {ref!r}'
+                  f'Release workflow must run on exact tag v{version}; got {ref!r}'
               )
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
@@ -64,23 +67,30 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Import trusted Windows signing certificate
+      - name: Import Windows signing certificate when configured
         shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.WHEELATHLETE_SIGN_PFX_BASE64 }}
           SIGN_PFX_PASSWORD: ${{ secrets.WHEELATHLETE_SIGN_PFX_PASSWORD }}
           TIMESTAMP_URL: ${{ vars.WHEELATHLETE_TIMESTAMP_URL }}
           EXPECTED_SUBJECT: ${{ vars.WHEELATHLETE_SIGN_CERT_SUBJECT }}
-          ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
         run: |
-          if (-not $env:SIGN_PFX_BASE64 -or -not $env:SIGN_PFX_PASSWORD -or -not $env:TIMESTAMP_URL -or -not $env:EXPECTED_SUBJECT) {
-            if ($env:ALLOW_UNSIGNED_RELEASE -eq "true") {
-              Write-Host "ALLOW_UNSIGNED_RELEASE=true: Building community unsigned release."
-              "ALLOW_UNSIGNED_RELEASE=true" >> $env:GITHUB_ENV
-              return
-            }
-            throw "Trusted Windows signing secrets, expected subject, and timestamp URL are required for publication."
+          $values = @(
+            $env:SIGN_PFX_BASE64,
+            $env:SIGN_PFX_PASSWORD,
+            $env:TIMESTAMP_URL,
+            $env:EXPECTED_SUBJECT
+          )
+          $configured = @($values | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+          if ($configured -eq 0) {
+            Write-Warning "Windows signing secrets are not configured; publishing an unsigned community build."
+            "ALLOW_UNSIGNED_RELEASE=true" >> $env:GITHUB_ENV
+            return
           }
+          if ($configured -ne $values.Count) {
+            throw "Windows signing configuration is partial. Configure all signing secrets/variables or none of them."
+          }
+
           $pfx = Join-Path $env:RUNNER_TEMP "wheelathlete-signing.pfx"
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
           try {
@@ -119,11 +129,111 @@ jobs:
             applications/wheelathlete_windows/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
             applications/wheelathlete_windows/release/WheelAthlete-${{ needs.metadata.outputs.version }}-portable.zip
             applications/wheelathlete_windows/release/signing-report.json
-            applications/wheelathlete_windows/release/SHA256SUMS.txt
+          if-no-files-found: error
+
+  android:
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Resolve locked Flutter dependencies
+        working-directory: applications/wheelathlete_mobile
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze and test Android source
+        working-directory: applications/wheelathlete_mobile
+        run: |
+          flutter analyze --no-pub
+          flutter test --no-pub
+
+      - name: Configure Android release signing when available
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WHEELATHLETE_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.WHEELATHLETE_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WHEELATHLETE_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WHEELATHLETE_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          configured=0
+          for value in "$KEYSTORE_BASE64" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD"; do
+            if [ -n "$value" ]; then configured=$((configured + 1)); fi
+          done
+
+          if [ "$configured" -eq 0 ]; then
+            echo "ANDROID_SIGNING_MODE=debug-key-fallback" >> "$GITHUB_ENV"
+            echo "::warning::Android release signing secrets are not configured; APK/AAB will use the debug key fallback."
+            exit 0
+          fi
+          if [ "$configured" -ne 4 ]; then
+            echo "Android signing configuration is partial. Configure all four WHEELATHLETE_ANDROID_* secrets or none of them." >&2
+            exit 1
+          fi
+
+          keystore="$RUNNER_TEMP/wheelathlete-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          echo "WHEELATHLETE_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+          echo "WHEELATHLETE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "WHEELATHLETE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "WHEELATHLETE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_SIGNING_MODE=release-keystore" >> "$GITHUB_ENV"
+
+      - name: Build Android APK and app bundle
+        working-directory: applications/wheelathlete_mobile
+        run: |
+          flutter build apk --release --no-pub
+          flutter build appbundle --release --no-pub
+
+      - name: Prepare Android release artifacts
+        working-directory: applications/wheelathlete_mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.metadata.outputs.version }}'
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk "release/WheelAthlete-${version}-android.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "release/WheelAthlete-${version}-android.aab"
+          sha256sum \
+            "release/WheelAthlete-${version}-android.apk" \
+            "release/WheelAthlete-${version}-android.aab" \
+            > release/SHA256SUMS-android.txt
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = {
+              'schema_version': 1,
+              'platform': 'android',
+              'version': '${{ needs.metadata.outputs.version }}',
+              'signing_mode': os.environ.get('ANDROID_SIGNING_MODE', 'unknown'),
+              'play_store_ready': os.environ.get('ANDROID_SIGNING_MODE') == 'release-keystore',
+          }
+          Path('release/android-signing-report.json').write_text(
+              json.dumps(report, indent=2) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: applications/wheelathlete_mobile/release/
           if-no-files-found: error
 
   publish:
-    needs: [metadata, windows]
+    needs: [metadata, windows, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -133,22 +243,46 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-release
-          path: dist
+          path: dist/windows
 
-      - name: Re-check public signing gate
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: dist/android
+
+      - name: Assemble release directory and checksums
         shell: bash
-        env:
-          ALLOW_UNSIGNED_RELEASE: ${{ vars.ALLOW_UNSIGNED_RELEASE }}
+        run: |
+          set -euo pipefail
+          version='${{ needs.metadata.outputs.version }}'
+          mkdir -p dist/release
+          cp "dist/windows/WheelAthleteSetup-${version}.exe" dist/release/
+          cp "dist/windows/WheelAthlete-${version}-portable.zip" dist/release/
+          cp dist/windows/signing-report.json dist/release/windows-signing-report.json
+          cp "dist/android/WheelAthlete-${version}-android.apk" dist/release/
+          cp "dist/android/WheelAthlete-${version}-android.aab" dist/release/
+          cp dist/android/android-signing-report.json dist/release/
+          cd dist/release
+          sha256sum \
+            "WheelAthleteSetup-${version}.exe" \
+            "WheelAthlete-${version}-portable.zip" \
+            "WheelAthlete-${version}-android.apk" \
+            "WheelAthlete-${version}-android.aab" \
+            > SHA256SUMS.txt
+
+      - name: Report signing state
+        shell: bash
         run: |
           python - <<'PY'
           import json
-          import os
           from pathlib import Path
 
-          allow_unsigned = os.environ.get('ALLOW_UNSIGNED_RELEASE', '').lower() == 'true'
-          report = json.loads(Path('dist/signing-report.json').read_text(encoding='utf-8'))
-          if not allow_unsigned and report.get('public_release_ready') is not True:
-              raise SystemExit('signing-report.json did not pass public_release_ready')
+          windows = json.loads(Path('dist/release/windows-signing-report.json').read_text(encoding='utf-8'))
+          android = json.loads(Path('dist/release/android-signing-report.json').read_text(encoding='utf-8'))
+          if windows.get('public_release_ready') is not True:
+              print('::warning::Windows release is unsigned. See windows-signing-report.json.')
+          if android.get('play_store_ready') is not True:
+              print('::warning::Android release uses the debug-key fallback and is not Play Store ready.')
           PY
 
       - name: Generate verified-artifact update manifest
@@ -156,10 +290,10 @@ jobs:
         run: |
           python release/generate_update_manifest.py \
             --version "${{ needs.metadata.outputs.version }}" \
-            --windows "dist/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe" \
-            --out dist/latest.json \
-            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} Windows release; mobile is under maintenance"
-          cat dist/latest.json
+            --windows "dist/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe" \
+            --out dist/release/latest.json \
+            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} Windows installer/portable and Android APK/AAB release"
+          cat dist/release/latest.json
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -167,9 +301,16 @@ jobs:
           tag_name: v${{ needs.metadata.outputs.version }}
           name: WheelAthlete v${{ needs.metadata.outputs.version }}
           generate_release_notes: true
+          body: |
+            Windows installer/portable and Android APK/AAB are attached.
+
+            Check `windows-signing-report.json` and `android-signing-report.json` before redistribution. If repository signing credentials are not configured, the Windows build is unsigned and Android uses the debug-key fallback.
           files: |
-            dist/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
-            dist/WheelAthlete-${{ needs.metadata.outputs.version }}-portable.zip
-            dist/signing-report.json
-            dist/SHA256SUMS.txt
-            dist/latest.json
+            dist/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe
+            dist/release/WheelAthlete-${{ needs.metadata.outputs.version }}-portable.zip
+            dist/release/WheelAthlete-${{ needs.metadata.outputs.version }}-android.apk
+            dist/release/WheelAthlete-${{ needs.metadata.outputs.version }}-android.aab
+            dist/release/windows-signing-report.json
+            dist/release/android-signing-report.json
+            dist/release/SHA256SUMS.txt
+            dist/release/latest.json
