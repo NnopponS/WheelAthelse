@@ -13,6 +13,13 @@ desktop.ini
 /.worktrees/
 /graft/
 
+# Local agent / orchestration / IDE-assistant state (never publish)
+/.agents/
+/.agent/
+/.lnwjud/
+/.serena/
+/.ignore
+
 # Temporary logs / agent scratch
 *.log
 *.tmp
@@ -106,6 +113,7 @@ BiWheel3D*
 !applications/wheelathlete_windows/tools/pc_gui/biwheel3d_runtime/**
 # Required mobile model attribution; keep the broad private research exclusion.
 !applications/wheelathlete_mobile/assets/models/BIWHEEL3D_LICENSE.txt
+!applications/wheelathlete_mobile/assets/models/BiWheel3D-XY-Yaw-current_best.json
 # Local release/update verification scratch
 .project/tmp_*
 .project/updater_*

@@ -182,7 +182,21 @@ class AcquisitionController(BaseController):
         self.client = DaemonClient(port=port, parent=self)
         self.daemon_logger = logging.getLogger("wheelathlete.daemon")
         self.gui_logger = logging.getLogger("wheelathlete.gui")
-        self.process_manager = DaemonProcessManager(repo_root=repo_root, port=port, parent=self)
+        settings = load_gui_settings()
+        default_root = Path.home() / "Documents" / "WheelAthlete" / "PC Sessions"
+        saved_folder = settings.get("session_folder")
+        journal_root = Path(str(saved_folder)).expanduser() if saved_folder else default_root
+        if not journal_root.is_dir():
+            journal_root = default_root
+        journal_root.mkdir(parents=True, exist_ok=True)
+        journal_root = journal_root.resolve()
+        self.state.journal_root = str(journal_root)
+        self.process_manager = DaemonProcessManager(
+            repo_root=repo_root,
+            port=port,
+            journal_root=journal_root,
+            parent=self,
+        )
         self.daemon_log.connect(self.daemon_logger.info)
         self.process_manager.log_line.connect(self.daemon_log)
         self.client.ready_changed.connect(self._on_ready)
@@ -200,10 +214,6 @@ class AcquisitionController(BaseController):
         self._poll.setInterval(1000)
         self._poll.timeout.connect(self.refresh_status)
         self._started = False
-        settings = load_gui_settings()
-        saved_folder = settings.get("session_folder")
-        if saved_folder and Path(saved_folder).is_dir():
-            self.state.journal_root = str(saved_folder)
 
     def start(self) -> None:
         if self._started:

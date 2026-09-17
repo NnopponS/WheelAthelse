@@ -99,16 +99,16 @@ class MobileUpdateManifest {
     required this.channel,
     required this.releaseUrl,
     required this.notes,
-    required this.android,
-    required this.ios,
+    this.android,
+    this.ios,
   });
 
   final String version;
   final String channel;
   final Uri releaseUrl;
   final String notes;
-  final AndroidUpdateArtifact android;
-  final IosUpdateArtifact ios;
+  final AndroidUpdateArtifact? android;
+  final IosUpdateArtifact? ios;
 }
 
 void _validateRepoUrl(Uri uri, {bool releaseDownload = false, String? suffix}) {
@@ -160,43 +160,56 @@ MobileUpdateManifest parseMobileUpdateManifest(List<int> bytes) {
   if (platforms is! Map<String, dynamic>) {
     throw const MobileUpdateException('Update manifest is missing platforms');
   }
+
+  AndroidUpdateArtifact? androidArtifact;
   final android = platforms['android'];
+  if (android is Map<String, dynamic>) {
+    final androidVersion = (android['version'] as Object?)?.toString() ?? '';
+    final androidBuild = android['build'];
+    final androidUrl = Uri.tryParse(
+      (android['url'] as Object?)?.toString() ?? '',
+    );
+    final androidSha =
+        (android['sha256'] as Object?)?.toString().toLowerCase() ?? '';
+    final androidSize = android['size'];
+    if (androidVersion != version || androidBuild is! int || androidBuild <= 0) {
+      throw const MobileUpdateException(
+        'Android update version/build is invalid',
+      );
+    }
+    if (androidUrl == null) {
+      throw const MobileUpdateException('Android update URL is invalid');
+    }
+    _validateRepoUrl(androidUrl, releaseDownload: true, suffix: '.apk');
+    if (androidSha.length != 64 ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(androidSha)) {
+      throw const MobileUpdateException('Android update SHA-256 is invalid');
+    }
+    if (androidSize is! int || androidSize <= 0) {
+      throw const MobileUpdateException('Android update size is invalid');
+    }
+    androidArtifact = AndroidUpdateArtifact(
+      version: androidVersion,
+      build: androidBuild,
+      url: androidUrl,
+      sha256: androidSha,
+      size: androidSize,
+    );
+  }
+
+  IosUpdateArtifact? iosArtifact;
   final ios = platforms['ios'];
-  if (android is! Map<String, dynamic> || ios is! Map<String, dynamic>) {
-    throw const MobileUpdateException(
-      'Update manifest is missing mobile artifacts',
+  if (ios is Map<String, dynamic>) {
+    final iosVersion = (ios['version'] as Object?)?.toString() ?? '';
+    final iosUrl = Uri.tryParse((ios['url'] as Object?)?.toString() ?? '');
+    if (iosVersion != version || iosUrl == null || iosUrl.scheme != 'https') {
+      throw const MobileUpdateException('iOS update metadata is invalid');
+    }
+    iosArtifact = IosUpdateArtifact(
+      version: iosVersion,
+      url: iosUrl,
+      storeManaged: ios['store_managed'] == true,
     );
-  }
-
-  final androidVersion = (android['version'] as Object?)?.toString() ?? '';
-  final androidBuild = android['build'];
-  final androidUrl = Uri.tryParse(
-    (android['url'] as Object?)?.toString() ?? '',
-  );
-  final androidSha =
-      (android['sha256'] as Object?)?.toString().toLowerCase() ?? '';
-  final androidSize = android['size'];
-  if (androidVersion != version || androidBuild is! int || androidBuild <= 0) {
-    throw const MobileUpdateException(
-      'Android update version/build is invalid',
-    );
-  }
-  if (androidUrl == null) {
-    throw const MobileUpdateException('Android update URL is invalid');
-  }
-  _validateRepoUrl(androidUrl, releaseDownload: true, suffix: '.apk');
-  if (androidSha.length != 64 ||
-      !RegExp(r'^[0-9a-f]{64}$').hasMatch(androidSha)) {
-    throw const MobileUpdateException('Android update SHA-256 is invalid');
-  }
-  if (androidSize is! int || androidSize <= 0) {
-    throw const MobileUpdateException('Android update size is invalid');
-  }
-
-  final iosVersion = (ios['version'] as Object?)?.toString() ?? '';
-  final iosUrl = Uri.tryParse((ios['url'] as Object?)?.toString() ?? '');
-  if (iosVersion != version || iosUrl == null || iosUrl.scheme != 'https') {
-    throw const MobileUpdateException('iOS update metadata is invalid');
   }
 
   return MobileUpdateManifest(
@@ -204,18 +217,8 @@ MobileUpdateManifest parseMobileUpdateManifest(List<int> bytes) {
     channel: 'stable',
     releaseUrl: releaseUrl,
     notes: (decoded['notes'] as Object?)?.toString().trim() ?? '',
-    android: AndroidUpdateArtifact(
-      version: androidVersion,
-      build: androidBuild,
-      url: androidUrl,
-      sha256: androidSha,
-      size: androidSize,
-    ),
-    ios: IosUpdateArtifact(
-      version: iosVersion,
-      url: iosUrl,
-      storeManaged: ios['store_managed'] == true,
-    ),
+    android: androidArtifact,
+    ios: iosArtifact,
   );
 }
 
@@ -229,10 +232,13 @@ bool mobileUpdateAvailableFor(
   final remote = SemanticVersion.parse(manifest.version);
   final comparison = remote.compareTo(current);
   if (platform == MobileUpdatePlatform.android) {
+    final android = manifest.android;
+    if (android == null) return false;
     // Android's package installer requires a strictly increasing versionCode
     // even when the semantic versionName is newer.
-    return comparison >= 0 && manifest.android.build > currentBuild;
+    return comparison >= 0 && android.build > currentBuild;
   }
+  if (manifest.ios == null) return false;
   return comparison > 0;
 }
 
@@ -341,7 +347,7 @@ class MobileUpdateService {
         throw const MobileUpdateException('Downloaded APK SHA-256 mismatch');
       }
       if (await file.exists()) await file.delete();
-      return partial.rename(file.path);
+      return await partial.rename(file.path);
     } on Object catch (_) {
       if (await partial.exists()) await partial.delete();
       rethrow;

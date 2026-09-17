@@ -288,48 +288,125 @@ class AcquisitionService:
                 name=f"auto-reconnect-{matching_side.value}",
             )
 
+    async def _establish_device(
+        self, device_id: str, *, expected_side: WheelSide | None = None
+    ) -> tuple[WheelSide, dict[str, Any]]:
+        """Establish one sensor and publish the same metadata for connect/reconnect."""
+        await self.transport.connect(device_id)
+        try:
+            info = _parse_info(await self.transport.read(device_id, INFO_UUID))
+            side = _side(info["side"])
+            if expected_side is not None and side is not expected_side:
+                raise RuntimeError(
+                    f"Reconnected device role changed: expected {expected_side.value}, got {side.value}"
+                )
+            existing = self.engine.device_id(side)
+            if existing is not None and existing != device_id:
+                raise RuntimeError(f"{side.value} wheel is already connected as {existing}")
+            if existing is None:
+                await self.engine.connect(side, device_id)
+
+            info = dict(info)
+            info["device_id"] = device_id
+            info["mtu"] = self.transport.negotiated_mtu(device_id)
+            candidate = self._scan_cache.get(device_id, {})
+            info["advertised_name"] = candidate.get("name")
+            info["rssi"] = candidate.get("rssi")
+            try:
+                info.update(_parse_config(await self.transport.read(device_id, CONFIG_UUID)))
+            except Exception:
+                pass
+            info["sensor_role"] = "chair_center" if side is WheelSide.CENTER else "wheel_hub"
+            if side is WheelSide.CENTER:
+                info["axis_convention"] = {
+                    "z_axis": "down_toward_floor",
+                    "x_y_axes": "board_axes_unmapped",
+                }
+            try:
+                battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
+                info["battery_percent"] = int(battery[0]) if battery else None
+            except Exception:
+                info["battery_percent"] = None
+            info.setdefault("sample_rate_hz", 100)
+            info.setdefault("name", info.get("advertised_name") or f"WheelAthlete-{side.value}")
+            self._device_info[side] = info
+            self._emit("connection_state", {**info, "state": "connected"})
+            return side, info
+        except BaseException:
+            if all(self.engine.device_id(item) != device_id for item in WheelSide):
+                with suppress(Exception):
+                    await self.transport.disconnect(device_id)
+            raise
+
+    async def _resume_live_after_reconnect(self, side: WheelSide) -> bool:
+        try:
+            model = await self.lifecycle.synchronize(side, count=3)
+            self._emit("sync_status", self._clock_payload(side, model))
+            await self.engine.reset_sequences((side,))
+            result = await self.lifecycle.scheduled_start((side,), lead_time_s=1.0)
+            self._emit(
+                "live_state",
+                {
+                    "state": "resumed",
+                    "live": True,
+                    "sides": [item.value for item in self._live_sides],
+                    **self._start_payload(result),
+                },
+            )
+            return True
+        except Exception as exc:
+            self._live_sides = tuple(item for item in self._live_sides if item is not side)
+            self._emit(
+                "error",
+                {
+                    "code": "live_resume_failed",
+                    "side": side.value,
+                    "message": f"{side.value} reconnected but Live preview could not resume: {exc}",
+                },
+            )
+            self._emit(
+                "live_state",
+                {
+                    "state": "degraded",
+                    "live": bool(self._live_sides),
+                    "sides": [item.value for item in self._live_sides],
+                },
+            )
+            return False
+
     async def _supervise_auto_reconnect(self, side: WheelSide, device_id: str) -> None:
         await asyncio.sleep(1.0)
+        last_error = "reconnect failed"
         for _attempt in range(20):
             if device_id in self._intentional_disconnect:
                 return
             if self.engine.device_id(side) is not None:
                 return
             try:
-                await self.transport.connect(device_id)
-                if self.engine.device_id(side) is None:
-                    await self.engine.connect(side, device_id)
-                info = _parse_info(await self.transport.read(device_id, INFO_UUID))
-                info = dict(info)
-                info["device_id"] = device_id
-                info["mtu"] = self.transport.negotiated_mtu(device_id)
-                candidate = self._scan_cache.get(device_id, {})
-                info["advertised_name"] = candidate.get("name")
-                info["rssi"] = candidate.get("rssi")
-                try:
-                    config = _parse_config(await self.transport.read(device_id, CONFIG_UUID))
-                except Exception:
-                    config = {}
-                info.update(config)
-                info["sensor_role"] = "chair_center" if side is WheelSide.CENTER else "wheel_hub"
-                try:
-                    battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
-                    info["battery_percent"] = int(battery[0]) if battery else None
-                except Exception:
-                    info["battery_percent"] = None
-                info.setdefault("sample_rate_hz", 100)
-                info.setdefault("name", info.get("advertised_name") or f"WheelAthlete-{side.value}")
-                self._device_info[side] = info
-                self._emit("connection_state", {**info, "state": "connected"})
+                await self._establish_device(device_id, expected_side=side)
                 if side in self._live_sides:
-                    try:
-                        await self.lifecycle.synchronize(side, count=3)
-                        await self.lifecycle.scheduled_start((side,), lead_time_s=1.0)
-                    except Exception:
-                        pass
+                    await self._resume_live_after_reconnect(side)
                 return
-            except Exception:
+            except Exception as exc:
+                last_error = str(exc)
                 await asyncio.sleep(1.5)
+        self._emit(
+            "connection_state",
+            {
+                "side": side.value,
+                "device_id": device_id,
+                "state": "disconnected",
+                "reconnecting": False,
+            },
+        )
+        self._emit(
+            "error",
+            {
+                "code": "auto_reconnect_failed",
+                "side": side.value,
+                "message": f"{side.value} could not reconnect: {last_error}",
+            },
+        )
 
     async def handle_command(self, command: str, payload: dict[str, Any]) -> dict[str, Any]:
         await self.start()
@@ -383,49 +460,11 @@ class AcquisitionService:
 
     async def _cmd_connect(self, payload: dict[str, Any]) -> dict[str, Any]:
         device_id = str(payload["device_id"])
-        await self.transport.connect(device_id)
-        try:
-            info = _parse_info(await self.transport.read(device_id, INFO_UUID))
-            side = _side(info["side"])
-            task = self._auto_reconnect_tasks.pop(side, None)
-            if task is not None and not task.done():
-                task.cancel()
-            existing = self.engine.device_id(side)
-            if existing is not None and existing != device_id:
-                raise RuntimeError(f"{side.value} wheel is already connected as {existing}")
-            if existing is None:
-                await self.engine.connect(side, device_id)
-            info = dict(info)
-            info["device_id"] = device_id
-            info["mtu"] = self.transport.negotiated_mtu(device_id)
-            candidate = self._scan_cache.get(device_id, {})
-            info["advertised_name"] = candidate.get("name")
-            info["rssi"] = candidate.get("rssi")
-            try:
-                config = _parse_config(await self.transport.read(device_id, CONFIG_UUID))
-            except Exception:
-                config = {}
-            info.update(config)
-            info["sensor_role"] = "chair_center" if side is WheelSide.CENTER else "wheel_hub"
-            if side is WheelSide.CENTER:
-                info["axis_convention"] = {
-                    "z_axis": "down_toward_floor",
-                    "x_y_axes": "board_axes_unmapped",
-                }
-            try:
-                battery = await self.transport.read(device_id, BATTERY_LEVEL_UUID)
-                info["battery_percent"] = int(battery[0]) if battery else None
-            except Exception:
-                info["battery_percent"] = None
-            info.setdefault("sample_rate_hz", 100)
-            info.setdefault("name", info.get("advertised_name") or f"WheelAthlete-{side.value}")
-            self._device_info[side] = info
-            self._emit("connection_state", {**info, "state": "connected"})
-            return info
-        except BaseException:
-            if all(self.engine.device_id(side) != device_id for side in WheelSide):
-                await self.transport.disconnect(device_id)
-            raise
+        side, info = await self._establish_device(device_id)
+        task = self._auto_reconnect_tasks.pop(side, None)
+        if task is not None and not task.done():
+            task.cancel()
+        return info
 
     async def _cmd_disconnect(self, payload: dict[str, Any]) -> dict[str, Any]:
         side = _side(payload["side"])

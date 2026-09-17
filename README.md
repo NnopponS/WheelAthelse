@@ -4,21 +4,21 @@
 
 WheelAthlete synchronizes inertial sensors mounted on the left and right wheelchair wheels, records research-grade motion data, and provides a dedicated Windows workflow for acquisition, quality control, export, diagnostics, and optional offline trajectory analysis. An optional chair-center IMU (`C`) is supported for acquisition and research instrumentation.
 
-> **Current release:** `v1.8.2` — Windows-first
-> **Windows application:** `1.8.2`
+> **Current release:** `v1.8.3`
+> **Windows application:** `1.8.3`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Mobile source:** `1.8.2+12`, maintenance-only; no new mobile publication or binary in this release
+> **Mobile source:** `1.8.3+13`; source/tests are release-gated, but no APK/AAB/IPA is published by the Windows release workflow
 > **Language:** English | [ไทย](README.th.md)
 
 ## Release status
 
-WheelAthlete 1.8.2 consolidates the Windows application, M5/XIAO firmware, three-sensor acquisition support, release hardening, installer lifecycle, Results workflow, and portable model-bundle support into one maintained source line.
+WheelAthlete 1.8.3 consolidates the current Windows and mobile source changes while retaining firmware 1.8.2 and BLE protocol 1.8.0.
 
 The public repository is intentionally organized around two branches:
 
 - `main` — integrated source of truth;
-- `release/main-v1.8.2` — exact tested 1.8.2 release line.
+- `release/main-v1.8.3` — exact tested 1.8.3 release line.
 
 Historical version tags are retained for traceability. Obsolete development/release branches do not need to remain visible after their work is fully integrated.
 

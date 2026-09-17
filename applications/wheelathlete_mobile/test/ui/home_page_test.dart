@@ -48,92 +48,74 @@ void main() {
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
-  testWidgets('shows three NavigationBar destinations', (tester) async {
+  testWidgets('shows five NavigationBar destinations', (tester) async {
     await pumpHome(tester);
 
-    expect(find.text('Connect'), findsOneWidget);
-    expect(find.text('Live'), findsOneWidget);
-    expect(find.text('Browse'), findsOneWidget);
-    // Experiments tab was merged into Browse (Phase 4 follow-up).
-    expect(find.text('Experiments'), findsNothing);
+    expect(find.widgetWithText(NavigationDestination, 'Dashboard'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Acquisition'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Results'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Model'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Diagnostics'), findsOneWidget);
   });
 
-  testWidgets('starts on Connect tab — shows ConnectionCard content', (
+  testWidgets('starts on Dashboard tab — shows 3-sensor cards and actions', (
     tester,
   ) async {
     await pumpHome(tester);
 
-    // Connect tab is active; ConnectPage shows its two ConnectionCards.
+    // Dashboard tab is active; shows sensor cards
     expect(find.text('Left wheel'), findsOneWidget);
     expect(find.text('Right wheel'), findsOneWidget);
+    expect(find.text('Chair center'), findsOneWidget);
   });
 
-  testWidgets('tapping Live tab reveals Live IMU AppBar', (tester) async {
+  testWidgets('tapping Acquisition tab reveals Acquisition content', (tester) async {
     await pumpHome(tester);
 
-    await tester.tap(find.text('Live'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Acquisition'));
     await tester.pump();
 
-    expect(find.text('Live IMU'), findsOneWidget);
+    expect(find.text('Acquisition'), findsWidgets);
   });
 
-  testWidgets('tapping Browse tab reveals Browse AppBar', (tester) async {
+  testWidgets('tapping Results tab reveals Results content', (tester) async {
     await pumpHome(tester);
 
-    await tester.tap(find.text('Browse'));
-    // BrowsePage contains a FutureBuilder with CircularProgressIndicator which
-    // animates continuously — pumpAndSettle would time out. Use pump() instead.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Results'));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // BrowsePage renders a Scaffold with AppBar title 'Browse'.
-    expect(find.text('Browse'), findsWidgets);
+    expect(find.text('Results'), findsWidgets);
   });
 
-  testWidgets('tapping Browse tab reveals New Template FAB', (tester) async {
+  testWidgets('tapping Model tab reveals Model & Trajectory content', (tester) async {
     await pumpHome(tester);
 
-    await tester.tap(find.text('Browse'));
-    // BrowsePage contains a FutureBuilder with CircularProgressIndicator which
-    // animates continuously — pumpAndSettle would time out. Use pump() instead.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Model'));
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('New Template'), findsOneWidget);
+    expect(find.text('Model & Trajectory'), findsWidgets);
   });
 
-  testWidgets('Live page Browse button switches to the bottom-nav Browse tab', (
+  testWidgets('tapping Diagnostics tab reveals Diagnostics matrix', (tester) async {
+    await pumpHome(tester);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Diagnostics'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Diagnostics'), findsWidgets);
+  });
+
+  testWidgets('switching between tabs preserves shell AppBar', (
     tester,
   ) async {
     await pumpHome(tester);
 
-    await tester.tap(find.text('Live'));
-    await tester.pumpAndSettle();
-    expect(find.text('Live IMU'), findsOneWidget);
-
-    // Tap the folder icon in the Live AppBar (tooltip 'Browse').
-    await tester.tap(
-      find.widgetWithIcon(IconButton, Icons.folder_open_rounded),
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-
-    // Should now be on the Browse tab: Browse AppBar shows and Live content
-    // is hidden (no second Browse page was pushed on the nav stack).
-    expect(find.text('Browse'), findsWidgets);
-    expect(find.text('Live IMU'), findsNothing);
-    expect(find.text('New Template'), findsOneWidget);
-  });
-
-  testWidgets('switching tabs back to Connect restores Connect content', (
-    tester,
-  ) async {
-    await pumpHome(tester);
-
-    await tester.tap(find.text('Live'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Acquisition'));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('Live IMU'), findsOneWidget);
+    expect(find.text('WheelAthlete'), findsOneWidget);
 
-    await tester.tap(find.text('Connect'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Dashboard'));
     await tester.pump(const Duration(milliseconds: 50));
-    // Back to Connect tab content.
     expect(find.text('Left wheel'), findsOneWidget);
   });
 
@@ -170,6 +152,7 @@ void main() {
     await pumpHome(tester);
 
     // The chip only appears when connectedCount > 0.
-    expect(find.byIcon(Icons.sensors_rounded), findsNothing);
+    expect(find.text('1 wheel'), findsNothing);
+    expect(find.text('L+R'), findsNothing);
   });
 }

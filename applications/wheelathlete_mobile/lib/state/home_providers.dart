@@ -1,18 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Index of the currently selected tab in the app's [NavigationBar].
-///
-/// 0 = Connect, 1 = Live, 2 = Browse.
-///
-/// This is global UI state so that any screen can switch the user's current
-/// tab (e.g. the Live page's AppBar Browse button jumps to Browse instead of
-/// pushing a second Browse page on the navigation stack, which was out of sync
-/// with the bottom nav).
+/// Navigation sections corresponding 1:1 to the Python Research Edition:
+/// 0 = Dashboard
+/// 1 = Acquisition
+/// 2 = Results
+/// 3 = Model
+/// 4 = Diagnostics
 class HomeTabNotifier extends Notifier<int> {
-  @override
-  int build() => 0;
+  static const int dashboard = 0;
+  static const int acquisition = 1;
+  static const int results = 2;
+  static const int model = 3;
+  static const int diagnostics = 4;
 
-  void setTab(int index) => state = index;
+  @override
+  int build() => dashboard;
+
+  void setTab(int index) => state = index.clamp(0, 4);
 }
 
 final homeTabIndexProvider = NotifierProvider<HomeTabNotifier, int>(

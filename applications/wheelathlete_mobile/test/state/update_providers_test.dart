@@ -25,23 +25,23 @@ MobileUpdateManifest fixtureManifest() => parseMobileUpdateManifest(
   utf8.encode(
     jsonEncode({
       'schema': 1,
-      'version': '1.8.2',
+      'version': '1.8.4',
       'channel': 'stable',
       'release_url':
-          'https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.2',
+          'https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.4',
       'notes': 'Updater test',
       'platforms': {
         'android': {
-          'version': '1.8.2',
-          'build': 11,
+          'version': '1.8.4',
+          'build': 14,
           'url':
-              'https://github.com/NnopponS/WheelAthelse/releases/download/v1.8.2/WheelAthlete-Android-1.8.2.apk',
+              'https://github.com/NnopponS/WheelAthelse/releases/download/v1.8.4/WheelAthlete-Android-1.8.4.apk',
           'sha256': 'a' * 64,
           'size': 100,
         },
         'ios': {
-          'version': '1.8.2',
-          'url': 'https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.2',
+          'version': '1.8.4',
+          'url': 'https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.4',
           'store_managed': true,
         },
       },
@@ -66,7 +66,7 @@ void main() {
     final state = container.read(mobileUpdateProvider);
     expect(fake.checks, 1);
     expect(state.status, MobileUpdateStatus.available);
-    expect(state.manifest?.version, '1.8.2');
+    expect(state.manifest?.version, '1.8.4');
     expect(state.updateAvailable, isTrue);
   });
 }

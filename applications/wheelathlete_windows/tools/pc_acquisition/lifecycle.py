@@ -26,10 +26,10 @@ class LifecycleError(RuntimeError):
 
 
 # Windows timer scheduling can overshoot a short asyncio sleep/wait deadline by
-# a few tens of milliseconds under concurrent Flutter/Gradle/test load. This is
+# up to roughly a tenth of a second under concurrent system/test load. This is
 # host scheduling tolerance only; it does not alter the shared device T0 or the
 # measured START_FIRED timestamp used for synchronization/QC.
-_HOST_TIMER_SLACK_S = 0.05
+_HOST_TIMER_SLACK_S = 0.10
 
 
 @dataclass(slots=True)

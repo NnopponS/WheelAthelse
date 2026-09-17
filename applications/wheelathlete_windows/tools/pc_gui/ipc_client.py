@@ -21,6 +21,7 @@ class _Pending:
     command: str
     on_success: SuccessCallback | None
     on_error: ErrorCallback | None
+    timer: QTimer | None = None
 
 
 class DaemonClient(QObject):
@@ -44,12 +45,18 @@ class DaemonClient(QObject):
         host: str = "127.0.0.1",
         port: int = 8765,
         auto_reconnect: bool = True,
+        command_timeout_ms: int = 60_000,
+        handshake_timeout_ms: int = 5_000,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
+        if command_timeout_ms < 1 or handshake_timeout_ms < 1:
+            raise ValueError("IPC timeouts must be positive")
         self.host = host
         self.port = port
         self.auto_reconnect = auto_reconnect
+        self.command_timeout_ms = int(command_timeout_ms)
+        self.handshake_timeout_ms = int(handshake_timeout_ms)
         self.socket = QTcpSocket(self)
         self.socket.connected.connect(self._on_connected)
         self.socket.disconnected.connect(self._on_disconnected)
@@ -101,17 +108,59 @@ class DaemonClient(QObject):
     ) -> str:
         if not self._ready:
             raise RuntimeError("acquisition daemon is not ready")
-        request_id = uuid.uuid4().hex
-        self._pending[request_id] = _Pending(command, on_success, on_error)
+        request_id = self._register_pending(
+            command,
+            on_success,
+            on_error,
+            timeout_ms=self.command_timeout_ms,
+        )
         self._write_message(command, payload or {}, request_id=request_id)
         return request_id
+
+    def _register_pending(
+        self,
+        command: str,
+        on_success: SuccessCallback | None,
+        on_error: ErrorCallback | None,
+        *,
+        timeout_ms: int,
+    ) -> str:
+        request_id = uuid.uuid4().hex
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(timeout_ms)
+        timer.timeout.connect(lambda request_id=request_id: self._expire_pending(request_id))
+        self._pending[request_id] = _Pending(command, on_success, on_error, timer)
+        timer.start()
+        return request_id
+
+    def _take_pending(self, request_id: str) -> _Pending | None:
+        pending = self._pending.pop(request_id, None)
+        if pending is not None and pending.timer is not None:
+            pending.timer.stop()
+            pending.timer.deleteLater()
+        return pending
+
+    def _expire_pending(self, request_id: str) -> None:
+        pending = self._take_pending(request_id)
+        if pending is None:
+            return
+        message = f"{pending.command} timed out waiting for acquisition daemon"
+        if pending.on_error is not None:
+            pending.on_error(message)
+        if pending.command == "hello":
+            self.protocol_error.emit(message)
+            self.socket.abort()
+            return
+        self.command_failed.emit(pending.command, message)
 
     def _on_connected(self) -> None:
         self._reconnect.stop()
         self._buffer.clear()
         self.connection_changed.emit(True, "Connected to acquisition daemon")
-        request_id = uuid.uuid4().hex
-        self._pending[request_id] = _Pending("hello", None, None)
+        request_id = self._register_pending(
+            "hello", None, None, timeout_ms=self.handshake_timeout_ms
+        )
         self._write_message("hello", {"client": "WheelAthlete"}, request_id=request_id)
 
     def _on_disconnected(self) -> None:
@@ -173,7 +222,7 @@ class DaemonClient(QObject):
 
         if message_type == "hello_ack":
             if isinstance(request_id, str):
-                self._pending.pop(request_id, None)
+                self._take_pending(request_id)
             self._set_ready(True)
             self.connection_changed.emit(True, str(payload.get("server", "Acquisition daemon ready")))
             return
@@ -181,7 +230,7 @@ class DaemonClient(QObject):
         if message_type == "response":
             if not isinstance(request_id, str):
                 raise ValueError("response missing request_id")
-            pending = self._pending.pop(request_id, None)
+            pending = self._take_pending(request_id)
             if pending is None:
                 return
             result = payload.get("result", {})
@@ -194,7 +243,7 @@ class DaemonClient(QObject):
 
         if message_type == "error":
             message = str(payload.get("message", "unknown daemon error"))
-            pending = self._pending.pop(request_id, None) if isinstance(request_id, str) else None
+            pending = self._take_pending(request_id) if isinstance(request_id, str) else None
             command = pending.command if pending is not None else "protocol"
             if pending is not None and pending.on_error is not None:
                 pending.on_error(message)
@@ -222,7 +271,7 @@ class DaemonClient(QObject):
             json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
         )
         if len(encoded) > MAX_MESSAGE_BYTES:
-            self._pending.pop(request_id, None)
+            self._take_pending(request_id)
             raise ValueError("IPC command exceeds maximum message size")
         self.socket.write(encoded)
 
@@ -233,8 +282,11 @@ class DaemonClient(QObject):
         self.ready_changed.emit(value)
 
     def _fail_all(self, message: str) -> None:
-        pending = list(self._pending.values())
-        self._pending.clear()
+        pending = [
+            item
+            for request_id in list(self._pending)
+            if (item := self._take_pending(request_id)) is not None
+        ]
         for item in pending:
             if item.on_error is not None:
                 item.on_error(message)

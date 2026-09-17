@@ -10,19 +10,19 @@ import 'package:wheelathlete/state/recording_providers.dart';
 import 'package:wheelathlete/state/update_providers.dart';
 import 'package:wheelathlete/theme/theme.dart';
 import 'package:wheelathlete/update/app_version.dart';
-import 'package:wheelathlete/ui/browse_page.dart';
-import 'package:wheelathlete/ui/connect_page.dart';
-import 'package:wheelathlete/ui/live_page.dart';
+import 'package:wheelathlete/ui/acquisition_page.dart';
+import 'package:wheelathlete/ui/dashboard_page.dart';
+import 'package:wheelathlete/ui/diagnostics_page.dart';
+import 'package:wheelathlete/ui/model_page.dart';
+import 'package:wheelathlete/ui/results_page.dart';
 import 'package:wheelathlete/widgets/widgets.dart' show ConnectionStatus;
 
-/// Real app home shell with a [NavigationBar] (Material 3) routing to:
-///   0 Ã¢â‚¬â€œ Connect  : BLE scan + connect L/R wheels
-///   1 Ã¢â‚¬â€œ Live & Record : realtime IMU display + start/stop recording
-///   2 Ã¢â‚¬â€œ Browse   : topic Ã¢â€ â€™ trial Ã¢â€ â€™ session hierarchy + CSV share +
-///                  protocol template progress bars
-///
-/// The Connect tab badge shows how many wheels are currently connected so the
-/// user can always see sensor status at a glance without switching tabs.
+/// Real app home shell with a [NavigationBar] (Material 3) routing to 5 sections:
+///   0 – Dashboard   : sensor summary, board settings, BLE scan/connect
+///   1 – Acquisition : live 3-IMU streaming, sync recording, 6 waveform charts
+///   2 – Results     : session explorer, multi-select, batch CSV/ZIP export
+///   3 – Model       : BiWheel3D trajectory & kinematic analysis
+///   4 – Diagnostics : 4-column telemetry matrix [Metric, L, R, C]
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key, required this.themeController});
 
@@ -44,19 +44,29 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   static const _tabs = [
     _TabSpec(
-      icon: Icon(Icons.bluetooth_rounded),
-      activeIcon: Icon(Icons.bluetooth_connected_rounded),
-      label: 'Connect',
+      icon: Icon(Icons.dashboard_outlined),
+      activeIcon: Icon(Icons.dashboard_rounded),
+      label: 'Dashboard',
     ),
     _TabSpec(
-      icon: Icon(Icons.show_chart_rounded),
-      activeIcon: Icon(Icons.show_chart_rounded),
-      label: 'Live',
+      icon: Icon(Icons.sensors_outlined),
+      activeIcon: Icon(Icons.sensors_rounded),
+      label: 'Acquisition',
     ),
     _TabSpec(
-      icon: Icon(Icons.folder_rounded),
-      activeIcon: Icon(Icons.folder_open_rounded),
-      label: 'Browse',
+      icon: Icon(Icons.folder_outlined),
+      activeIcon: Icon(Icons.folder_rounded),
+      label: 'Results',
+    ),
+    _TabSpec(
+      icon: Icon(Icons.route_outlined),
+      activeIcon: Icon(Icons.route_rounded),
+      label: 'Model',
+    ),
+    _TabSpec(
+      icon: Icon(Icons.analytics_outlined),
+      activeIcon: Icon(Icons.analytics_rounded),
+      label: 'Diagnostics',
     ),
   ];
 
@@ -104,7 +114,13 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       body: IndexedStack(
         index: tab,
-        children: const [_ConnectTab(), _LiveTab(), _BrowseTab()],
+        children: const [
+          DashboardPage(),
+          AcquisitionPage(),
+          ResultsPage(),
+          ModelPage(),
+          DiagnosticsPage(),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
@@ -131,6 +147,16 @@ class _HomePageState extends ConsumerState<HomePage> {
             icon: _tabs[2].icon,
             selectedIcon: _tabs[2].activeIcon,
             label: _tabs[2].label,
+          ),
+          NavigationDestination(
+            icon: _tabs[3].icon,
+            selectedIcon: _tabs[3].activeIcon,
+            label: _tabs[3].label,
+          ),
+          NavigationDestination(
+            icon: _tabs[4].icon,
+            selectedIcon: _tabs[4].activeIcon,
+            label: _tabs[4].label,
           ),
         ],
       ),
@@ -290,53 +316,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-/// The Connect tab body Ã¢â‚¬â€ wraps [ConnectPage] without its own [Scaffold] so the
-/// shell's AppBar and BottomNavigationBar stay in place.
-///
-/// [ConnectPage] is a [ConsumerWidget] that uses [Scaffold] internally. To
-/// avoid a nested Scaffold (which causes a grey background artifact), we embed
-/// its Scaffold-less body logic here via delegation. However, because
-/// [ConnectPage] is already a standalone Scaffold widget we use it as a
-/// whole-screen push target from the tab. Instead, we embed it directly inside
-/// [IndexedStack] Ã¢â‚¬â€ Flutter allows nested Scaffolds but the nested one should
-/// have [appBar] = null so it doesn't double-render. We set [resizeToAvoidBottomInset]
-/// to false so the keyboard doesn't fight the outer Scaffold.
-class _ConnectTab extends StatelessWidget {
-  const _ConnectTab();
-
-  @override
-  Widget build(BuildContext context) {
-    // ConnectPage is a full Scaffold widget. When embedded inside IndexedStack
-    // the inner Scaffold's appBar overlaps with the outer Scaffold's AppBar.
-    // Solution: render ConnectPage directly Ã¢â‚¬â€ it handles its own Scaffold.
-    // The outer Scaffold's body is just this widget; Material allows nested
-    // Scaffolds and inner one handles its own AppBar slot correctly.
-    return const ConnectPage();
-  }
-}
-
-/// The Live tab body Ã¢â‚¬â€ wraps [LivePage] (realtime IMU + Start/Stop FAB).
-/// From here the Record button in [LivePage]'s AppBar pushes [RecordPage].
-class _LiveTab extends StatelessWidget {
-  const _LiveTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const LivePage();
-  }
-}
-
-/// The Browse tab body Ã¢â‚¬â€ wraps [BrowsePage] (topic Ã¢â€ â€™ trial Ã¢â€ â€™ session hierarchy).
-class _BrowseTab extends StatelessWidget {
-  const _BrowseTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const BrowsePage();
-  }
-}
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Internal helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ──────────────────────────────────────────────
+// Internal helpers
+// ──────────────────────────────────────────────
 
 class _TabSpec {
   const _TabSpec({

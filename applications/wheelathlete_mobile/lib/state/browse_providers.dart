@@ -8,6 +8,11 @@ final topicsProvider = FutureProvider<List<TopicEntry>>((ref) async {
   return storage.listTopics();
 });
 
+final allSessionsProvider = FutureProvider<List<SessionMeta>>((ref) async {
+  final storage = ref.watch(storageRepositoryProvider);
+  return storage.listAllSessions();
+});
+
 final trialsProvider = FutureProvider.family<List<int>, String>((
   ref,
   topic,

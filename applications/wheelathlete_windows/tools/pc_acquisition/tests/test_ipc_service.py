@@ -2,6 +2,7 @@ import asyncio
 import json
 import struct
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from tools.pc_acquisition.ipc import AcquisitionIpcServer, PROTOCOL_VERSION, MAX_MESSAGE_BYTES
 from tools.pc_acquisition.models import WheelSide
@@ -240,6 +241,38 @@ def test_auto_reconnect_on_unexpected_transport_disconnect(tmp_path: Path):
             for ev, data in events[1:]
         )
 
+        await service.close()
+
+    asyncio.run(scenario())
+
+
+def test_auto_reconnect_marks_live_side_degraded_when_resume_fails(tmp_path: Path):
+    async def scenario():
+        transport = FakeBleTransport()
+        transport.read_values[("left-device", INFO_UUID)] = (
+            bytes([0x4C, 1, 8, 2, 1, 3])
+            + struct.pack("<ff", 4 / 32768, 2000 / 32768)
+            + bytes([2, 1])
+        )
+        service = AcquisitionService(transport, journal_root=tmp_path)
+        events: list[tuple[str, dict]] = []
+        service.set_event_sink(lambda ev, data: events.append((ev, data)))
+
+        await service.handle_command("connect", {"device_id": "left-device"})
+        service._live_sides = (WheelSide.LEFT,)
+        service.lifecycle.synchronize = AsyncMock(side_effect=RuntimeError("sync failed"))
+
+        transport.simulate_disconnect("left-device")
+        await asyncio.sleep(1.2)
+
+        assert service.engine.device_id(WheelSide.LEFT) == "left-device"
+        assert WheelSide.LEFT not in service._live_sides
+        assert any(
+            ev == "error"
+            and data.get("code") == "live_resume_failed"
+            and data.get("side") == "L"
+            for ev, data in events
+        )
         await service.close()
 
     asyncio.run(scenario())

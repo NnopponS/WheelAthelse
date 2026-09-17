@@ -138,6 +138,7 @@ class AnalysisTimeline(QWidget):
         self.cursor_line.setPen(QPen(QColor("#2563eb"), 1.7))
         for line in (self.start_line, self.stop_line):
             line.setPen(QPen(QColor("#ea580c"), 1.4, Qt.PenStyle.DashLine))
+            line.setVisible(False)
         for line in (self.cursor_line, self.start_line, self.stop_line):
             self.chart.addSeries(line)
             line.attachAxis(self.xaxis)
@@ -225,6 +226,8 @@ class AnalysisTimeline(QWidget):
         self.export_status.setWordWrap(True)
         self.export_status.setObjectName("mutedText")
         window_layout.addWidget(self.export_status)
+        self.window_panel = window_panel
+        self.window_panel.hide()
         layout.addWidget(window_panel)
 
         self.cursor.valueChanged.connect(self._cursor_changed)

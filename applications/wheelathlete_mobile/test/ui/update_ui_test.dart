@@ -45,7 +45,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Software update'), findsOneWidget);
-    expect(find.text('Installed: WheelAthlete 1.8.2 (build 12)'), findsOneWidget);
+    expect(find.text('Installed: WheelAthlete 1.8.3 (build 13)'), findsOneWidget);
     expect(find.byKey(const Key('softwareUpdateActionButton')), findsOneWidget);
   });
 }

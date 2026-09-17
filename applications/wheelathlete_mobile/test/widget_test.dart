@@ -35,9 +35,30 @@ void main() {
     expect(find.text('WheelAthlete UI'), findsNothing);
   });
 
-  testWidgets('NavigationBar has Connect / Live / Browse destinations', (
-    tester,
-  ) async {
+  testWidgets(
+    'NavigationBar has five destinations',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bleRepositoryProvider.overrideWith(
+              (_) => FakeBleRepository(devices: const []),
+            ),
+          ],
+          child: const app_entry.WheelAthleteApp(),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.widgetWithText(NavigationDestination, 'Dashboard'), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Acquisition'), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Results'), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Model'), findsOneWidget);
+      expect(find.widgetWithText(NavigationDestination, 'Diagnostics'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tapping Acquisition tab navigates to Acquisition page', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -50,12 +71,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Connect'), findsOneWidget);
-    expect(find.text('Live'), findsOneWidget);
-    expect(find.text('Browse'), findsOneWidget);
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Acquisition'));
+    await tester.pump();
+
+    expect(find.text('Acquisition'), findsWidgets);
   });
 
-  testWidgets('tapping Live tab shows Live IMU AppBar title', (tester) async {
+  testWidgets('tapping Results tab navigates to Results page', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -68,31 +90,10 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Live'));
-    await tester.pump();
-
-    expect(find.text('Live IMU'), findsOneWidget);
-  });
-
-  testWidgets('tapping Browse tab shows Browse AppBar title', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          bleRepositoryProvider.overrideWith(
-            (_) => FakeBleRepository(devices: const []),
-          ),
-        ],
-        child: const app_entry.WheelAthleteApp(),
-      ),
-    );
-    await tester.pump();
-
-    await tester.tap(find.text('Browse'));
-    // BrowsePage contains a FutureBuilder with CircularProgressIndicator which
-    // animates continuously — pumpAndSettle would time out. Use pump() instead.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Results'));
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('Browse'), findsWidgets);
+    expect(find.text('Results'), findsWidgets);
   });
 
   testWidgets('theme toggle popup opens with System/Light/Dark options', (
@@ -137,7 +138,7 @@ void main() {
     );
     await tester.pump();
     expect(find.text('WheelAthlete'), findsWidgets);
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Dashboard'), findsOneWidget);
   });
 
   testWidgets('ThemeModeController cycle via widget tree', (tester) async {

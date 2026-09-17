@@ -335,3 +335,101 @@ def prepare_windows(session: dict, *, target_hz: int = 100) -> tuple[np.ndarray,
         "scale_provenance": session.get("scale_provenance", {"status": "not_recorded"}),
         "physical_sync_verified": False,
     }
+
+
+def prepare_three_imu_samples(session: dict, *, target_hz: int = 100) -> tuple[np.ndarray, dict]:
+    """Prepare synchronized L/R/C SI samples for the active 3-IMU v3 runtime."""
+    if target_hz != 100:
+        raise AnalysisInputError("3-IMU v3 requires the frozen 100 Hz input contract")
+    if session.get("analysis_errors"):
+        raise AnalysisInputError("; ".join(session["analysis_errors"]))
+    source_hz = finite_number(session.get("sample_rate_hz", target_hz), "source rate")
+    if not 20 <= source_hz <= 1000:
+        raise AnalysisInputError("Source sample rate must be between 20 and 1000 Hz")
+    samples = session.get("samples", {})
+    if any(len(samples.get(side, [])) < 2 for side in ("L", "R", "C")):
+        raise AnalysisInputError("3-IMU v3 requires L, R, and C recordings")
+    timing = session.get("analysis_timing", {})
+    models = timing.get("clock_models", {})
+    if (models or timing.get("start")) and "C" not in models:
+        raise AnalysisInputError("3-IMU v3 requires a saved center-IMU clock model when affine timing is used")
+    per_rate = timing.get("side_sample_rates", {})
+    prepared = {}
+    for side in ("L", "R", "C"):
+        rate = finite_number(per_rate.get(side, source_hz), "side sample rate")
+        if abs(rate - source_hz) > 1e-6:
+            raise AnalysisInputError("Mismatched L/R/C configured sample rates")
+        prepared[side] = prepare_side(samples[side], rate, side=side, timing=timing)
+    bases = {prepared[side][3]["time_basis"] for side in ("L", "R", "C")}
+    if len(bases) != 1:
+        raise AnalysisInputError("L, R, and C do not share a time-basis policy")
+    start = max(0.0, *(prepared[side][0][0] for side in ("L", "R", "C")))
+    stop = min(prepared[side][0][-1] for side in ("L", "R", "C"))
+    if stop <= start:
+        raise AnalysisInputError("L, R, and C timelines do not overlap")
+    count = int(np.floor((stop - start) * target_hz + 1e-7)) + 1
+    if count < 200:
+        raise AnalysisInputError("3-IMU v3 needs at least 2.0 s of overlapping L/R/C data")
+    grid = start + np.arange(count, dtype=float) / target_hz
+    matrices, gap_masks, clip_masks = [], [], []
+    for side in ("L", "R", "C"):
+        t, x, clips, info = prepared[side]
+        i = np.searchsorted(t, grid, side="right") - 1
+        i = np.clip(i, 0, len(t) - 2)
+        exact = (np.abs(grid - t[i]) <= 1e-8) | (np.abs(grid - t[i + 1]) <= 1e-8)
+        bracket = t[i + 1] - t[i]
+        explicit_gap = np.asarray(info["sequence_gap_after"], dtype=bool)[i]
+        gap_masks.append(~exact & ((bracket > 1.5 / source_hz + 1e-9) | explicit_gap))
+        clip_masks.append(clips[i] | clips[i + 1])
+        z = np.column_stack([np.interp(grid, t, x[:, j]) for j in range(6)])
+        z[:, :3] *= 9.80665
+        z[:, 3:] *= np.pi / 180.0
+        matrices.append(z)
+    matrix = np.concatenate(matrices, axis=1).astype(np.float64)
+    if matrix.shape != (count, 18) or not np.isfinite(matrix).all():
+        raise AnalysisInputError("3-IMU SI conversion produced an invalid tensor")
+    gap = np.logical_or.reduce(gap_masks)
+    clipped = np.logical_or.reduce(clip_masks)
+    flags = [[] for _ in range(count)]
+    for index in range(count):
+        if gap[index]:
+            flags[index].append("small_gap_interpolated")
+        if clipped[index]:
+            flags[index].append("sensor_clipping")
+    warnings = list(session.get("analysis_warnings", []))
+    warnings.append("Active 3-IMU v3 estimate; C3D is never an inference input.")
+    basis = next(iter(bases))
+    if basis.startswith("legacy"):
+        warnings.append("Legacy timing is not sufficient to certify physical L/R/C synchronization.")
+    elif basis == "saved_device_affine":
+        warnings.append("Saved pre-START affine clocks used for all three IMUs; physical sync quality remains recorded provenance.")
+    reported = int(session.get("total_missing_samples", 0) or 0)
+    missing = sum(value[3]["missing_sequences"] for value in prepared.values())
+    if reported or missing or gap.any():
+        warnings.append(f"Recording reports {reported} missing sample(s); {missing} sequence holes remain; interpolated samples are flagged.")
+    if clipped.any():
+        warnings.append("Raw int16 sensor clipping detected; affected samples are flagged.")
+    return matrix, {
+        "source_hz": source_hz,
+        "target_hz": target_hz,
+        "raw_left_samples": len(samples["L"]),
+        "raw_right_samples": len(samples["R"]),
+        "raw_center_samples": len(samples["C"]),
+        "aligned_samples": count,
+        "model_steps": count,
+        "duration_s": count / target_hz,
+        "resampled": abs(source_hz - target_hz) > 1e-6,
+        "missing_samples": max(reported, missing),
+        "warnings": list(dict.fromkeys(warnings)),
+        "time_s": grid.tolist(),
+        "overlap_start_s": float(start),
+        "last_raw_sample_s": float(grid[-1]),
+        "discarded_tail_samples": 0,
+        "time_basis": basis,
+        "clock_evidence": timing,
+        "quality_flags": flags,
+        "side_diagnostics": {key: value[3] for key, value in prepared.items()},
+        "input_gap_policy": {"maximum_bracket_s": MAX_BRACKET_S, "large_gap": "reject", "small_gap": "interpolate_and_flag"},
+        "scale_provenance": session.get("scale_provenance", {"status": "not_recorded"}),
+        "physical_sync_verified": False,
+    }
