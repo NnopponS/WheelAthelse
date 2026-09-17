@@ -284,7 +284,7 @@ class _TrajectoryDisplayCard extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 Text('2D Planar Trajectory', style: theme.textTheme.titleSmall),
                 const Spacer(),
-                if (result.modelKey == threeImuV4ModelKey || result.modelLabel.contains('3IMU')) ...[
+                if (result.modelLabel == threeImuV4ModelLabel) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(

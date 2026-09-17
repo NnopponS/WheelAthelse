@@ -219,8 +219,8 @@ TrajectoryResult _runThreeImuInference(_ThreeImuInferenceArgs args) {
   final sortedW = List<double>.from(wheelNorm)..sort();
   final qIdx = (sampleCount * 0.035).floor().clamp(0, sampleCount - 1);
 
-  final cFloor = 10.0;
-  final wFloor = 35.0;
+  const cFloor = 10.0;
+  const wFloor = 35.0;
   final cThr = math.max(cFloor, sortedC[qIdx]);
   final wThr = math.max(wFloor, sortedW[qIdx]);
 
@@ -347,7 +347,7 @@ TrajectoryResult _runThreeImuInference(_ThreeImuInferenceArgs args) {
   var gInitX = pauseAx.isNotEmpty ? _median(pauseAx) : _median(axCenterMps2);
   var gInitY = pauseAy.isNotEmpty ? _median(pauseAy) : _median(ayCenterMps2);
   var gInitZ = pauseAz.isNotEmpty ? _median(pauseAz) : _median(azCenterMps2);
-  var initGNorm = math.sqrt(gInitX * gInitX + gInitY * gInitY + gInitZ * gInitZ);
+  final initGNorm = math.sqrt(gInitX * gInitX + gInitY * gInitY + gInitZ * gInitZ);
   final gMag = initGNorm > 1e-6 ? initGNorm : 9.80665;
   if (initGNorm > 1e-6) {
     gInitX /= initGNorm;
@@ -365,7 +365,7 @@ TrajectoryResult _runThreeImuInference(_ThreeImuInferenceArgs args) {
 
   var gCurrX = gInitX, gCurrY = gInitY, gCurrZ = gInitZ;
   const tau = 2.0;
-  final alpha = dt / (tau + dt);
+  const alpha = dt / (tau + dt);
   const scaleGyro = (math.pi / 180.0) * virtualGyroDpsPerCount;
 
   for (var i = 0; i < sampleCount; i++) {
@@ -504,12 +504,10 @@ _TimedInterpResult _interpolateTimed(
 ) {
   if (readings.isEmpty) return const _TimedInterpResult([0, 0, 0, 0, 0, 0], 0);
   if (t <= readings.first.tSeconds) {
-    final r = readings.first;
-    return _TimedInterpResult([r.axMps2, r.ayMps2, r.azMps2, r.gxRadps, r.gyRadps, r.gzRadps], 0);
+    return _TimedInterpResult(_readingSi(readings.first), 0);
   }
   if (t >= readings.last.tSeconds) {
-    final r = readings.last;
-    return _TimedInterpResult([r.axMps2, r.ayMps2, r.azMps2, r.gxRadps, r.gyRadps, r.gzRadps], readings.length - 1);
+    return _TimedInterpResult(_readingSi(readings.last), readings.length - 1);
   }
   var idx = startIdx.clamp(0, readings.length - 2);
   while (idx < readings.length - 2 && readings[idx + 1].tSeconds < t) {
@@ -519,14 +517,30 @@ _TimedInterpResult _interpolateTimed(
   final r1 = readings[idx + 1];
   final span = r1.tSeconds - r0.tSeconds;
   final frac = span > 1e-9 ? (t - r0.tSeconds) / span : 0.0;
+  final v0 = _readingSi(r0);
+  final v1 = _readingSi(r1);
 
-  return _TimedInterpResult([
-    r0.axMps2 + frac * (r1.axMps2 - r0.axMps2),
-    r0.ayMps2 + frac * (r1.ayMps2 - r0.ayMps2),
-    r0.azMps2 + frac * (r1.azMps2 - r0.azMps2),
-    r0.gxRadps + frac * (r1.gxRadps - r0.gxRadps),
-    r0.gyRadps + frac * (r1.gyRadps - r0.gyRadps),
-    r0.gzRadps + frac * (r1.gzRadps - r0.gzRadps),
-  ], idx);
+  return _TimedInterpResult(
+    List<double>.generate(
+      6,
+      (channel) => v0[channel] + frac * (v1[channel] - v0[channel]),
+      growable: false,
+    ),
+    idx,
+  );
+}
+
+List<double> _readingSi(TimedAnalysisReading reading) {
+  final sample = reading.sample.reading;
+  const gravity = 9.80665;
+  const degreesToRadians = math.pi / 180.0;
+  return [
+    sample.ax * gravity,
+    sample.ay * gravity,
+    sample.az * gravity,
+    sample.gx * degreesToRadians,
+    sample.gy * degreesToRadians,
+    sample.gz * degreesToRadians,
+  ];
 }
 
