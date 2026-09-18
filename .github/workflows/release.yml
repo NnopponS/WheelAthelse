@@ -152,6 +152,19 @@ jobs:
         working-directory: applications/wheelathlete_mobile
         run: flutter pub get --enforce-lockfile
 
+      - name: Expose ONNX Runtime for Linux host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ort_lib="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -path '*/onnxruntime_v2-*/linux/libonnxruntime.so.1.22.0' -print -quit)"
+          if [ -z "$ort_lib" ]; then
+            echo "Bundled Linux ONNX Runtime was not found in the Pub cache." >&2
+            exit 1
+          fi
+          ort_dir="$(dirname "$ort_lib")"
+          echo "LD_LIBRARY_PATH=$ort_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          ldd "$ort_lib"
+
       - name: Analyze and test Android source
         working-directory: applications/wheelathlete_mobile
         run: |
