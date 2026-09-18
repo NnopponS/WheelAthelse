@@ -301,11 +301,40 @@ jobs:
       - name: Generate verified-artifact update manifest
         shell: bash
         run: |
+          set -euo pipefail
+          signing_flag="$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path('dist/release/windows-signing-report.json').read_text(encoding='utf-8')
+          )
+          print('--is-signed' if report.get('is_signed') is True else '--unsigned')
+          PY
+          )"
           python release/generate_update_manifest.py \
             --version "${{ needs.metadata.outputs.version }}" \
             --windows "dist/release/WheelAthleteSetup-${{ needs.metadata.outputs.version }}.exe" \
             --out dist/release/latest.json \
-            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} Windows installer/portable and Android APK/AAB release"
+            --notes "WheelAthlete ${{ needs.metadata.outputs.version }} Windows installer/portable and Android APK/AAB release" \
+            "$signing_flag"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(
+              Path('dist/release/windows-signing-report.json').read_text(encoding='utf-8')
+          )
+          manifest = json.loads(
+              Path('dist/release/latest.json').read_text(encoding='utf-8')
+          )
+          expected = report.get('is_signed') is True
+          actual = manifest['platforms']['windows'].get('is_signed') is True
+          if actual != expected:
+              raise SystemExit(
+                  f'Windows signing mismatch: report={expected}, manifest={actual}'
+              )
+          PY
           cat dist/release/latest.json
 
       - name: Publish GitHub Release
