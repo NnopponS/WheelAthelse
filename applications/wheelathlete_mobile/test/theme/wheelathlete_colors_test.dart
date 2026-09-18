@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wheelathlete/theme/app_palette.dart';
 import 'package:wheelathlete/theme/wheel_side.dart';
-import 'package:wheelathlete/theme/WheelAthlete_colors.dart';
+import 'package:wheelathlete/theme/wheelathlete_colors.dart';
 
 void main() {
   group('WheelAthleteColors.forWheel', () {

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wheelathlete/theme/app_dimens.dart';
 import 'package:wheelathlete/theme/app_palette.dart';
 import 'package:wheelathlete/theme/app_typography.dart';
-import 'package:wheelathlete/theme/WheelAthlete_colors.dart';
+import 'package:wheelathlete/theme/wheelathlete_colors.dart';
 
 /// Builds the WheelAthlete [ThemeData] for light and dark modes.
 ///
