@@ -31,7 +31,7 @@ The repository provides two paths for packaging and distributing the Windows app
 
 An unsigned local package is suitable for development/testing and community distribution. SHA-256 protects artifact integrity; when installing unsigned packages on Windows, SmartScreen prompt can be dismissed via "More info" -> "Run anyway".
 
-## What is included in 1.8.2
+## What is included in 1.8.3
 
 ### WheelAthlete Windows Research Application
 
@@ -44,10 +44,11 @@ The Windows application uses a two-process architecture:
 
 The GUI is not the authoritative raw-data path. A slow chart, model task, or GUI restart must not silently become the BLE recording bottleneck.
 
-Key 1.8.2 behavior:
+Key 1.8.3 behavior:
 
 - Streamlined, minimal navigation sidebar ("WheelAthlete") with clean uncluttered headers across all pages;
-- Focused, distraction-free Acquisition setup with simplified trial inputs and countdown audio cues;
+- Focused, distraction-free Acquisition setup with simplified trial inputs, pre-warmed countdown audio cues (5-4-3-2-1 at 700 Hz) and 1200 Hz start tone;
+- Final QC result card displaying recording quality, duration, Experiment topic, and Trial number;
 - Day -> Experiment -> Trial Results hierarchy with persistent session-ID selection and C sample counts;
 - day/all/clear batch selection and deduplicated export;
 - high-resolution Windows host timing based on QueryPerformanceCounter;
@@ -114,7 +115,7 @@ The authoritative research recording remains the `.waj` journal. MODEL output, p
 
 ### Mobile status
 
-The existing Flutter Android/iOS source remains in the repository as maintenance material. **No new mobile source changes, APK/AAB/IPA, mobile download, or mobile update offer are part of this v1.8.2 consolidation.**
+The existing Flutter Android/iOS source remains in the repository as maintenance material. **No new mobile source changes, APK/AAB/IPA, mobile download, or mobile update offer are part of this v1.8.3 consolidation.**
 
 Mobile is therefore not a current publication gate for this release. Future mobile publication should be handled as a separately reviewed release scope.
 
@@ -123,7 +124,7 @@ Mobile is therefore not a current publication gate for this release. Future mobi
 ```text
 WheelAthelse/
 ├── applications/
-│   ├── wheelathlete_windows/          # active Windows v1.8.2 application
+│   ├── wheelathlete_windows/          # active Windows v1.8.3 application
 │   └── wheelathlete_mobile/           # retained mobile maintenance source
 ├── hardware_firmware/
 │   ├── m5stickc_plus2/
@@ -156,7 +157,7 @@ https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 
 When a trusted signed release exists, WheelAthlete validates semantic version, repository-owned HTTPS URL, exact byte size, and SHA-256 before launching the installer. Update installation is blocked while Live preview, countdown, or recording is active.
 
-The current source-only v1.8.2 release intentionally publishes no `latest.json`, so installed clients receive no update offer yet.
+The current source-only v1.8.3 release intentionally publishes no `latest.json`, so installed clients receive no update offer yet.
 
 The release workflow is **manually dispatched** from [`.github/workflows/release.yml`](.github/workflows/release.yml). It tests the Windows application, requires the trusted signing configuration, builds/verifies the Windows package, generates `latest.json`, and publishes only after all release gates pass.
 
@@ -199,7 +200,7 @@ Automated tests and successful builds do **not** prove real RF throughput, physi
 
 ## Current acceptance boundary
 
-Software/source acceptance for 1.8.2 is separate from two external gates:
+Software/source acceptance for 1.8.3 is separate from two external gates:
 
 - **Trusted Windows signing** — required before public Windows binaries/update manifest are published.
 - **Final L/R/C physical acceptance** — deferred until the sensor hardware is available again.
@@ -212,18 +213,18 @@ The specific XIAO C 1.8.2 board has strong partial runtime evidence, but the fin
 - [`.project/HANDOFF.md`](.project/HANDOFF.md) — exact continuation instructions
 - [`.project/architecture.md`](.project/architecture.md) — runtime/data/model boundaries
 - [`.project/decisions.md`](.project/decisions.md) — active durable decisions
-- [`release/RELEASE_NOTES_1.8.2.md`](release/RELEASE_NOTES_1.8.2.md) — release summary
+- [`release/RELEASE_NOTES_1.8.3.md`](release/RELEASE_NOTES_1.8.3.md) — release summary
 
 ## Version matrix
 
 | Component | Version / status |
 |---|---|
-| Product release | `1.8.2` |
-| Windows Research Application | `1.8.2` |
+| Product release | `1.8.3` |
+| Windows Research Application | `1.8.3` |
 | M5StickC Plus2 firmware | `1.8.2` |
 | XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |
-| Flutter mobile source | `1.8.2+12` — maintenance-only, not part of current publication |
+| Flutter mobile source | `1.8.3+13` — maintenance-only, not part of current publication |
 
 The root [`VERSION`](VERSION) file is the coordinated product version used by Windows packaging and release validation.
 

@@ -1,16 +1,14 @@
 # Current engineering handoff
 
-Updated: 2026-09-15
-Updated: 2026-09-18
 Updated: 2026-09-19
 
-## v1.8.2 repository state
+## v1.8.3 repository state
 
-WheelAthlete **v1.8.2** is consolidated as a Windows-first release line. The final public repository surface is intentionally small:
+WheelAthlete **v1.8.3** is consolidated as a Windows-first release line. The final public repository surface is intentionally small:
 
 - `main`
-- `release/main-v1.8.2`
-- source-only GitHub Release/tag `v1.8.2`
+- `release/main-v1.8.3`
+- source-only GitHub Release/tag `v1.8.3`
 
 The obsolete remote development/archive/release branches were checked as ancestors of the integrated `main` before deletion. Old visible GitHub Release entries were removed while historical version tags remain for traceability.
 
@@ -20,9 +18,10 @@ The obsolete remote development/archive/release branches were checked as ancesto
 - `codex/v1.8.2-repairs` is contained in `main` history.
 - `codex/windows-trust-hardening` was merged normally into `main` without conflicts or force-pushing.
 - The trust hardening recursively signs/verifies packaged executable components, validates RSA + Code Signing EKU + exact publisher subject, requires timestamps, signs the generated Inno uninstaller/installer and produces a fail-closed `public_release_ready` report.
-- The release workflow supports `ALLOW_UNSIGNED_RELEASE=true` community build mode (`is_signed=false`) while embedding available baseline/experimental models, requires dispatch from the exact `v1.8.2` tag, gives write permission only to the publish job, and re-checks `public_release_ready=true` for signed release channels.
+- The release workflow supports `ALLOW_UNSIGNED_RELEASE=true` community build mode (`is_signed=false`) while embedding available baseline/experimental models, requires dispatch from the exact `v1.8.3` tag, gives write permission only to the publish job, and re-checks `public_release_ready=true` for signed release channels.
 - GUI polished: minimal navigation sidebar ("WheelAthlete"), uncluttered headers across pages, window icon integration, polished Analysis timeline typography, Wheel C in Diagnostics and Results with C sample counts, compact Athlete input (240px), and Kinematic Trajectory (XY + Yaw) baseline bound to `Documents/WheelAthlete`.
 - Acquisition synchronized recording countdown audio and visual cue streamlining: removed calibration hold message (`"Hold still for calibration… X s"`) in favor of direct countdown timing `5`, `4`, `3`, `2`, `1` on `recordCountdown`, pre-warmed in-memory PCM WAV audio queue worker ensuring reliable non-blocking playback of 1 s interval beeps at 700 Hz (120 ms) across every second without Windows audio DAC power-saving sleep drops, and a 500 ms long start tone at 1200 Hz with persistent "START!" visual display before recording clock transition.
+- Acquisition QC metadata display: Final QC summary card now explicitly displays the recorded Experiment topic, Trial number, and athlete name (`Experiment: <topic> • Trial <trial> • Athlete: <name>`), with metadata preserved and forwarded across daemon IPC, LiveController, and DemoController.
 
 ## Verification recorded on 2026-09-10
 
@@ -61,13 +60,13 @@ The obsolete remote development/archive/release branches were checked as ancesto
 
 ## Current release truth
 
-WheelAthlete product/Windows/firmware version is 1.8.2; BLE protocol remains 1.8.0. The XIAO center role is `C` / `0x43`, with green XIAO identity and Wheel C monitoring. Current production trajectory inference remains L/R-only.
+WheelAthlete product/Windows version is 1.8.3; firmware is 1.8.2; BLE protocol remains 1.8.0. The XIAO center role is `C` / `0x43`, with green XIAO identity and Wheel C monitoring. Current production trajectory inference remains L/R-only.
 
-The public v1.8.2 GitHub Release is deliberately source-only. Do not attach the locally generated unsigned installer, portable ZIP or `latest.json`. Installed-client update offers begin only after a future trusted signed release passes the publication gate.
+The public v1.8.3 GitHub Release is deliberately source-only. Do not attach the locally generated unsigned installer, portable ZIP or `latest.json`. Installed-client update offers begin only after a future trusted signed release passes the publication gate.
 
 ## Publication scope
 
-No new Flutter/mobile source change or mobile binary belongs to this consolidation. Existing mobile source/history remains maintenance-only. Do not stage, reset, clean, merge or push the separate local `BiWheel3D/` repository.
+This v1.8.3 consolidation publishes no new Flutter/mobile source change and no mobile binary. Existing mobile source/history remains maintenance-only. Do not stage, reset, clean, merge or push the separate local `BiWheel3D/` repository.
 
 Generated Windows packages, firmware build output, recordings, private logs, local evidence, signing credentials and absolute user paths must not enter source commits. Keep local evidence in ignored `.project/local/`.
 

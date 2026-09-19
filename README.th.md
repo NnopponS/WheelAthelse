@@ -4,21 +4,21 @@
 
 WheelAthlete ซิงโครไนซ์เซนเซอร์ที่ล้อซ้ายและขวา บันทึกข้อมูลการเคลื่อนไหวแบบ research-grade และมี Windows application สำหรับเก็บข้อมูล ตรวจคุณภาพ จัดการผลลัพธ์ ส่งออกข้อมูล ดู diagnostics และวิเคราะห์ trajectory แบบ offline นอกจากนี้ระบบยังรองรับ IMU ตัวที่สามตำแหน่งกลางเก้าอี้ (`C`) สำหรับการเก็บข้อมูลและงานทดลอง
 
-> **Release ปัจจุบัน:** `v1.8.2` — Windows-first
-> **Windows application:** `1.8.2`
+> **Release ปัจจุบัน:** `v1.8.3` — Windows-first
+> **Windows application:** `1.8.3`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Mobile source:** `1.8.2+12` อยู่ในโหมด maintenance; release นี้ไม่เพิ่ม mobile source หรือ mobile binary ใหม่
+> **Mobile source:** `1.8.3+13` อยู่ในโหมด maintenance; release นี้ไม่เพิ่ม mobile source หรือ mobile binary ใหม่
 > **ภาษา:** [English](README.md) | ไทย
 
 ## สถานะ Release
 
-WheelAthlete 1.8.2 รวมงาน Windows application, firmware M5/XIAO, การรองรับเซนเซอร์ 3 ตัว, installer lifecycle, Results workflow, model bundle และระบบ release hardening ไว้ใน source line เดียว
+WheelAthlete 1.8.3 รวมงาน Windows application, firmware M5/XIAO, การรองรับเซนเซอร์ 3 ตัว, installer lifecycle, Results workflow, model bundle และระบบ release hardening ไว้ใน source line เดียว
 
 โครงสร้าง branch สาธารณะตั้งใจให้เหลือเพียง:
 
 - `main` — source หลักที่รวมงานทั้งหมดแล้ว
-- `release/main-v1.8.2` — release line ที่ชี้ไปยัง commit 1.8.2 ที่ผ่านการตรวจสอบ
+- `release/main-v1.8.3` — release line ที่ชี้ไปยัง commit 1.8.3 ที่ผ่านการตรวจสอบ
 
 Tag ของ version เก่ายังคงเก็บไว้เพื่อ trace ประวัติได้ แต่ branch พัฒนา/release เก่าที่ merge เรียบร้อยแล้วไม่จำเป็นต้องแสดงอยู่ต่อ
 
@@ -31,7 +31,7 @@ Repository รองรับการสร้างแพ็กเกจ Windo
 
 ไฟล์ unsigned เหมาะสำหรับนักวิจัยและผู้ใช้งานชุมชนในการพัฒนา/ทดสอบ โดย SHA-256 ใช้ตรวจสอบความถูกต้องของไฟล์อย่างสมบูรณ์ สำหรับ Windows SmartScreen สามารถกดยืนยันผ่าน "More info" -> "Run anyway" ได้
 
-## สิ่งที่อยู่ใน WheelAthlete 1.8.2
+## สิ่งที่อยู่ใน WheelAthlete 1.8.3
 
 ### WheelAthlete Windows Research Application
 
@@ -44,10 +44,11 @@ Windows application ใช้สถาปัตยกรรมแบบ 2 proces
 
 GUI ไม่ใช่ authoritative raw-data path ดังนั้น chart ที่ช้า, model analysis หรือการ restart GUI ต้องไม่ทำให้เส้นทางบันทึก BLE สูญหายแบบเงียบ ๆ
 
-ความสามารถสำคัญของ 1.8.2:
+ความสามารถสำคัญของ 1.8.3:
 
 - Navigation sidebar แบบมินิมอล ("WheelAthlete") อ่านง่าย ไม่มีข้อความซ้ำซ้อน
-- หน้า Acquisition setup กระชับ ลดฟิลด์ที่ไม่จำเป็น พร้อมระบบเสียงนับถอยหลัง (audio countdown cues)
+- หน้า Acquisition setup กระชับ พร้อมระบบนับถอยหลัง (5-4-3-2-1) และเสียงเตือน PCM WAV 700 Hz แบบไม่สะดุด (pre-warmed worker) และเสียงยาว 1200 Hz เมื่อเริ่มบันทึก
+- การ์ดสรุปผล Final QC แสดงผล Experiment (การทดลอง) และ Trial (ครั้งที่) พร้อมชื่อนักกีฬาอย่างชัดเจน
 - Results แบบ Day -> Experiment -> Trial พร้อมแสดงจำนวน C samples และช่องกรอก Athlete ที่กะทัดรัด
 - เลือกทั้งวัน / เลือกทั้งหมด / ล้าง selection และ batch export แบบไม่ซ้ำ
 - หน้า Diagnostics แสดงข้อมูล telemetry แยกครบ 3 เซนเซอร์: ล้อซ้าย (L), ล้อขวา (R) และ กึ่งกลางตัวรถ (C)
@@ -114,16 +115,16 @@ Model ใหม่ที่นำเข้าแบบ portable ใช้ contra
 
 ### สถานะ Mobile
 
-Flutter Android/iOS source ที่มีอยู่เดิมยังเก็บไว้เพื่อ maintenance แต่ **การรวม v1.8.2 รอบนี้จะไม่เพิ่ม/แก้ mobile source สำหรับการ publish, ไม่สร้าง APK/AAB/IPA, ไม่มี mobile download และไม่มี mobile update offer**
+Flutter Android/iOS source ที่มีอยู่เดิมยังเก็บไว้เพื่อ maintenance แต่ **การรวม v1.8.3 รอบนี้จะไม่เพิ่ม/แก้ mobile source สำหรับการ publish, ไม่สร้าง APK/AAB/IPA, ไม่มี mobile download และไม่มี mobile update offer**
 
-ดังนั้น mobile ไม่ใช่ publication gate ของ v1.8.2 รอบนี้ หากจะกลับมาเผยแพร่ mobile ในอนาคตควรแยกเป็น release scope ที่ตรวจสอบต่างหาก
+ดังนั้น mobile ไม่ใช่ publication gate ของ v1.8.3 รอบนี้ หากจะกลับมาเผยแพร่ mobile ในอนาคตควรแยกเป็น release scope ที่ตรวจสอบต่างหาก
 
 ## โครงสร้าง Repository
 
 ```text
 WheelAthelse/
 ├── applications/
-│   ├── wheelathlete_windows/          # Windows v1.8.2 ที่ใช้งานหลัก
+│   ├── wheelathlete_windows/          # Windows v1.8.3 ที่ใช้งานหลัก
 │   └── wheelathlete_mobile/           # mobile source สำหรับ maintenance
 ├── hardware_firmware/
 │   ├── m5stickc_plus2/
@@ -199,7 +200,7 @@ Automated tests หรือการ build สำเร็จ **ไม่ใช
 
 ## ขอบเขต Acceptance ปัจจุบัน
 
-Source/software acceptance ของ 1.8.2 แยกออกจาก external gate 2 เรื่อง:
+Source/software acceptance ของ 1.8.3 แยกออกจาก external gate 2 เรื่อง:
 
 - **Trusted Windows signing** — ต้องมีก่อน publish Windows binaries และ update manifest
 - **Final L/R/C physical acceptance** — รอจนกว่าจะมี hardware กลับมาใช้งานอีกครั้ง
@@ -212,18 +213,18 @@ XIAO C firmware 1.8.2 มี partial runtime evidence ที่ดี แต่ 
 - [`.project/HANDOFF.md`](.project/HANDOFF.md) — ขั้นตอนต่อเนื่องที่ชัดเจน
 - [`.project/architecture.md`](.project/architecture.md) — runtime/data/model boundaries
 - [`.project/decisions.md`](.project/decisions.md) — active engineering decisions
-- [`release/RELEASE_NOTES_1.8.2.md`](release/RELEASE_NOTES_1.8.2.md) — release summary
+- [`release/RELEASE_NOTES_1.8.3.md`](release/RELEASE_NOTES_1.8.3.md) — release summary
 
 ## Version Matrix
 
 | Component | Version / status |
 |---|---|
-| Product release | `1.8.2` |
-| Windows Research Application | `1.8.2` |
+| Product release | `1.8.3` |
+| Windows Research Application | `1.8.3` |
 | M5StickC Plus2 firmware | `1.8.2` |
 | XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |
-| Flutter mobile source | `1.8.2+12` — maintenance-only, ไม่อยู่ใน publication รอบนี้ |
+| Flutter mobile source | `1.8.3+13` — maintenance-only, ไม่อยู่ใน publication รอบนี้ |
 
 ไฟล์ [`VERSION`](VERSION) ที่ root เป็น coordinated product version ที่ใช้กับ Windows packaging และ release validation
 

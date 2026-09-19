@@ -1,6 +1,6 @@
-# WheelAthlete v1.8.2 release
+# WheelAthlete v1.8.3 release
 
-WheelAthlete 1.8.2 is a **Windows-first** release line. The current public GitHub Release is source-only until trusted Windows signing is configured. No mobile binary or mobile update offer belongs to this release.
+WheelAthlete 1.8.3 is a **Windows-first** release line. The current public GitHub Release is source-only until trusted Windows signing is configured. No mobile binary or mobile update offer belongs to this release.
 
 ## Stable Windows update manifest
 
@@ -44,17 +44,17 @@ Physical L/R/C acceptance remains a separate hardware evidence gate. Source/buil
 ## Signed assets when the trust gate is available
 
 ```text
-WheelAthleteSetup-1.8.2.exe
-WheelAthlete-1.8.2-portable.zip
+WheelAthleteSetup-1.8.3.exe
+WheelAthlete-1.8.3-portable.zip
 SHA256SUMS.txt
 signing-report.json
 latest.json
 ```
 
-Until trusted signing exists, the v1.8.2 page should contain GitHub's source archives only.
+Until trusted signing exists, the v1.8.3 page should contain GitHub's source archives only.
 
 ## Branch and version policy
 
-`main` is the integrated source line. `release/main-v1.8.2` is the public release branch pointing at the exact tested v1.8.2 commit. Historical version tags are retained for traceability; obsolete remote development/release branches do not need to remain visible after their work is fully merged.
+`main` is the integrated source line. `release/main-v1.8.3` is the public release branch pointing at the exact tested v1.8.3 commit. Historical version tags are retained for traceability; obsolete remote development/release branches do not need to remain visible after their work is fully merged.
 
-See [RELEASE_NOTES_1.8.2.md](RELEASE_NOTES_1.8.2.md) and [`../applications/wheelathlete_windows/packaging/windows/README.md`](../applications/wheelathlete_windows/packaging/windows/README.md).
+See [RELEASE_NOTES_1.8.3.md](RELEASE_NOTES_1.8.3.md) and [`../applications/wheelathlete_windows/packaging/windows/README.md`](../applications/wheelathlete_windows/packaging/windows/README.md).

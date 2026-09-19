@@ -65,16 +65,17 @@ raw-to-g / raw-to-deg/s conversion cannot silently keep stale scale factors.
 The Acquisition page combines live telemetry and recording into one operator
 workflow:
 
-- current Accel X/Y/Z and Gyro X/Y/Z for both wheels;
+- current Accel X/Y/Z and Gyro X/Y/Z for both wheels and optional chair-center (C);
 - acceleration and gyroscope charts using bounded preview traffic;
-- athlete, topic, trial and rate;
+- athlete, topic (experiment), trial and rate;
+- pre-warmed audio countdown cues (5-4-3-2-1 at 700 Hz) and 1200 Hz start tone;
 - configures every connected board before START;
 - pre-record clock synchronization;
 - common PC monotonic scheduled T0;
 - firmware START acknowledgement;
 - append-only raw journal recording;
 - reliable STOP and post-stop synchronization;
-- final QC result.
+- final QC result card displaying quality, duration, Experiment topic, and Trial number.
 
 Only throttled preview telemetry enters the GUI. Raw 50/100/200 Hz samples stay
 inside the acquisition daemon and authoritative journal path.
