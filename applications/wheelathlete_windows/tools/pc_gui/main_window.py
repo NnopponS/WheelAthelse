@@ -284,6 +284,7 @@ QFrame#card { background-color: white; border: 1px solid #dce5ef; border-radius:
 QLabel#pageTitle { font-size: 27px; font-weight: 750; color: #0f1f3d; }
 QLabel#pageSub { color: #64748b; }
 QLabel#cardTitle { font-size: 16px; font-weight: 700; }
+QLabel#resultMeta { font-size: 13px; font-weight: 600; color: #0f766e; }
 QLabel#mutedText, QLabel#metricLabel { color: #64748b; }
 QLabel#metricLabel { font-size: 11px; }
 QLabel#metricValue { font-size: 17px; font-weight: 700; }
@@ -1236,14 +1237,21 @@ class AcquisitionPage(QWidget):
         self.result = Card()
         result_layout = QVBoxLayout(self.result)
         result_layout.setContentsMargins(16, 12, 16, 12)
+        result_layout.setSpacing(4)
         self.result_title = QLabel("No finalized recording yet")
         self.result_title.setObjectName("cardTitle")
+        self.result_meta = QLabel("")
+        self.result_meta.setObjectName("resultMeta")
+        self.result_meta.setAccessibleName("resultMeta")
+        self.result_meta.setWordWrap(True)
+        self.result_meta.setVisible(False)
         self.result_detail = QLabel(
             "Final QC compares host, firmware and authoritative journal counts."
         )
         self.result_detail.setWordWrap(True)
         self.result_detail.setObjectName("mutedText")
         result_layout.addWidget(self.result_title)
+        result_layout.addWidget(self.result_meta)
         result_layout.addWidget(self.result_detail)
         left_col.addWidget(self.result)
         left_col.addStretch(1)
@@ -1508,6 +1516,19 @@ class AcquisitionPage(QWidget):
         duration = result.get("duration_s")
         reasons = result.get("reasons", [])
         self.result_title.setText(f"Final QC: {quality}   •   {fmt(duration, ' s', 1)}")
+
+        topic = str(result.get("topic") or self.topic.text()).strip() or "General"
+        trial = result.get("trial_number")
+        if trial is None or trial == "":
+            trial = self.trial.value()
+        athlete = str(result.get("athlete") or self.athlete.text()).strip()
+
+        meta_parts = [f"Experiment: {topic}", f"Trial {trial}"]
+        if athlete:
+            meta_parts.append(f"Athlete: {athlete}")
+        self.result_meta.setText("   •   ".join(meta_parts))
+        self.result_meta.setVisible(True)
+
         if reasons:
             text = "\n".join(
                 f"• {item.get('code', 'check')}: {item.get('detail', '')}"

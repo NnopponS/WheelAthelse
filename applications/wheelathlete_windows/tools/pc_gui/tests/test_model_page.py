@@ -259,10 +259,10 @@ def test_model_page_warns_on_3imu_model_with_2imu_recording():
     _APP.processEvents()
     assert model.generate_button.isEnabled()
 
-    # 3-IMU model: IMU v4 (Active) -> Disabled with warning
+    # 3-IMU model: requires Wheel C -> Disabled with warning
     for idx in range(model.model_combo.count()):
         spec = model.model_combo.itemData(idx)
-        if hasattr(spec, "label") and ("v4" in spec.label or "v3" in spec.label):
+        if hasattr(spec, "required_sensor_roles") and "C" in spec.required_sensor_roles:
             model.model_combo.setCurrentIndex(idx)
             break
     _APP.processEvents()

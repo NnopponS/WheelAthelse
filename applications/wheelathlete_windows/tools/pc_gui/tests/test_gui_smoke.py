@@ -86,6 +86,10 @@ def test_python_research_ui_navigation_and_combined_acquisition():
     _APP.processEvents()
     assert not controller.state.recording
     assert "Final QC: GOOD" in window.acquisition.result_title.text()
+    assert "Experiment: Sprint" in window.acquisition.result_meta.text()
+    assert "Trial 3" in window.acquisition.result_meta.text()
+    assert "Athlete: TestRunner" in window.acquisition.result_meta.text()
+    assert not window.acquisition.result_meta.isHidden()
 
     controller.close()
     window.close()

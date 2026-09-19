@@ -878,6 +878,7 @@ class AcquisitionService:
         value = {
             "session_id": session_id,
             "journal_path": str(final_path),
+            **metadata,
             **summary,
         }
         self._emit("recording_state", {"state": "finalized", **value})

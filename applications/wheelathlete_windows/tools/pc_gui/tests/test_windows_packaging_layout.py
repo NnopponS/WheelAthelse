@@ -84,4 +84,4 @@ def test_build_signs_and_verifies_every_distributed_executable() -> None:
     assert "contents: read" in workflow
     assert "contents: write" in workflow
     assert "public_release_ready" in workflow
-    assert "Release workflow must be dispatched on exact tag" in workflow
+    assert "Release workflow must run on exact tag" in workflow

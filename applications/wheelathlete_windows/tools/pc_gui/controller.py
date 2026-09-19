@@ -214,6 +214,7 @@ class AcquisitionController(BaseController):
         self._poll.setInterval(1000)
         self._poll.timeout.connect(self.refresh_status)
         self._started = False
+        self._active_record_metadata: dict[str, Any] = {}
 
     def start(self) -> None:
         if self._started:
@@ -602,6 +603,7 @@ class AcquisitionController(BaseController):
             self.command_error.emit("record", "Sample rate must be 50, 100, or 200 Hz")
             return
 
+        self._active_record_metadata = dict(metadata)
         self.state.recording_starting = True
         self.state.countdown = None
         self.state_changed.emit(self.state)
@@ -749,7 +751,8 @@ class AcquisitionController(BaseController):
         self.state.recording_target_pc_ns = None
         self.state.session_id = None
         self.state_changed.emit(self.state)
-        self.recording_finished.emit(result)
+        merged = {**self._active_record_metadata, **result}
+        self.recording_finished.emit(merged)
         self.refresh_status()
         self.refresh_sessions()
 
@@ -913,6 +916,7 @@ class DemoController(BaseController):
                 "recorded_utc_ms": demo_yesterday_utc_ms,
             },
         ]
+        self._active_record_metadata: dict[str, Any] = {}
 
     def start(self) -> None:
         self._timer.start()
@@ -1151,6 +1155,7 @@ class DemoController(BaseController):
         self.message.emit("Demo mode has no incomplete journal")
 
     def start_record(self, metadata: dict[str, Any]) -> None:
+        self._active_record_metadata = dict(metadata)
         self.state.recording = True
         self.state.recording_started_utc_ms = int(time.time() * 1000)
         self._started_ns = time.perf_counter_ns()
@@ -1161,12 +1166,16 @@ class DemoController(BaseController):
     def stop_record(self) -> None:
         self.state.recording = False
         duration = max(0.1, (time.perf_counter_ns() - self._started_ns) / 1e9)
+        athlete = str(self._active_record_metadata.get("athlete") or "Athlete")
+        topic = str(self._active_record_metadata.get("topic") or "Sprint")
+        trial_raw = self._active_record_metadata.get("trial_number")
+        trial_number = int(trial_raw) if trial_raw is not None else (len(self.sessions) + 1)
         new_session = {
             "session_id": self.state.session_id or f"DEMO-{uuid.uuid4().hex[:8]}",
-            "athlete": "Athlete",
-            "topic": "Sprint",
-            "trial_number": len(self.sessions) + 1,
-            "sample_rate_hz": 100,
+            "athlete": athlete,
+            "topic": topic,
+            "trial_number": trial_number,
+            "sample_rate_hz": int(self._active_record_metadata.get("sample_rate_hz", 100)),
             "duration_s": duration,
             "quality": "GOOD",
             "sample_counts": {
@@ -1187,6 +1196,9 @@ class DemoController(BaseController):
                 "duration_s": duration,
                 "reasons": [],
                 "demo": True,
+                "athlete": athlete,
+                "topic": topic,
+                "trial_number": trial_number,
             }
         )
         self.refresh_sessions()
