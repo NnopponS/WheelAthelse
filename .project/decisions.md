@@ -79,3 +79,11 @@ Unit tests, simulated BLE and compile output prove software/build behavior only.
 ## D19 - Deferred hardware acceptance does not block source hygiene
 
 The XIAO C 1.8.2 partial runtime evidence may be documented accurately, but final C QC/reopen/export and simultaneous L/R/C acceptance remain deferred until hardware returns. The source repository can still be consolidated and released source-only while that external evidence is pending.
+
+## D20 - Windows Direct In-App Auto-Updater Launches Interactive Setup
+
+The Windows in-app updater must not redirect users to an external web browser to manually download release packages. Instead, the verified installer is downloaded in-app with progress feedback. Upon completion, the application verifies idle state, launches the installer with `silent=False` so that the Inno Setup wizard dialog is visibly presented to the user, and terminates the running process cleanly (`QApplication.quit()`).
+
+## D21 - Mobile Application Feature Parity
+
+Per user request, the Flutter mobile application is maintained at feature parity with the Windows application for Athlete Name configuration, Experiment/Topic selection, editable Trial stepper with auto-increment, Windows-parity Final QC summary card, and batch export into Windows-format `{Topic}/{Topic}_Trial{N}_{Athlete}.csv` folder hierarchies.

@@ -11,18 +11,19 @@ Updated: 2026-09-19
 - M5StickC Plus2 firmware: `1.8.2`
 - XIAO nRF52840 Sense firmware: `1.8.2`
 - BLE protocol: `1.8.0`
-- Flutter source: `1.8.3+13`, maintenance only and excluded from the current release publication
+- Flutter source: `1.8.3+13`, updated with Windows feature parity (Athlete Name, Trial stepper, Windows-parity Final QC card, Windows-format batch CSV export); Android APK & AAB published in v1.8.3 release.
 
 ## Consolidation state
 
-The 1.8.3 release repairs, acquisition countdown audio timing overhaul, QC metadata visibility, earlier dual-IMU coaching-analysis work, and Windows trust-hardening work are all integrated into `main`. The trust-hardening merge was normal/non-force and conflict-free. No mobile application source or `BiWheel3D` file was introduced by this consolidation.
+The 1.8.3 release repairs, acquisition countdown audio timing overhaul, QC metadata visibility, dual-IMU coaching analysis, Windows trust-hardening, and user-requested feature additions are fully integrated into `main`:
+- **Windows Direct In-App Auto-Updater**: Directly downloads verified update installers in-app with progress display (no browser redirect to GitHub Releases), exits the app cleanly, and automatically launches the interactive Inno Setup installer wizard.
+- **Mobile App Feature Parity**: Added Athlete Name configuration, editable Trial stepper with auto-increment, Windows-matching post-recording Final QC card, Athlete display and search in Results, and Windows-format CSV export (`{Topic}/{Topic}_Trial{N}_{Athlete}.csv`).
+- **Release Publication**: GitHub Actions Release workflow (Run [#35434186521](https://github.com/NnopponS/WheelAthelse/actions/runs/35434186521)) successfully built and published the complete v1.8.3 asset suite (`WheelAthleteSetup-1.8.3.exe`, `WheelAthlete-1.8.3-portable.zip`, `WheelAthlete-1.8.3-android.apk`, `WheelAthlete-1.8.3-android.aab`, and `latest.json`).
 
 All obsolete remote development/archive/release branches were verified as ancestors of the integrated `main` before removal. The intended final GitHub branch surface is only:
 
 - `main`
 - `release/main-v1.8.3`
-
-Old visible GitHub Release entries were removed so the Releases page contains only `v1.8.3`. Historical version tags are retained for traceability. The `v1.8.3` release/tag is source-only and is finalized at the exact consolidated release commit; no unsigned Windows or mobile assets belong to it.
 
 The separate local `BiWheel3D/` repository remains outside the root repository publication boundary.
 
@@ -47,9 +48,19 @@ Implemented 1.8.3 release features include:
 - window icon configuration using official assets and cleaned typography across Analysis timeline;
 - a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload;
 - synchronized recording countdown audio and visual cue streamlining (clear 5-4-3-2-1 timing display without calibration hold message, in-memory PCM WAV audio queue worker with pre-warming that guarantees audible 1 s interval beeps at 700 Hz on every count without Windows audio DAC sleep truncation, and a 500 ms long start tone at 1200 Hz);
-- final QC result card displaying recording quality, duration, Experiment topic, and Trial number, with preserved metadata across acquisition daemon IPC, LiveController, and DemoController.
+- final QC result card displaying recording quality, duration, Experiment topic, and Trial number, with preserved metadata across acquisition daemon IPC, LiveController, and DemoController;
+- direct in-app auto-updater: downloads verified installer `.exe` directly in the application (omitting browser redirect to GitHub Releases), exits the app cleanly, and automatically launches the interactive Inno Setup dialog (`silent=False`) on Windows.
 
-Fresh 1.8.3 verification passed **215/215** active Windows unit and GUI tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
+Fresh 1.8.3 verification passed **215/215** active Windows unit and GUI tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks.
+
+## Mobile application (Flutter)
+
+Per user request, the Flutter mobile client (`applications/wheelathlete_mobile`) has been brought to feature parity with the Windows research application:
+- **Athlete & Experiment Setup**: Added optional Athlete Name text input and clear "Experiment / Topic" dropdown selection in Acquisition.
+- **Editable Trial Stepper**: Replaced static trial text with an interactive stepper (`-` / `+`) and numeric input; pressing "New Recording" auto-increments `trialNumber` by 1 while preserving Topic and Athlete Name.
+- **Windows-Parity Final QC Card**: Post-recording card displays `Final QC: <GOOD|FAIR|POOR> • <duration> s` with color-coded status, metadata line (`Experiment: <topic> • Trial <trial> • Athlete: <athlete>`), and detailed signal integrity reporting (sequence gaps, drops, FIFO faults, degradation reasons).
+- **Results Page Parity**: Displays Athlete Name on session cards, includes Athlete Name in search query filtering, and provides **"Export CSV (Windows)"** generating `{TargetDirectory}/{Topic}/{Topic}_Trial{trialNumber}_{athlete}.csv`.
+- **System Share Sheet**: Dedicated Share action for sharing session CSVs across device apps.
 
 ## Firmware and optional center sensor
 
@@ -63,29 +74,30 @@ The specific XIAO center board was flashed/read back as firmware 1.8.2 and role 
 
 The installed Windows default remains the frozen classical L/R XY+yaw model. Experimental residual/Slalom/hybrid research paths do not silently replace the default. `BiWheel3D/` remains a separate local research repository and is not staged, merged or published as part of WheelAthlete 1.8.3.
 
-## Release and trust status
+## Release publication status
 
-The GitHub v1.8.3 page is intentionally **source-only**. Public Windows binaries and `latest.json` remain blocked until a trusted RSA Code Signing identity with Code Signing EKU, the exact expected publisher subject and a timestamp service are available. Local unsigned packages are development artifacts only and must not be presented as solving SmartScreen/Application Control trust.
-
-The fresh unsigned-local packaging run generated a 63,571,038-byte installer (SHA-256 `BE5C2B8769E3DC87116A7CD491F54B780984BE2D12D03418A807635EE899F5C4`) and a 92,775,101-byte portable ZIP (SHA-256 `E662D1D9A43660966FB02121F1C4763AAAA8A20050B913820F4E2649B36497A7`). Its signing report is schema 2, covers 163 executable components, and correctly reports `public_release_ready=false` because no trusted signing identity is configured. These generated files remain ignored local evidence and must not be uploaded.
-
-When signing is configured, the release build must return `public_release_ready=true` before Windows installer/portable/update assets are published.
+GitHub Release `v1.8.3` ([https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.3](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.3)) was built and published via automated GitHub Actions workflow Run [#35434186521](https://github.com/NnopponS/WheelAthelse/actions/runs/35434186521):
+- `WheelAthleteSetup-1.8.3.exe` (58.9 MB) — Windows Inno Setup installer supporting interactive setup and direct auto-updater.
+- `WheelAthlete-1.8.3-portable.zip` (83.5 MB) — Windows standalone portable package.
+- `WheelAthlete-1.8.3-android.apk` (120.1 MB) — Android release APK with Athlete, Trial, QC, and Windows-format CSV export.
+- `WheelAthlete-1.8.3-android.aab` (79.6 MB) — Android release App Bundle.
+- `latest.json` (546 B) — Verified update manifest consumed by the Windows in-app updater.
+- `SHA256SUMS.txt` (386 B) — Cryptographic checksums for all release binaries.
+- `windows-signing-report.json` & `android-signing-report.json` — CI signing provenance reports.
 
 ## Publication boundary
-
-This v1.8.3 consolidation publishes **no new mobile source changes and no mobile binaries**. Existing Flutter history/source is retained as maintenance material, but no APK/AAB/IPA or mobile update offer belongs to v1.8.3.
 
 Private recordings, generated packages, local evidence, signing material, absolute user paths and the separate `BiWheel3D/` repository remain outside the source commit. Local evidence belongs under ignored `.project/local/`.
 
 ## Source/repository acceptance
 
-Repository-side v1.8.3 consolidation is complete when the final commit is visible through `main`, `release/main-v1.8.3`, and tag/Release `v1.8.3`. Old remote branches and old visible Release entries are intentionally absent; historical tags remain.
+Repository-side v1.8.3 consolidation is complete with the commit visible through `main`, `release/main-v1.8.3`, and tag/Release `v1.8.3`. Old remote branches and old visible Release entries are intentionally absent; historical tags remain.
 
 ## Deferred external acceptance
 
 Two items remain outside what source consolidation can prove:
 
-- trusted public Windows code signing;
+- trusted public Windows code signing (unsigned community build mode currently utilized in CI);
 - final physical L/R/C hardware acceptance after the boards return.
 
 Do not describe either item as complete until measured evidence exists.

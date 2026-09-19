@@ -8,8 +8,8 @@ WheelAthlete v1.8.2 is a Windows-first acquisition/research release with maintai
 
 ```text
 applications/
-  wheelathlete_windows/                 active v1.8.2 Windows application
-  wheelathlete_mobile/                  retained maintenance source; no v1.8.2 mobile publication
+  wheelathlete_windows/                 active v1.8.3 Windows application
+  wheelathlete_mobile/                  active v1.8.3 Flutter mobile application (feature parity with Windows)
 hardware_firmware/
   m5stickc_plus2/                       ESP32/M5StickC Plus2 firmware
   xiao_nrf52840_sense/                  nRF52840/LSM6DS3 firmware
@@ -104,18 +104,18 @@ GitHub Releases latest.json
 version / exact size / SHA-256 validation
         |
         v
-verified Inno installer
+verified Inno installer downloaded in-app
         |
         v
-idle-only update -> clean app exit -> upgrade -> relaunch
+idle acquisition safety check -> launch interactive setup dialog -> clean app exit -> upgrade
 ```
 
-The current source-only v1.8.2 Release intentionally publishes no `latest.json`, so installed clients receive no update offer until a trusted signed Windows release exists.
+The v1.8.3 Release publishes `latest.json` alongside `WheelAthleteSetup-1.8.3.exe` and Android release assets.
 
 ## Trust and release architecture
 
 A signed build requires a trusted RSA Code Signing identity with Code Signing EKU, current validity, exact expected publisher subject and a timestamp service. The packaging pipeline signs/verifies packaged EXE/DLL/PYD/PowerShell components and uses Inno signing for the generated uninstaller/installer. Release metadata reports component status and `public_release_ready`.
 
-Unsigned local builds may be tested but are not public trusted binaries and do not solve SmartScreen/Application Control publisher trust.
+Unsigned community builds may be built and published in `ALLOW_UNSIGNED_RELEASE=true` mode for open-source distributions.
 
-The intended public branch surface is `main` plus `release/main-v1.8.2`; release tag `v1.8.2` must point at the exact final tested commit.
+The intended public branch surface is `main` plus `release/main-v1.8.3`; release tag `v1.8.3` points at the exact final tested commit.

@@ -22,6 +22,22 @@ The obsolete remote development/archive/release branches were checked as ancesto
 - GUI polished: minimal navigation sidebar ("WheelAthlete"), uncluttered headers across pages, window icon integration, polished Analysis timeline typography, Wheel C in Diagnostics and Results with C sample counts, compact Athlete input (240px), and Kinematic Trajectory (XY + Yaw) baseline bound to `Documents/WheelAthlete`.
 - Acquisition synchronized recording countdown audio and visual cue streamlining: removed calibration hold message (`"Hold still for calibration… X s"`) in favor of direct countdown timing `5`, `4`, `3`, `2`, `1` on `recordCountdown`, pre-warmed in-memory PCM WAV audio queue worker ensuring reliable non-blocking playback of 1 s interval beeps at 700 Hz (120 ms) across every second without Windows audio DAC power-saving sleep drops, and a 500 ms long start tone at 1200 Hz with persistent "START!" visual display before recording clock transition.
 - Acquisition QC metadata display: Final QC summary card now explicitly displays the recorded Experiment topic, Trial number, and athlete name (`Experiment: <topic> • Trial <trial> • Athlete: <name>`), with metadata preserved and forwarded across daemon IPC, LiveController, and DemoController.
+- **Windows Direct In-App Auto-Updater Overhaul**:
+  - Replaced browser redirection to GitHub Releases with in-app background download of verified installer `.exe`.
+  - In `applications/wheelathlete_windows/tools/pc_gui/update_service.py`, `installer_command(installer, *, silent=False)` supports interactive GUI setup mode (`silent=False` omits `/VERYSILENT` and `/SUPPRESSMSGBOXES`).
+  - In `applications/wheelathlete_windows/tools/pc_gui/main_window.py`, `_apply_downloaded_update()` guards active recording states, invokes `self.update_controller.install(silent=False)`, and quits the application (`QApplication.quit()`). The installer wizard dialog launches directly on the Windows desktop for the user to proceed.
+- **Mobile App (Flutter) Feature Parity**:
+  - Re-aligned `applications/wheelathlete_mobile` with the Windows desktop application per explicit user request.
+  - In `lib/ui/acquisition_page.dart`: Added optional Athlete Name input (`_athleteController`), editable Trial stepper with `-` / `+` buttons and numeric field (`_trialController`), and auto-increment on "New Recording".
+  - Post-recording Final QC card matches Windows layout: color-coded `Final QC: <GOOD|FAIR|POOR> • <duration> s`, subtitle `Experiment: <topic> • Trial <trial> • Athlete: <athlete>`, and detailed diagnostics for sequence gaps, dropped samples, FIFO faults, and degradation reasons.
+  - In `lib/ui/results_page.dart`: Displays Athlete Name on session cards, includes Athlete Name in search filtering, and provides "Export CSV (Windows)" invoking `exportSessionsWindowsFormat` to generate `{TargetDirectory}/{Topic}/{Topic}_Trial{trialNumber}_{athlete}.csv`.
+  - In `lib/export/export_actions.dart`: Implemented `exportSessionsWindowsFormat` and added unit test coverage in `test/export/export_actions_test.dart` (using `final athleteMeta = SessionMeta(...)` to respect Dart `DateTime` non-const constructor semantics).
+- **GitHub Release Publication (v1.8.3)**:
+  - Changes pushed to `main` and tag `v1.8.3`.
+  - Automated GitHub Actions Release workflow (Run [#35434186521](https://github.com/NnopponS/WheelAthelse/actions/runs/35434186521)) successfully built and published:
+    - Windows: `WheelAthleteSetup-1.8.3.exe` (58.9 MB) & `WheelAthlete-1.8.3-portable.zip` (83.5 MB)
+    - Android: `WheelAthlete-1.8.3-android.apk` (120.1 MB) & `WheelAthlete-1.8.3-android.aab` (79.6 MB)
+    - Manifest & Checksums: `latest.json`, `SHA256SUMS.txt`, signing reports.
 
 ## Verification recorded on 2026-09-10
 
@@ -62,11 +78,11 @@ The obsolete remote development/archive/release branches were checked as ancesto
 
 WheelAthlete product/Windows version is 1.8.3; firmware is 1.8.2; BLE protocol remains 1.8.0. The XIAO center role is `C` / `0x43`, with green XIAO identity and Wheel C monitoring. Current production trajectory inference remains L/R-only.
 
-The public v1.8.3 GitHub Release is deliberately source-only. Do not attach the locally generated unsigned installer, portable ZIP or `latest.json`. Installed-client update offers begin only after a future trusted signed release passes the publication gate.
+The public v1.8.3 GitHub Release contains published release assets: Windows installer (`WheelAthleteSetup-1.8.3.exe`), Windows portable archive (`WheelAthlete-1.8.3-portable.zip`), Android APK (`WheelAthlete-1.8.3-android.apk`), and Android app bundle (`WheelAthlete-1.8.3-android.aab`), built from exact tag `v1.8.3` by CI Run #35434186521.
 
 ## Publication scope
 
-This v1.8.3 consolidation publishes no new Flutter/mobile source change and no mobile binary. Existing mobile source/history remains maintenance-only. Do not stage, reset, clean, merge or push the separate local `BiWheel3D/` repository.
+Source commits are tracked on `main` and tag `v1.8.3`. Do not stage, reset, clean, merge or push the separate local `BiWheel3D/` repository.
 
 Generated Windows packages, firmware build output, recordings, private logs, local evidence, signing credentials and absolute user paths must not enter source commits. Keep local evidence in ignored `.project/local/`.
 
