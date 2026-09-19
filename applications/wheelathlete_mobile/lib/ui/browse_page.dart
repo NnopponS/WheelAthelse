@@ -1107,13 +1107,14 @@ class _SessionListViewState extends ConsumerState<_SessionListView> {
                         );
                         return SessionListItem(
                           title: meta.sessionId,
-                          subtitle:
-                              '${widget.topic} Â· ${dt.toIso8601String().split('T').first}',
+                          subtitle: meta.athleteName != null && meta.athleteName!.isNotEmpty
+                              ? '${widget.topic} · Trial ${meta.trialNumber} · ${meta.athleteName} · ${dt.toIso8601String().split('T').first}'
+                              : '${widget.topic} · Trial ${meta.trialNumber} · ${dt.toIso8601String().split('T').first}',
                           duration: Duration(milliseconds: meta.durationMs),
                           sampleCount: meta.sampleCount,
                           markerCount: meta.markerCount,
                           syncQuality: meta.driftResidualRmsMsLeft != null
-                              ? 'Â±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
+                              ? '±${meta.driftResidualRmsMsLeft!.toStringAsFixed(1)} ms'
                               : null,
                           qualityLevel: QualityBadge.fromMeta(meta),
                           tags: meta.tags,

@@ -247,26 +247,34 @@ def self_update_supported() -> bool:
     return any(exe_dir.glob("unins*.exe"))
 
 
-def installer_command(installer: Path) -> list[str]:
+def installer_command(installer: Path, *, silent: bool = False) -> list[str]:
     if not installer.is_file():
         raise UpdateError(f"Installer not found: {installer}")
+    if silent:
+        return [
+            str(installer),
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/CLOSEAPPLICATIONS",
+            "/AUTOUPDATE=1",
+            f"/LOG={updates_dir() / 'installer.log'}",
+        ]
     return [
         str(installer),
-        "/VERYSILENT",
-        "/SUPPRESSMSGBOXES",
-        "/NORESTART",
-        "/CLOSEAPPLICATIONS",
         "/AUTOUPDATE=1",
         f"/LOG={updates_dir() / 'installer.log'}",
     ]
 
 
-def launch_installer(installer: Path) -> subprocess.Popen[bytes]:
-    if not self_update_supported():
+def launch_installer(
+    installer: Path, *, silent: bool = False
+) -> subprocess.Popen[bytes]:
+    if sys.platform != "win32":
         raise UpdateError(
-            "Self-update installation is only enabled in the packaged Windows application"
+            "Self-update installation is only enabled on Windows"
         )
-    command = installer_command(installer)
+    command = installer_command(installer, silent=silent)
     return subprocess.Popen(  # noqa: S603
         command,
         close_fds=True,

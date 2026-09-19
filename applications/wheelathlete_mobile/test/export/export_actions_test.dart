@@ -312,4 +312,30 @@ void main() {
       expect(writes.keys.any((path) => path.endsWith('manifest.json')), isTrue);
     },
   );
+
+  test(
+    'exportSessionsWindowsFormat writes files matching Windows directory structure and naming',
+    () async {
+      final writes = <String, List<int>>{};
+      final athleteMeta = SessionMeta(
+        sessionId: 'abc',
+        topic: 'sprint',
+        trialNumber: 1,
+        athleteName: 'John Doe',
+        sampleRateHz: 100,
+        startTime: DateTime.utc(2026, 6, 29),
+        durationMs: 1000,
+        sampleCount: 1,
+        markerCount: 0,
+      );
+      final written = await ExportActions(ops, storage).exportSessionsWindowsFormat(
+        sessions: [athleteMeta],
+        pickDirectory: () async => '/picked',
+        writeFile: (path, bytes) async => writes[path] = bytes,
+      );
+      expect(written.length, 1);
+      expect(written.first, '/picked/sprint/sprint_Trial1_John_Doe.csv');
+      expect(writes.containsKey('/picked/sprint/sprint_Trial1_John_Doe.csv'), isTrue);
+    },
+  );
 }

@@ -167,6 +167,40 @@ class ExportActions {
     return written;
   }
 
+  /// Exports sessions matching the Windows directory structure and naming convention:
+  /// {TargetDirectory}/{Topic}/{Topic}_Trial{trialNumber}_{athlete}.csv
+  Future<List<String>> exportSessionsWindowsFormat({
+    required List<SessionMeta> sessions,
+    required DirectoryPicker pickDirectory,
+    required FileSink writeFile,
+  }) async {
+    final dir = await pickDirectory();
+    if (dir == null) return const [];
+    final written = <String>[];
+    for (final meta in sessions) {
+      final samples = await _storage.readSamples(
+        meta.topic,
+        meta.trialNumber,
+        meta.sessionId,
+      );
+      if (samples.isEmpty) continue;
+      final safeTopic = _safeFilePart(meta.topic).isEmpty ? 'General' : _safeFilePart(meta.topic);
+      final trialStr = 'Trial${meta.trialNumber}';
+      final safeAthlete = meta.athleteName != null && meta.athleteName!.trim().isNotEmpty
+          ? _safeFilePart(meta.athleteName!.trim())
+          : '';
+      final fileName = safeAthlete.isNotEmpty
+          ? '${safeTopic}_${trialStr}_$safeAthlete.csv'
+          : '${safeTopic}_$trialStr.csv';
+
+      final csvContent = CsvExporter.toCombinedCsvString(samples);
+      final path = _availablePath('$dir/$safeTopic/$fileName');
+      await writeFile(path, utf8.encode(csvContent));
+      written.add(path);
+    }
+    return written;
+  }
+
   /// Atomically exports every trial in one selected topic into a real folder.
   Future<TopicExportResult> exportTopicFolder({
     required String topic,

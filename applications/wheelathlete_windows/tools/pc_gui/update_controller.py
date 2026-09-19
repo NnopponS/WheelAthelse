@@ -139,17 +139,14 @@ class UpdateController(QObject):
     def _on_downloaded(self, path: Path) -> None:
         self._busy = False
         self.downloaded_installer = path
-        if self.state.install_supported:
-            message = "Update verified and ready to install"
-        else:
-            message = "Update verified; self-install is available in the packaged Windows app"
+        message = "Update verified and ready to install"
         self._set_state(status="ready", progress_percent=100, message=message)
 
     def _on_error(self, message: str) -> None:
         self._busy = False
         self._set_state(status="error", message=message, progress_percent=0)
 
-    def install(self) -> None:
+    def install(self, *, silent: bool = False) -> None:
         if self.downloaded_installer is None:
             raise UpdateError("No verified installer is ready")
-        launch_installer(self.downloaded_installer)
+        launch_installer(self.downloaded_installer, silent=silent)

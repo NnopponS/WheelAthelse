@@ -91,11 +91,16 @@ def test_installer_command_is_silent_autoupdate(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(
         "tools.pc_gui.update_service.updates_dir", lambda: tmp_path / "Updates"
     )
-    command = installer_command(installer)
+    command = installer_command(installer, silent=True)
     assert command[0] == str(installer)
     assert "/VERYSILENT" in command
     assert "/CLOSEAPPLICATIONS" in command
     assert "/AUTOUPDATE=1" in command
+
+    interactive = installer_command(installer, silent=False)
+    assert interactive[0] == str(installer)
+    assert "/VERYSILENT" not in interactive
+    assert "/AUTOUPDATE=1" in interactive
 
 
 def test_self_update_only_for_inno_installed_frozen_build(tmp_path: Path, monkeypatch) -> None:

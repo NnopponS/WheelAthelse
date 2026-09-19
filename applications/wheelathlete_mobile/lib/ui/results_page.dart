@@ -70,6 +70,28 @@ class ResultsPage extends ConsumerWidget {
     final export = ref.read(exportActionsProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final paths = await export.exportSessionsWindowsFormat(
+        sessions: selected,
+        pickDirectory: pickDirectory,
+        writeFile: writeCsvFile,
+      );
+      if (paths.isNotEmpty && context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Exported ${paths.length} session(s) in Windows format.')),
+        );
+      }
+    } on Object catch (e) {
+      if (context.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _shareSelected(BuildContext context, WidgetRef ref, List<SessionMeta> selected) async {
+    if (selected.isEmpty) return;
+    final export = ref.read(exportActionsProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
       for (final s in selected) {
         await export.share(
           level: ExportLevel.session,
@@ -78,11 +100,15 @@ class ResultsPage extends ConsumerWidget {
           sessionId: s.sessionId,
         );
       }
-      messenger.showSnackBar(
-        SnackBar(content: Text('Exported ${selected.length} session(s).')),
-      );
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Shared ${selected.length} session(s).')),
+        );
+      }
     } on Object catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      if (context.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+      }
     }
   }
 
@@ -181,6 +207,7 @@ class ResultsPage extends ConsumerWidget {
             if (query.isNotEmpty) {
               final match = s.sessionId.toLowerCase().contains(query) ||
                   s.topic.toLowerCase().contains(query) ||
+                  (s.athleteName?.toLowerCase().contains(query) ?? false) ||
                   (s.notes?.toLowerCase().contains(query) ?? false);
               if (!match) return false;
             }
@@ -281,9 +308,14 @@ class ResultsPage extends ConsumerWidget {
                                     : null,
                               ),
                               FilledButton.icon(
-                                icon: const Icon(Icons.share_rounded),
-                                label: const Text('Export CSV(s)'),
+                                icon: const Icon(Icons.download_rounded),
+                                label: const Text('Export CSV (Windows)'),
                                 onPressed: () => _exportSelectedCsv(context, ref, selectedSessions),
+                              ),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.share_rounded),
+                                label: const Text('Share'),
+                                onPressed: () => _shareSelected(context, ref, selectedSessions),
                               ),
                               OutlinedButton.icon(
                                 icon: const Icon(Icons.delete_outline_rounded),
@@ -338,7 +370,9 @@ class ResultsPage extends ConsumerWidget {
                                         trialNumber: session.trialNumber,
                                         sessionId: session.sessionId,
                                       ),
-                                      title: '${session.topic} · Trial ${session.trialNumber}',
+                                      title: session.athleteName != null && session.athleteName!.isNotEmpty
+                                          ? '${session.topic} · Trial ${session.trialNumber} · ${session.athleteName}'
+                                          : '${session.topic} · Trial ${session.trialNumber}',
                                     ),
                                   ),
                                 );
@@ -367,7 +401,9 @@ class ResultsPage extends ConsumerWidget {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                '${session.topic} · Trial ${session.trialNumber}',
+                                                session.athleteName != null && session.athleteName!.isNotEmpty
+                                                    ? '${session.topic} · Trial ${session.trialNumber} · ${session.athleteName}'
+                                                    : '${session.topic} · Trial ${session.trialNumber}',
                                                 style: theme.textTheme.titleMedium?.copyWith(
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -400,6 +436,8 @@ class ResultsPage extends ConsumerWidget {
                                         Text('${session.sampleCount} samples'),
                                         Text('${session.sampleRateHz} Hz'),
                                         Text('Sides: ${session.recordedSides.join(', ')}'),
+                                        if (session.athleteName != null && session.athleteName!.isNotEmpty)
+                                          Text('Athlete: ${session.athleteName}'),
                                       ],
                                     ),
                                     const SizedBox(height: AppSpacing.sm),

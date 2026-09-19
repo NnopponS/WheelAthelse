@@ -5244,8 +5244,9 @@ class MainWindow(QMainWindow):
             self.update_button.setText(f"Update to {state.available_version}")
             self.update_button.setEnabled(True)
         elif state.status == "ready":
-            self.update_button.setText("Install verified update")
-            self.update_button.setEnabled(True)
+            self.update_button.setText("Launching installer…")
+            self.update_button.setEnabled(False)
+            QTimer.singleShot(200, self._apply_downloaded_update)
         elif state.status == "error":
             self.update_button.setText("Update check failed")
             self.update_button.setEnabled(True)
@@ -5259,66 +5260,40 @@ class MainWindow(QMainWindow):
         if state.message and state.status in {"available", "ready", "error"}:
             self.statusBar().showMessage(state.message, 8000)
 
+    def _apply_downloaded_update(self) -> None:
+        if (
+            self.controller.state.live
+            or self.controller.state.recording
+            or self.controller.state.recording_starting
+        ):
+            self.update_button.setText("Install verified update")
+            self.update_button.setEnabled(True)
+            QMessageBox.warning(
+                self,
+                "Stop acquisition first",
+                "Stop Live preview/countdown/recording before installing an update. "
+                "WheelAthlete will never interrupt active research acquisition for an update.",
+            )
+            return
+        try:
+            self.update_controller.install(silent=False)
+        except Exception as exc:
+            self.update_button.setText("Install verified update")
+            self.update_button.setEnabled(True)
+            QMessageBox.critical(self, "Update failed", str(exc))
+            return
+        self._installing_update = True
+        self.update_controller.stop()
+        self.controller.close()
+        QApplication.quit()
+
     def _update_action(self) -> None:
         state = self.update_controller.state
         if state.status == "available":
-            if not state.install_supported:
-                manifest = self.update_controller.manifest
-                if manifest is not None and manifest.release_url:
-                    QDesktopServices.openUrl(QUrl(manifest.release_url))
-                return
             self.update_controller.download()
             return
         if state.status == "ready":
-            if not state.install_supported:
-                manifest = self.update_controller.manifest
-                if manifest is not None and manifest.release_url:
-                    QDesktopServices.openUrl(QUrl(manifest.release_url))
-                else:
-                    QMessageBox.information(
-                        self,
-                        "Packaged app required",
-                        "Automatic installation is available from the installed Windows build. "
-                        "Source/demo mode can check releases but does not replace itself.",
-                    )
-                return
-            if (
-                self.controller.state.live
-                or self.controller.state.recording
-                or self.controller.state.recording_starting
-            ):
-                QMessageBox.warning(
-                    self,
-                    "Stop acquisition first",
-                    "Stop Live preview/countdown/recording before installing an update. "
-                    "WheelAthlete will never interrupt active research acquisition for an update.",
-                )
-                return
-            version = state.available_version or (
-                self.update_controller.manifest.version
-                if self.update_controller.manifest is not None
-                else "new version"
-            )
-            confirmed = _ask_confirm_dialog(
-                self,
-                "Install WheelAthlete update",
-                f"Install verified WheelAthlete {version} now?\n\n"
-                "The app will close, the installer will update the existing installation, "
-                "and WheelAthlete will relaunch automatically.",
-                confirm_text="Install Update",
-                cancel_text="Later",
-            )
-            if not confirmed:
-                return
-            try:
-                self.update_controller.install()
-            except Exception as exc:
-                QMessageBox.critical(self, "Update failed", str(exc))
-                return
-            self._installing_update = True
-            self.update_controller.stop()
-            self.controller.close()
-            QApplication.quit()
+            self._apply_downloaded_update()
             return
         self.update_controller.check()
 

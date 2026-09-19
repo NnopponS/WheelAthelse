@@ -38,11 +38,21 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
   String? _selectedTemplateId;
   int _sampleRateHz = 100;
   WheelSide? _selectedChartSide;
+  final _athleteController = TextEditingController();
+  late final TextEditingController _trialController;
 
   @override
   void initState() {
     super.initState();
+    _trialController = TextEditingController(text: '$_trialNumber');
     _refreshTopics();
+  }
+
+  @override
+  void dispose() {
+    _athleteController.dispose();
+    _trialController.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshTopics() async {
@@ -54,7 +64,30 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
     final storage = ref.read(storageRepositoryProvider);
     final n = await storage.nextTrialNumber(_selectedTopic!);
     if (!mounted) return;
-    setState(() => _trialNumber = n);
+    setState(() {
+      _trialNumber = n;
+      _trialController.text = '$n';
+    });
+  }
+
+  void _setTrialNumber(int n) {
+    if (n < 1) return;
+    setState(() {
+      _trialNumber = n;
+      _trialController.text = '$n';
+    });
+  }
+
+  void _incrementTrial() {
+    final current = int.tryParse(_trialController.text) ?? _trialNumber;
+    _setTrialNumber(current + 1);
+  }
+
+  void _decrementTrial() {
+    final current = int.tryParse(_trialController.text) ?? _trialNumber;
+    if (current > 1) {
+      _setTrialNumber(current - 1);
+    }
   }
 
   Future<void> _onTemplateSelected(
@@ -120,10 +153,13 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
   Future<void> _startRecording() async {
     if (_selectedTopic == null) return;
     if (!await _confirmSingleWheelIfNeeded()) return;
+    final parsedTrial = int.tryParse(_trialController.text) ?? _trialNumber;
+    final athlete = _athleteController.text.trim();
     final config = SessionConfig(
       topic: _selectedTopic!,
-      trialNumber: _trialNumber,
+      trialNumber: parsedTrial > 0 ? parsedTrial : 1,
       sampleRateHz: _sampleRateHz,
+      athleteName: athlete.isEmpty ? null : athlete,
       protocolTemplateId: _selectedTemplateId,
     );
     try {
@@ -449,6 +485,7 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
     final theme = Theme.of(context);
     final rec = ref.watch(recordingProvider);
     final config = rec.config;
+    final athlete = config?.athleteName;
 
     return Card(
       color: theme.colorScheme.errorContainer.withAlpha(50),
@@ -461,11 +498,13 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
               children: [
                 const Icon(Icons.fiber_manual_record_rounded, color: Colors.red, size: 20),
                 const SizedBox(width: AppSpacing.xs),
-                Text(
-                  'RECORDING: ${config?.topic ?? ""} · Trial ${config?.trialNumber ?? 1}',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    'RECORDING: ${config?.topic ?? ""} · Trial ${config?.trialNumber ?? 1}${athlete != null && athlete.isNotEmpty ? " · $athlete" : ""}',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
                 Text(
                   '${rec.sampleCount} pts',
                   style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -492,6 +531,59 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
     final rec = ref.watch(recordingProvider);
     final meta = rec.lastMeta;
 
+    final quality = meta != null ? QualityBadge.fromMeta(meta).name.toUpperCase() : 'UNKNOWN';
+    final durationSec = meta != null ? (meta.durationMs / 1000.0).toStringAsFixed(1) : '0.0';
+
+    final topic = meta?.topic ?? _selectedTopic ?? 'General';
+    final trial = meta?.trialNumber ?? _trialNumber;
+    final athlete = (meta?.athleteName ?? _athleteController.text).trim();
+
+    final metaParts = ['Experiment: $topic', 'Trial $trial'];
+    if (athlete.isNotEmpty) {
+      metaParts.add('Athlete: $athlete');
+    }
+    final metaLine = metaParts.join('   •   ');
+
+    final reasons = <String>[];
+    if (meta != null) {
+      if (meta.degradationReason != null && meta.degradationReason!.isNotEmpty) {
+        reasons.add('Degradation: ${meta.degradationReason}');
+      }
+      for (final entry in meta.sequenceGaps.entries) {
+        if (entry.value > 0) {
+          reasons.add('Sensor ${entry.key}: ${entry.value} sequence gap(s)');
+        }
+      }
+      for (final entry in meta.dropCounts.entries) {
+        if (entry.value > 0) {
+          reasons.add('Sensor ${entry.key}: ${entry.value} dropped sample(s)');
+        }
+      }
+      for (final entry in meta.sampleQueueDrops.entries) {
+        if (entry.value > 0) {
+          reasons.add('Sensor ${entry.key}: ${entry.value} queue drop(s)');
+        }
+      }
+      for (final entry in meta.imuFifoFaults.entries) {
+        if (entry.value > 0) {
+          reasons.add('Sensor ${entry.key}: ${entry.value} FIFO fault(s)');
+        }
+      }
+    }
+
+    final detailText = reasons.isNotEmpty
+        ? reasons.map((r) => '• $r').join('\n')
+        : (quality == 'GOOD'
+            ? 'All recorded integrity checks passed (100% contiguous data).'
+            : 'No additional QC reason was supplied.');
+
+    final qualityColor = switch (quality) {
+      'GOOD' => Colors.green,
+      'FAIR' => Colors.orange,
+      'POOR' => Colors.red,
+      _ => theme.colorScheme.onSurface,
+    };
+
     return Card(
       color: theme.colorScheme.surfaceContainerHigh,
       child: Padding(
@@ -501,18 +593,52 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.green, size: 24),
+                Icon(
+                  quality == 'GOOD'
+                      ? Icons.check_circle_rounded
+                      : (quality == 'FAIR' ? Icons.warning_amber_rounded : Icons.error_outline_rounded),
+                  color: qualityColor,
+                  size: 24,
+                ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(
-                  'Session Recorded & Validated',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    'Final QC: $quality   •   $durationSec s',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: qualityColor,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
+              metaLine,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
               'Session ID: ${meta?.sessionId ?? "Unknown"}',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                detailText,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: reasons.isNotEmpty ? 'monospace' : null,
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.sm),
             Wrap(
@@ -525,12 +651,13 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
                 ),
                 Chip(
                   avatar: const Icon(Icons.speed_rounded, size: 16),
-                  label: Text('${meta?.sampleRateHz ?? 100} Hz target'),
+                  label: Text('${meta?.sampleRateHz ?? _sampleRateHz} Hz target'),
                 ),
-                Chip(
-                  avatar: const Icon(Icons.high_quality_rounded, size: 16),
-                  label: Text('QC: ${meta != null ? QualityBadge.fromMeta(meta).name : "good"}'),
-                ),
+                if (meta != null && meta.recordedSides.isNotEmpty)
+                  Chip(
+                    avatar: const Icon(Icons.sensors_rounded, size: 16),
+                    label: Text('Sides: ${meta.recordedSides.join(", ")}'),
+                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -541,7 +668,7 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
                     onPressed: () {
                       ref.read(recordingProvider.notifier).reset();
                       ref.read(recordCountdownProvider.notifier).reset();
-                      _refreshTrialNumber();
+                      _incrementTrial();
                     },
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('New Recording'),
@@ -641,7 +768,18 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
               error: (_, _) => const SizedBox.shrink(),
             ),
             const SizedBox(height: AppSpacing.sm),
-            // Topic selection
+            // Athlete name input
+            TextField(
+              controller: _athleteController,
+              decoration: const InputDecoration(
+                labelText: 'Athlete Name (optional)',
+                hintText: 'e.g. Athlete 1, John Doe',
+                prefixIcon: Icon(Icons.person_outline_rounded),
+                contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // Topic / Experiment selection
             Row(
               children: [
                 Expanded(
@@ -651,7 +789,7 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
                           ? _selectedTopic
                           : null,
                       decoration: const InputDecoration(
-                        labelText: 'Topic / Experiment',
+                        labelText: 'Experiment / Topic',
                         contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                       ),
                       items: topics
@@ -674,11 +812,46 @@ class _AcquisitionPageState extends ConsumerState<AcquisitionPage> {
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
-            // Trial number & Sample rate
+            // Trial number stepper & Sample rate
             Row(
               children: [
                 Expanded(
-                  child: Text('Trial: #$_trialNumber', style: theme.textTheme.bodyMedium),
+                  child: Row(
+                    children: [
+                      const Text('Trial:', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const SizedBox(width: AppSpacing.xs),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline_rounded),
+                        tooltip: 'Decrease trial',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _decrementTrial,
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child: TextField(
+                          controller: _trialController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onChanged: (val) {
+                            final n = int.tryParse(val);
+                            if (n != null && n > 0) {
+                              _trialNumber = n;
+                            }
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                        tooltip: 'Increase trial',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _incrementTrial,
+                      ),
+                    ],
+                  ),
                 ),
                 SegmentedButton<int>(
                   segments: const [

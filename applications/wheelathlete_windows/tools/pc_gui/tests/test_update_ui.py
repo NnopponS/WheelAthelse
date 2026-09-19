@@ -48,3 +48,35 @@ def test_source_mode_does_not_start_background_update_timer() -> None:
     window.close()
     window.deleteLater()
     _APP.processEvents()
+
+
+def test_ready_state_triggers_interactive_installer_and_app_exit(monkeypatch) -> None:
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    installed_args = []
+    quitted = []
+
+    monkeypatch.setattr(
+        window.update_controller,
+        "install",
+        lambda *, silent=False: installed_args.append(silent),
+    )
+    monkeypatch.setattr(QApplication, "quit", lambda: quitted.append(True))
+
+    window._update_update_ui(
+        UpdateViewState(
+            status="ready",
+            current_version="1.8.0",
+            available_version="1.8.1",
+            message="Update verified and ready to install",
+        )
+    )
+    window._apply_downloaded_update()
+    assert installed_args == [False]  # silent=False so setup GUI appears
+    assert quitted == [True]
+    assert window._installing_update is True
+
+    window.close()
+    window.deleteLater()
+    _APP.processEvents()
+
