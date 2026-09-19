@@ -452,8 +452,14 @@ def test_model_page_multi_model_and_c3d_comparison():
     controller, window = _window()
     model = window.model
 
-    assert hasattr(model, "comp_v5")
-    assert hasattr(model, "comp_v4")
+    assert hasattr(model, "comp_v8")
+    assert model.comp_v8.text() == "SOF-3IMU v2"
+    assert model.comp_v3.text() == "PHC-3IMU v1"
+    assert model.comp_v2.text() == "PBF-3IMU v1"
+    assert model.comp_v7.isHidden()
+    assert model.comp_v6.isHidden()
+    assert model.comp_v5.isHidden()
+    assert model.comp_v4.isHidden()
     assert hasattr(model, "comp_v3")
     assert hasattr(model, "comp_v2")
     assert hasattr(model, "comp_c3d")
@@ -461,6 +467,9 @@ def test_model_page_multi_model_and_c3d_comparison():
 
     result = _sample_result()
     result["comp_dual_hub_xy"] = [(0.0, 0.0), (0.5, 0.0), (1.0, 0.0)]
+    result["comp_v8_xy"] = [(0.0, 0.0), (0.53, -0.01), (1.03, 0.00)]
+    result["comp_v7_xy"] = [(0.0, 0.0), (0.52, -0.01), (1.02, 0.01)]
+    result["comp_v6_xy"] = [(0.0, 0.0), (0.51, 0.00), (1.01, 0.02)]
     result["comp_v5_xy"] = [(0.0, 0.0), (0.50, 0.01), (1.00, 0.03)]
     result["comp_v4_xy"] = [(0.0, 0.0), (0.49, 0.02), (0.99, 0.05)]
     result["comp_v3_xy"] = [(0.0, 0.0), (0.47, 0.04), (0.95, 0.08)]
@@ -471,6 +480,9 @@ def test_model_page_multi_model_and_c3d_comparison():
     _APP.processEvents()
 
     assert model.comparison_series.count() == 3
+    assert model.comp_v8_series.count() == 3
+    assert model.comp_v7_series.count() == 3
+    assert model.comp_v6_series.count() == 3
     assert model.comp_v5_series.count() == 3
     assert model.comp_v4_series.count() == 3
     assert model.comp_v3_series.count() == 3
@@ -486,6 +498,9 @@ def test_model_page_multi_model_and_c3d_comparison():
 
     model._invalidate_analysis()
     _APP.processEvents()
+    assert model.comp_v8_series.count() == 0
+    assert model.comp_v7_series.count() == 0
+    assert model.comp_v6_series.count() == 0
     assert model.comp_v5_series.count() == 0
     assert model.comp_v4_series.count() == 0
     assert model.ground_truth_series.count() == 0

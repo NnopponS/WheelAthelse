@@ -19,6 +19,9 @@ CURRENT_BEST_WHEEL_RADIUS_M = 0.30
 CURRENT_BEST_TRACK_WIDTH_M = 0.52
 CURRENT_BEST_KEY = "biwheel3d:xy_yaw_current_best"
 CURRENT_BEST_RECIPE_NAME = "BiWheel3D-XY-Yaw-current_best.json"
+THREE_IMU_V8_KEY = "biwheel3d:three_imu_dbf_v8"
+THREE_IMU_V7_KEY = "biwheel3d:three_imu_sof_v7"
+THREE_IMU_V6_KEY = "biwheel3d:three_imu_wa_caif_v6"
 THREE_IMU_V5_KEY = "biwheel3d:three_imu_odometry_v5"
 THREE_IMU_V4_KEY = "biwheel3d:three_imu_odometry_v4"
 THREE_IMU_V3_KEY = "biwheel3d:three_imu_odometry_v3"
@@ -226,24 +229,40 @@ def _bundled_current_best_recipe() -> Path:
 
 
 def _three_imu_spec(version: int) -> ModelSpec:
-    if version not in {2, 3, 4, 5}:
+    if version not in {2, 3, 4, 5, 6, 7, 8}:
         raise ModelInferenceError(f"Unsupported three-IMU model version: {version}")
     checkpoint = _runtime_root() / "models" / f"imu_v{version}.json"
-    if version == 5:
-        key = THREE_IMU_V5_KEY
+    if version == 8:
+        key = THREE_IMU_V8_KEY
+        architecture_label = "SOF-3IMU v2"
         lifecycle = "research - development candidate"
+    elif version == 7:
+        key = THREE_IMU_V7_KEY
+        architecture_label = "SOF-3IMU v1"
+        lifecycle = "historical research"
+    elif version == 6:
+        key = THREE_IMU_V6_KEY
+        architecture_label = "GRF-3IMU v3"
+        lifecycle = "historical research"
+    elif version == 5:
+        key = THREE_IMU_V5_KEY
+        architecture_label = "GRF-3IMU v2"
+        lifecycle = "historical research"
     elif version == 4:
         key = THREE_IMU_V4_KEY
-        lifecycle = "research - rejected"
+        architecture_label = "GRF-3IMU v1"
+        lifecycle = "historical research - rejected"
     elif version == 3:
         key = THREE_IMU_V3_KEY
+        architecture_label = "PHC-3IMU v1"
         lifecycle = "active"
     else:
         key = THREE_IMU_V2_KEY
+        architecture_label = "PBF-3IMU v1"
         lifecycle = "rollback"
     return ModelSpec(
         key=key,
-        label=f"IMU v{version} ({lifecycle.title()})",
+        label=f"{architecture_label} ({lifecycle.title()})",
         checkpoint=checkpoint,
         description=(
             "Three-IMU L/R/C wheelchair odometry with pause-aware bias correction, "
@@ -262,7 +281,7 @@ def _three_imu_spec(version: int) -> ModelSpec:
             ("yaw_rate_radps", "rad/s"),
         ),
         runtime_requirements=("numpy", "scipy"),
-        experimental=version in {4, 5},
+        experimental=version in {4, 5, 6, 7, 8},
     )
 
 
@@ -642,7 +661,9 @@ def discover_compatible_models(
             seen_keys.add(spec.key)
             seen_paths.add(spec.checkpoint)
 
-    for version in (5, 4, 3, 2):
+    # Normal discovery exposes one representative per current lifecycle branch.
+    # Historical GRF/SOF revisions remain addressable by _three_imu_spec for reproducibility.
+    for version in (8, 3, 2):
         try:
             three_spec = _three_imu_spec(version)
             if three_spec.key not in seen_keys and three_spec.checkpoint not in seen_paths:
@@ -698,15 +719,21 @@ def model_runtime_status(repo_root: Path) -> tuple[bool, str]:
         runtime / "three_imu_odometry_v2.py",
         runtime / "three_imu_odometry_v3.py",
         runtime / "three_imu_odometry_v4.py",
+        runtime / "three_imu_odometry_v8.py",
+        runtime / "three_imu_odometry_v7.py",
+        runtime / "three_imu_odometry_v6.py",
         runtime / "three_imu_odometry_v5.py",
+        runtime / "models" / "imu_v8.json",
+        runtime / "models" / "imu_v7.json",
+        runtime / "models" / "imu_v6.json",
         runtime / "models" / "imu_v5.json",
         runtime / "models" / "imu_v4.json",
         runtime / "models" / "imu_v3.json",
         runtime / "models" / "imu_v2.json",
     ]
     if any(not path.is_file() for path in required):
-        return False, "Bundled three-IMU v5/v4/v3/v2 runtime is incomplete."
-    return True, f"IMU v3 active; IMU v2 rollback ready; IMU v5 research candidate available. Model library: {model_library_root()}"
+        return False, "Bundled three-IMU v8/v7/v6/v5/v4/v3/v2 runtime is incomplete."
+    return True, f"PHC-3IMU v1 active; PBF-3IMU v1 rollback ready; SOF-3IMU v2 research candidate available; historical GRF/SOF artifacts retained. Model library: {model_library_root()}"
 
 
 def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
@@ -718,7 +745,7 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
     for requirement in spec.runtime_requirements:
         if importlib.util.find_spec(requirement) is None:
             return False, f"This model requires the Python package {requirement}."
-    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5"}:
+    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5", "three_imu_v6", "three_imu_v7", "three_imu_v8"}:
         module = _runtime_root() / f"three_imu_odometry_v{spec.model_version}.py"
         if not module.is_file():
             return False, f"Three-IMU v{spec.model_version} runtime is missing."
@@ -1606,7 +1633,7 @@ def _prepare_three_imu_session(
         "missing_samples": int(session_data.get("total_missing_samples", 0) or 0),
         "warnings": list(dict.fromkeys([
             *warnings,
-            "Three-IMU v2-v5 runtime uses L/R/C only; C3D is never used for inference.",
+            "Three-IMU v2-v8 runtime uses L/R/C only; C3D is never used for inference.",
         ])),
         "time_s": imu.t.tolist(),
         "overlap_start_s": start,
@@ -1639,7 +1666,37 @@ def _run_three_imu_model(spec: ModelSpec, session_data: dict[str, Any]) -> tuple
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ModelInferenceError(f"Invalid three-IMU runtime config: {spec.checkpoint}") from exc
 
-    if spec.kind == "three_imu_v5":
+    if spec.kind == "three_imu_v8":
+        from .biwheel3d_runtime.three_imu_odometry_v8 import (
+            DualBiasObserverModel,
+            estimate_trajectory_v8,
+        )
+
+        model_dict = config.get("model")
+        model = DualBiasObserverModel(**model_dict) if model_dict else None
+        estimate = estimate_trajectory_v8(imu, calibration, model=model)
+        runtime_source = "three_imu_odometry_v8"
+    elif spec.kind == "three_imu_v7":
+        from .biwheel3d_runtime.three_imu_odometry_v7 import (
+            SOFFusionModel,
+            estimate_trajectory_v7,
+        )
+
+        model_dict = config.get("model")
+        model = SOFFusionModel(**model_dict) if model_dict else None
+        estimate = estimate_trajectory_v7(imu, calibration, model=model)
+        runtime_source = "three_imu_odometry_v7"
+    elif spec.kind == "three_imu_v6":
+        from .biwheel3d_runtime.three_imu_odometry_v6 import (
+            CAIFMultiScaleResidualModel,
+            estimate_trajectory_v6,
+        )
+
+        model_dict = config.get("model")
+        model = CAIFMultiScaleResidualModel(**model_dict) if model_dict else None
+        estimate = estimate_trajectory_v6(imu, calibration, model=model)
+        runtime_source = "three_imu_odometry_v6"
+    elif spec.kind == "three_imu_v5":
         from .biwheel3d_runtime.three_imu_odometry_v5 import (
             V5MotionExpertModel,
             estimate_trajectory_v5,
@@ -1716,7 +1773,7 @@ def run_session_model(
     from .analysis_contract import file_identity
 
     checkpoint_before = file_identity(spec.checkpoint)
-    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5"}:
+    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5", "three_imu_v6", "three_imu_v7", "three_imu_v8"}:
         model_result, preprocess, model_input = _run_three_imu_model(spec, session_data)
         model_input_layout = (
             "little-endian float32 (T,18), virtual calibration counts; "

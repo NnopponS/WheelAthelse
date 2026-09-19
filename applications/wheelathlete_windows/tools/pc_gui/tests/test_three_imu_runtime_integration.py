@@ -10,7 +10,11 @@ from tools.pc_gui.model_inference import (
     THREE_IMU_V3_KEY,
     THREE_IMU_V4_KEY,
     THREE_IMU_V5_KEY,
+    THREE_IMU_V6_KEY,
+    THREE_IMU_V7_KEY,
+    THREE_IMU_V8_KEY,
     ModelInferenceError,
+    _three_imu_spec,
     discover_compatible_models,
     model_runtime_status,
     run_session_model,
@@ -60,12 +64,51 @@ def test_three_imu_runtime_is_ready_and_lifecycle_order_is_stable():
     assert [model.kind for model in models] == ["three_imu_v3", "three_imu_v2"]
 
 
-def test_v5_is_available_only_as_research_candidate_and_runs_c3d_free():
+def test_v8_is_available_only_as_research_candidate_and_runs_c3d_free():
     models = {model.key: model for model in discover_compatible_models(REPO_ROOT)}
-    spec = models[THREE_IMU_V5_KEY]
+    spec = models[THREE_IMU_V8_KEY]
+    assert spec.kind == "three_imu_v8"
+    assert spec.experimental is True
+    assert spec.label == "SOF-3IMU v2 (Research - Development Candidate)"
+
+    result = run_session_model(REPO_ROOT, spec, _three_imu_session())
+    assert result["runtime_source"] == "three_imu_odometry_v8"
+    assert result["point_count"] == 220
+    assert result["path_length_m"] == pytest.approx(0.0, abs=1e-9)
+    assert any("C3D" in warning for warning in result["analysis"]["metadata"]["warnings"])
+
+
+def test_v7_historical_sof_runtime_remains_reproducible():
+    spec = _three_imu_spec(7)
+    assert spec.kind == "three_imu_v7"
+    assert spec.experimental is True
+    assert spec.label == "SOF-3IMU v1 (Historical Research)"
+
+    result = run_session_model(REPO_ROOT, spec, _three_imu_session())
+    assert result["runtime_source"] == "three_imu_odometry_v7"
+    assert result["point_count"] == 220
+    assert result["path_length_m"] == pytest.approx(0.0, abs=1e-9)
+    assert any("C3D" in warning for warning in result["analysis"]["metadata"]["warnings"])
+
+
+def test_v6_historical_grf_runtime_remains_reproducible():
+    spec = _three_imu_spec(6)
+    assert spec.kind == "three_imu_v6"
+    assert spec.experimental is True
+    assert spec.label == "GRF-3IMU v3 (Historical Research)"
+
+    result = run_session_model(REPO_ROOT, spec, _three_imu_session())
+    assert result["runtime_source"] == "three_imu_odometry_v6"
+    assert result["point_count"] == 220
+    assert result["path_length_m"] == pytest.approx(0.0, abs=1e-9)
+    assert any("C3D" in warning for warning in result["analysis"]["metadata"]["warnings"])
+
+
+def test_v5_historical_grf_runtime_remains_reproducible():
+    spec = _three_imu_spec(5)
     assert spec.kind == "three_imu_v5"
     assert spec.experimental is True
-    assert "Research" in spec.label
+    assert spec.label == "GRF-3IMU v2 (Historical Research)"
 
     result = run_session_model(REPO_ROOT, spec, _three_imu_session())
     assert result["runtime_source"] == "three_imu_odometry_v5"

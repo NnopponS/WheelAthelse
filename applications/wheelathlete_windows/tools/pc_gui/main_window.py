@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import csv
+import io
 import math
 import shutil
+import struct
 import sys
 import time
+import wave
 import winsound
 from datetime import datetime, timezone
 from pathlib import Path
+from queue import Queue
 from threading import Thread
 from typing import Any
 
@@ -658,14 +662,110 @@ def _set_table_action_state(
     return True
 
 
+_AUDIO_QUEUE: Queue[tuple[bytes, int, int] | None] | None = None
+_AUDIO_THREAD: Thread | None = None
+_WAV_CACHE: dict[tuple[int, int], bytes] = {}
+
+
+def _make_tone_wav(frequency: int, duration_ms: int, volume: float = 0.9) -> bytes:
+    sample_rate = 44100
+    n_samples = max(1, int(sample_rate * duration_ms / 1000))
+    fade_samples = min(int(sample_rate * 0.005), n_samples // 4)
+    frames = bytearray()
+    for i in range(n_samples):
+        t = i / sample_rate
+        sample_val = math.sin(2.0 * math.pi * frequency * t)
+        if fade_samples > 0 and i < fade_samples:
+            factor = i / fade_samples
+        elif fade_samples > 0 and i > n_samples - fade_samples:
+            factor = (n_samples - i) / fade_samples
+        else:
+            factor = 1.0
+        val = max(-32768, min(32767, int(sample_val * factor * volume * 32767)))
+        frames.extend(struct.pack("<h", val))
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(frames)
+    return buf.getvalue()
+
+
+def _get_tone_wav(frequency: int, duration_ms: int) -> bytes:
+    key = (frequency, duration_ms)
+    wav_bytes = _WAV_CACHE.get(key)
+    if wav_bytes is None:
+        wav_bytes = _make_tone_wav(frequency, duration_ms)
+        _WAV_CACHE[key] = wav_bytes
+    return wav_bytes
+
+
+def _ensure_audio_worker() -> Queue[tuple[bytes, int, int] | None]:
+    global _AUDIO_QUEUE, _AUDIO_THREAD
+    if _AUDIO_QUEUE is None or _AUDIO_THREAD is None or not _AUDIO_THREAD.is_alive():
+        _AUDIO_QUEUE = Queue()
+
+        def _worker() -> None:
+            while True:
+                assert _AUDIO_QUEUE is not None
+                item = _AUDIO_QUEUE.get()
+                if item is None:
+                    break
+                wav_bytes, freq, dur = item
+                played = False
+                try:
+                    winsound.PlaySound(wav_bytes, winsound.SND_MEMORY)
+                    played = True
+                except Exception:
+                    pass
+                if not played:
+                    try:
+                        winsound.Beep(freq, dur)
+                        played = True
+                    except Exception:
+                        pass
+                if not played:
+                    try:
+                        winsound.MessageBeep()
+                    except Exception:
+                        pass
+                _AUDIO_QUEUE.task_done()
+
+        _AUDIO_THREAD = Thread(target=_worker, daemon=True, name="wheelathlete_audio_worker")
+        _AUDIO_THREAD.start()
+    return _AUDIO_QUEUE
+
+
 def _play_tone(frequency: int, duration_ms: int) -> None:
-    def play() -> None:
+    try:
+        wav_data = _get_tone_wav(frequency, duration_ms)
+        q = _ensure_audio_worker()
+        q.put((wav_data, frequency, duration_ms))
+    except Exception:
         try:
             winsound.Beep(frequency, duration_ms)
-        except RuntimeError:
-            winsound.MessageBeep()
+        except Exception:
+            try:
+                winsound.MessageBeep()
+            except Exception:
+                pass
 
-    Thread(target=play, daemon=True).start()
+
+def _prewarm_audio() -> None:
+    """Pre-warm Windows audio pipeline so countdown beeps play without DAC wakeup drop."""
+    try:
+        warmup_wav = _get_tone_wav(400, 10)
+        q = _ensure_audio_worker()
+        q.put((warmup_wav, 400, 10))
+    except Exception:
+        pass
+
+
+# Pre-cache standard countdown beeps (700Hz/120ms) and start horn (1200Hz/500ms)
+_get_tone_wav(700, 120)
+_get_tone_wav(1200, 500)
 
 
 class ModernDialog(QDialog):
@@ -1252,6 +1352,7 @@ class AcquisitionPage(QWidget):
             self.controller.start_live()
 
     def _start(self) -> None:
+        _prewarm_audio()
         self.controller.start_record(self.metadata())
 
     def _schedule_start_cue(
@@ -1279,7 +1380,7 @@ class AcquisitionPage(QWidget):
     def _countdown_tick(self) -> None:
         self._countdown_remaining -= 1
         if self._countdown_remaining > 0:
-            self.countdown_label.setText(f"Hold still for calibration… {self._countdown_remaining} s")
+            self.countdown_label.setText(f"{self._countdown_remaining}")
             _play_tone(700, 120)
             return
         self._countdown_timer.stop()
@@ -1293,6 +1394,9 @@ class AcquisitionPage(QWidget):
             return
         now_utc_ms = time.time_ns() // 1_000_000
         elapsed_ms = max(0, now_utc_ms - int(state.recording_started_utc_ms))
+        if self.countdown_label.text() == "START!" and elapsed_ms < 600:
+            QTimer.singleShot(max(1, 600 - elapsed_ms), self._update_record_clock)
+            return
         total_seconds = elapsed_ms // 1000
         self.countdown_label.setText(f"Recording {total_seconds} s")
 
@@ -1355,7 +1459,7 @@ class AcquisitionPage(QWidget):
             self._record_clock_timer.stop()
             self._countdown_started = True
             self._countdown_remaining = state.countdown
-            self.countdown_label.setText(f"Hold still for calibration… {state.countdown} s")
+            self.countdown_label.setText(f"{state.countdown}")
             _play_tone(700, 120)
             self._schedule_start_cue(
                 target_pc_ns=state.recording_target_pc_ns,
@@ -3205,25 +3309,47 @@ class ModelPage(QWidget):
         self.compare_checkbox = self.comp_dual_hub
         options_row.addWidget(self.comp_dual_hub)
 
-        self.comp_v5 = QCheckBox("3-IMU v5")
+        self.comp_v8 = QCheckBox("SOF-3IMU v2")
+        self.comp_v8.setObjectName("compV8Checkbox")
+        self.comp_v8.setAccessibleName("compV8Checkbox")
+        self.comp_v8.setToolTip("Overlay latest frozen generic research architecture: SOF-3IMU v2")
+        options_row.addWidget(self.comp_v8)
+
+        self.comp_v7 = QCheckBox("SOF-3IMU v1")
+        self.comp_v7.setObjectName("compV7Checkbox")
+        self.comp_v7.setAccessibleName("compV7Checkbox")
+        self.comp_v7.setToolTip("Overlay frozen research-only SOF-3IMU v7 development candidate")
+        options_row.addWidget(self.comp_v7)
+        self.comp_v7.hide()
+
+        self.comp_v6 = QCheckBox("GRF-3IMU v3")
+        self.comp_v6.setObjectName("compV6Checkbox")
+        self.comp_v6.setAccessibleName("compV6Checkbox")
+        self.comp_v6.setToolTip("Overlay research-only WA-CAIF v6 development candidate")
+        options_row.addWidget(self.comp_v6)
+        self.comp_v6.hide()
+
+        self.comp_v5 = QCheckBox("GRF-3IMU v2")
         self.comp_v5.setObjectName("compV5Checkbox")
         self.comp_v5.setAccessibleName("compV5Checkbox")
         self.comp_v5.setToolTip("Overlay research-only 3-IMU v5 trajectory")
         options_row.addWidget(self.comp_v5)
+        self.comp_v5.hide()
 
-        self.comp_v4 = QCheckBox("3-IMU v4")
+        self.comp_v4 = QCheckBox("GRF-3IMU v1")
         self.comp_v4.setObjectName("compV4Checkbox")
         self.comp_v4.setAccessibleName("compV4Checkbox")
         self.comp_v4.setToolTip("Overlay 3-IMU v4 trajectory in Teal line")
         options_row.addWidget(self.comp_v4)
+        self.comp_v4.hide()
 
-        self.comp_v3 = QCheckBox("3-IMU v3")
+        self.comp_v3 = QCheckBox("PHC-3IMU v1")
         self.comp_v3.setObjectName("compV3Checkbox")
         self.comp_v3.setAccessibleName("compV3Checkbox")
         self.comp_v3.setToolTip("Overlay 3-IMU v3 trajectory in Blue dotted line")
         options_row.addWidget(self.comp_v3)
 
-        self.comp_v2 = QCheckBox("3-IMU v2")
+        self.comp_v2 = QCheckBox("PBF-3IMU v1")
         self.comp_v2.setObjectName("compV2Checkbox")
         self.comp_v2.setAccessibleName("compV2Checkbox")
         self.comp_v2.setToolTip("Overlay 3-IMU v2 trajectory in Purple dash-dot line")
@@ -3323,29 +3449,50 @@ class ModelPage(QWidget):
         )
         self.comparison_series.setVisible(False)
 
+        self.comp_v8_series = QLineSeries()
+        self.comp_v8_series.setName("SOF-3IMU v2")
+        self.comp_v8_series.setPen(
+            QPen(QColor("#be123c"), 2.8, Qt.PenStyle.SolidLine)
+        )
+        self.comp_v8_series.setVisible(False)
+
+        self.comp_v7_series = QLineSeries()
+        self.comp_v7_series.setName("SOF-3IMU v1")
+        self.comp_v7_series.setPen(
+            QPen(QColor("#0891b2"), 2.6, Qt.PenStyle.SolidLine)
+        )
+        self.comp_v7_series.setVisible(False)
+
+        self.comp_v6_series = QLineSeries()
+        self.comp_v6_series.setName("GRF-3IMU v3")
+        self.comp_v6_series.setPen(
+            QPen(QColor("#dc2626"), 2.4, Qt.PenStyle.SolidLine)
+        )
+        self.comp_v6_series.setVisible(False)
+
         self.comp_v5_series = QLineSeries()
-        self.comp_v5_series.setName("3-IMU v5")
+        self.comp_v5_series.setName("GRF-3IMU v2")
         self.comp_v5_series.setPen(
             QPen(QColor("#16a34a"), 2.2, Qt.PenStyle.SolidLine)
         )
         self.comp_v5_series.setVisible(False)
 
         self.comp_v4_series = QLineSeries()
-        self.comp_v4_series.setName("3-IMU v4")
+        self.comp_v4_series.setName("GRF-3IMU v1")
         self.comp_v4_series.setPen(
             QPen(QColor("#0d9488"), 2.0, Qt.PenStyle.SolidLine)
         )
         self.comp_v4_series.setVisible(False)
 
         self.comp_v3_series = QLineSeries()
-        self.comp_v3_series.setName("3-IMU v3")
+        self.comp_v3_series.setName("PHC-3IMU v1")
         self.comp_v3_series.setPen(
             QPen(QColor("#2563eb"), 2.0, Qt.PenStyle.DotLine)
         )
         self.comp_v3_series.setVisible(False)
 
         self.comp_v2_series = QLineSeries()
-        self.comp_v2_series.setName("3-IMU v2")
+        self.comp_v2_series.setName("PBF-3IMU v1")
         self.comp_v2_series.setPen(
             QPen(QColor("#9333ea"), 2.0, Qt.PenStyle.DashDotLine)
         )
@@ -3376,6 +3523,9 @@ class ModelPage(QWidget):
         for series in (
             self.trajectory_series,
             self.comparison_series,
+            self.comp_v8_series,
+            self.comp_v7_series,
+            self.comp_v6_series,
             self.comp_v5_series,
             self.comp_v4_series,
             self.comp_v3_series,
@@ -3401,6 +3551,9 @@ class ModelPage(QWidget):
         for series in (
             self.trajectory_series,
             self.comparison_series,
+            self.comp_v8_series,
+            self.comp_v7_series,
+            self.comp_v6_series,
             self.comp_v5_series,
             self.comp_v4_series,
             self.comp_v3_series,
@@ -3451,6 +3604,9 @@ class ModelPage(QWidget):
         self.export_image_button.clicked.connect(self.export_trajectory_image)
         self.import_c3d_button.clicked.connect(self.import_c3d_file)
         self.comp_dual_hub.toggled.connect(self._on_comparison_toggled)
+        self.comp_v8.toggled.connect(self._on_comparison_toggled)
+        self.comp_v7.toggled.connect(self._on_comparison_toggled)
+        self.comp_v6.toggled.connect(self._on_comparison_toggled)
         self.comp_v5.toggled.connect(self._on_comparison_toggled)
         self.comp_v4.toggled.connect(self._on_comparison_toggled)
         self.comp_v3.toggled.connect(self._on_comparison_toggled)
@@ -3781,6 +3937,9 @@ class ModelPage(QWidget):
 
         recording_label = self.session_combo.currentText().strip() or session_id
         compare_dual = self.comp_dual_hub.isChecked()
+        compare_v8 = self.comp_v8.isChecked()
+        compare_v7 = self.comp_v7.isChecked()
+        compare_v6 = self.comp_v6.isChecked()
         compare_v5 = self.comp_v5.isChecked()
         compare_v4 = self.comp_v4.isChecked()
         compare_v3 = self.comp_v3.isChecked()
@@ -3815,6 +3974,33 @@ class ModelPage(QWidget):
                                 result["comparison_xy"] = cres.get("xy")
                             except Exception:
                                 pass
+                    if compare_v8 and getattr(spec, "model_version", None) != 8:
+                        try:
+                            v8_spec = _three_imu_spec(8)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v8_spec, research_path
+                            )
+                            result["comp_v8_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v7 and getattr(spec, "model_version", None) != 7:
+                        try:
+                            v7_spec = _three_imu_spec(7)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v7_spec, research_path
+                            )
+                            result["comp_v7_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v6 and getattr(spec, "model_version", None) != 6:
+                        try:
+                            v6_spec = _three_imu_spec(6)
+                            cres = run_processed_trial_model(
+                                self.repo_root, v6_spec, research_path
+                            )
+                            result["comp_v6_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
                     if compare_v5 and getattr(spec, "model_version", None) != 5:
                         try:
                             v5_spec = _three_imu_spec(5)
@@ -3878,6 +4064,33 @@ class ModelPage(QWidget):
                                 result["comparison_label"] = dual_spec.label
                             except Exception:
                                 pass
+                    if compare_v8 and getattr(spec, "model_version", None) != 8:
+                        try:
+                            v8_spec = _three_imu_spec(8)
+                            cres = run_session_model(
+                                self.repo_root, v8_spec, session_data
+                            )
+                            result["comp_v8_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v7 and getattr(spec, "model_version", None) != 7:
+                        try:
+                            v7_spec = _three_imu_spec(7)
+                            cres = run_session_model(
+                                self.repo_root, v7_spec, session_data
+                            )
+                            result["comp_v7_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
+                    if compare_v6 and getattr(spec, "model_version", None) != 6:
+                        try:
+                            v6_spec = _three_imu_spec(6)
+                            cres = run_session_model(
+                                self.repo_root, v6_spec, session_data
+                            )
+                            result["comp_v6_xy"] = cres.get("xy")
+                        except Exception:
+                            pass
                     if compare_v5 and getattr(spec, "model_version", None) != 5:
                         try:
                             v5_spec = _three_imu_spec(5)
@@ -3950,6 +4163,9 @@ class ModelPage(QWidget):
         self.refresh_models_button.setEnabled(not running)
         self.browse_research_button.setEnabled(not running)
         self.comp_dual_hub.setEnabled(not running)
+        self.comp_v8.setEnabled(not running)
+        self.comp_v7.setEnabled(not running)
+        self.comp_v6.setEnabled(not running)
         self.comp_v5.setEnabled(not running)
         self.comp_v4.setEnabled(not running)
         self.comp_v3.setEnabled(not running)
@@ -4054,6 +4270,18 @@ class ModelPage(QWidget):
             self.comp_c3d.blockSignals(True)
             self.comp_c3d.setChecked(True)
             self.comp_c3d.blockSignals(False)
+        if result.get("comp_v8_xy"):
+            self.comp_v8.blockSignals(True)
+            self.comp_v8.setChecked(True)
+            self.comp_v8.blockSignals(False)
+        if result.get("comp_v7_xy"):
+            self.comp_v7.blockSignals(True)
+            self.comp_v7.setChecked(True)
+            self.comp_v7.blockSignals(False)
+        if result.get("comp_v6_xy"):
+            self.comp_v6.blockSignals(True)
+            self.comp_v6.setChecked(True)
+            self.comp_v6.blockSignals(False)
         if result.get("comp_v5_xy"):
             self.comp_v5.blockSignals(True)
             self.comp_v5.setChecked(True)
@@ -4204,6 +4432,9 @@ class ModelPage(QWidget):
         for series in (
             self.trajectory_series,
             self.comparison_series,
+            self.comp_v8_series,
+            self.comp_v7_series,
+            self.comp_v6_series,
             self.comp_v5_series,
             self.comp_v4_series,
             self.comp_v3_series,
@@ -4453,6 +4684,12 @@ class ModelPage(QWidget):
                 or self._analysis_result.get("comparison_xy")
             ):
                 need_recompute = True
+            if self.comp_v8.isChecked() and not self._analysis_result.get("comp_v8_xy"):
+                need_recompute = True
+            if self.comp_v7.isChecked() and not self._analysis_result.get("comp_v7_xy"):
+                need_recompute = True
+            if self.comp_v6.isChecked() and not self._analysis_result.get("comp_v6_xy"):
+                need_recompute = True
             if self.comp_v5.isChecked() and not self._analysis_result.get("comp_v5_xy"):
                 need_recompute = True
             if self.comp_v4.isChecked() and not self._analysis_result.get("comp_v4_xy"):
@@ -4509,6 +4746,51 @@ class ModelPage(QWidget):
             self.comparison_series.clear()
             self.comparison_series.setVisible(False)
 
+        v8_pts = list(result.get("comp_v8_xy") or [])
+        if v8_pts and self.comp_v8.isChecked():
+            s = max(1, len(v8_pts) // 5000)
+            disp = v8_pts[::s]
+            if disp[-1] != v8_pts[-1]:
+                disp.append(v8_pts[-1])
+            self.comp_v8_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v8_series.setName("SOF-3IMU v2")
+            self.comp_v8_series.setVisible(True)
+        else:
+            self.comp_v8_series.clear()
+            self.comp_v8_series.setVisible(False)
+
+        v7_pts = list(result.get("comp_v7_xy") or [])
+        if v7_pts and self.comp_v7.isChecked():
+            s = max(1, len(v7_pts) // 5000)
+            disp = v7_pts[::s]
+            if disp[-1] != v7_pts[-1]:
+                disp.append(v7_pts[-1])
+            self.comp_v7_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v7_series.setName("SOF-3IMU v1")
+            self.comp_v7_series.setVisible(True)
+        else:
+            self.comp_v7_series.clear()
+            self.comp_v7_series.setVisible(False)
+
+        v6_pts = list(result.get("comp_v6_xy") or [])
+        if v6_pts and self.comp_v6.isChecked():
+            s = max(1, len(v6_pts) // 5000)
+            disp = v6_pts[::s]
+            if disp[-1] != v6_pts[-1]:
+                disp.append(v6_pts[-1])
+            self.comp_v6_series.replace(
+                [QPointF(float(x), float(y)) for x, y in disp]
+            )
+            self.comp_v6_series.setName("GRF-3IMU v3")
+            self.comp_v6_series.setVisible(True)
+        else:
+            self.comp_v6_series.clear()
+            self.comp_v6_series.setVisible(False)
+
         v5_pts = list(result.get("comp_v5_xy") or [])
         if v5_pts and self.comp_v5.isChecked():
             s = max(1, len(v5_pts) // 5000)
@@ -4518,7 +4800,7 @@ class ModelPage(QWidget):
             self.comp_v5_series.replace(
                 [QPointF(float(x), float(y)) for x, y in disp]
             )
-            self.comp_v5_series.setName("3-IMU v5")
+            self.comp_v5_series.setName("GRF-3IMU v2")
             self.comp_v5_series.setVisible(True)
         else:
             self.comp_v5_series.clear()
@@ -4533,7 +4815,7 @@ class ModelPage(QWidget):
             self.comp_v4_series.replace(
                 [QPointF(float(x), float(y)) for x, y in disp]
             )
-            self.comp_v4_series.setName("3-IMU v4")
+            self.comp_v4_series.setName("GRF-3IMU v1")
             self.comp_v4_series.setVisible(True)
         else:
             self.comp_v4_series.clear()
@@ -4548,7 +4830,7 @@ class ModelPage(QWidget):
             self.comp_v3_series.replace(
                 [QPointF(float(x), float(y)) for x, y in disp]
             )
-            self.comp_v3_series.setName("3-IMU v3")
+            self.comp_v3_series.setName("PHC-3IMU v1")
             self.comp_v3_series.setVisible(True)
         else:
             self.comp_v3_series.clear()
@@ -4563,7 +4845,7 @@ class ModelPage(QWidget):
             self.comp_v2_series.replace(
                 [QPointF(float(x), float(y)) for x, y in disp]
             )
-            self.comp_v2_series.setName("3-IMU v2")
+            self.comp_v2_series.setName("PBF-3IMU v1")
             self.comp_v2_series.setVisible(True)
         else:
             self.comp_v2_series.clear()
@@ -4586,6 +4868,9 @@ class ModelPage(QWidget):
 
         has_any_comp = (
             (bool(dh_pts) and self.comp_dual_hub.isChecked())
+            or (bool(v8_pts) and self.comp_v8.isChecked())
+            or (bool(v7_pts) and self.comp_v7.isChecked())
+            or (bool(v6_pts) and self.comp_v6.isChecked())
             or (bool(v5_pts) and self.comp_v5.isChecked())
             or (bool(v4_pts) and self.comp_v4.isChecked())
             or (bool(v3_pts) and self.comp_v3.isChecked())
@@ -4604,6 +4889,9 @@ class ModelPage(QWidget):
         ys = [float(p[1]) for p in points]
         for extra in (
             dh_pts if self.comp_dual_hub.isChecked() else [],
+            v8_pts if self.comp_v8.isChecked() else [],
+            v7_pts if self.comp_v7.isChecked() else [],
+            v6_pts if self.comp_v6.isChecked() else [],
             v5_pts if self.comp_v5.isChecked() else [],
             v4_pts if self.comp_v4.isChecked() else [],
             v3_pts if self.comp_v3.isChecked() else [],
@@ -4784,6 +5072,7 @@ class MainWindow(QMainWindow):
             app_root=Path(__file__).resolve().parents[2], parent=self
         )
         self._installing_update = False
+        _prewarm_audio()
         for candidate in (
             Path(__file__).resolve().parents[4] / "assets" / "wheelathlete-logo.png",
             Path(__file__).resolve().parents[4] / "assets" / "wheelathlete-logo.ico",

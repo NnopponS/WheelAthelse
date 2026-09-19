@@ -28,7 +28,7 @@ BiWheel3D/                              separate local research repository, neve
 |---|---|---|---|
 | L | `0x4C` | left wheel-hub IMU | L/R model input |
 | R | `0x52` | right wheel-hub IMU | L/R model input |
-| C | `0x43` | optional chair-center/frame IMU | acquisition/storage only |
+| C | `0x43` | optional chair-center/frame IMU | production: acquisition/storage only; explicit offline three-IMU research V5-V8 may consume C |
 
 Center mounting contract: **+Z points down toward the floor**. Center X/Y remain physical board axes until forward/lateral orientation is measured. Code must not silently map C to R or extend the legacy L/R model tensor by enum iteration.
 
@@ -76,7 +76,7 @@ Retained mobile source uses its own versioned storage. It is not part of the cur
 
 Raw packet data retains device microsecond timestamp, sequence, arrival timestamp and sequence classification. Saved clock observations and START evidence establish the application's chosen device-to-host mapping; they are not independent physical-synchronization proof.
 
-Windows host timing uses the high-resolution `perf_counter_ns()`/QueryPerformanceCounter domain. A future L/R/C model must preserve explicit three-stream clock provenance; independently setting each stream start to zero is not acceptable alignment.
+Windows host timing uses the high-resolution `perf_counter_ns()`/QueryPerformanceCounter domain. Any L/R/C model, including research-only V5-V8 offline estimators, must preserve explicit three-stream clock provenance; independently setting each stream start to zero is not acceptable alignment.
 
 ## Offline analysis boundary
 
@@ -86,7 +86,7 @@ The installed Windows default remains the frozen classical L/R XY+yaw runtime. E
 
 ### Experimental models
 
-Residual/Slalom/hybrid estimators remain explicit research choices. C3D/reference data is never an inference input. Protocol constraints must be reported separately from unconstrained motion estimates.
+Residual/Slalom/hybrid estimators remain explicit research choices. Bundled three-IMU V5-V8 estimators are research-only: they consume synchronized L/R/C IMU streams and frozen development artifacts, while V3 remains the active/default 3-IMU application method and the installed production default remains the frozen L/R runtime. V7 adds a spin-orthogonal hub-yaw observation; V8 uses that observation to estimate a persistent causal center-yaw bias state. Neither is a promoted runtime. C3D/reference data is never an inference input. Protocol constraints must be reported separately from unconstrained motion estimates.
 
 New portable models use the contained `wheelathlete-model.json` bundle contract and cannot escape the bundle directory or silently introduce arbitrary Python execution.
 

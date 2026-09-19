@@ -1,6 +1,7 @@
 # WheelAthlete current status
 
 Updated: 2026-09-15
+Updated: 2026-09-19
 
 ## Release line
 
@@ -45,7 +46,8 @@ Implemented 1.8.2 release features include:
 - installed-app update support through a verified GitHub Release manifest when a trusted signed release exists;
 - fail-closed Windows release signing that verifies packaged EXE/DLL/PYD/PowerShell components, the generated uninstaller and the installer;
 - window icon configuration using official assets and cleaned typography across Analysis timeline;
-- a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload.
+- a release workflow that can publish only from the exact version tag and re-checks `public_release_ready=true` before GitHub Release upload;
+- synchronized recording countdown audio and visual cue streamlining (clear 5-4-3-2-1 timing display without calibration hold message, in-memory PCM WAV audio queue worker with pre-warming that guarantees audible 1 s interval beeps at 700 Hz on every count without Windows audio DAC sleep truncation, and a 500 ms long start tone at 1200 Hz).
 
 Fresh 2026-09-10 consolidation verification passed **198/198** Windows tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
 

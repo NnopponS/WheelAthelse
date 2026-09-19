@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "model_id": "biwheel3d:three_imu_sof_v7",
+  "method": "SOF-3IMU",
+  "component": "spin_orthogonal_slow_yaw_fusion",
+  "internal_version": 7,
+  "lifecycle": "frozen_development_candidate_not_promoted",
+  "development_date": "2026-09-09",
+  "runtime_inputs": [
+    "L",
+    "R",
+    "C"
+  ],
+  "runtime_uses_c3d": false,
+  "runtime_uses_protocol_or_identity": false,
+  "calibration": {
+    "speed_gain_mps_per_count": 0.0003568106929730844,
+    "center_yaw_gain_radps_per_count": 0.0012191216634507398,
+    "wheel_yaw_gain_radps_per_count": 0.0007274715109836487,
+    "calibration_trials": 108,
+    "provenance": "development_only",
+    "diagnostics": {
+      "speed_fit_rmse_mps": 0.06623841713406013,
+      "speed_fit_corr": 0.983530456269761,
+      "center_yaw_fit_rmse_rad_s": 0.045034075469779736,
+      "center_yaw_fit_corr": 0.9983896400537721,
+      "wheel_yaw_fit_rmse_rad_s": 0.28554992879562047,
+      "wheel_yaw_fit_corr": 0.9438043786981392,
+      "speed_fit_samples": 264213.0,
+      "yaw_fit_samples": 201611.0
+    }
+  },
+  "model": {
+    "hub_correction_weight": 1.0,
+    "bias_tau_s": 5.0,
+    "disagreement_guard_deg_s": 12.0,
+    "turn_threshold_deg_s": 5.0,
+    "correction_clip_deg_s": 1.0
+  }
+}

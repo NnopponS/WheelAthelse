@@ -14,6 +14,9 @@ from tools.pc_gui.model_inference import (  # noqa: E402
     THREE_IMU_V3_KEY,
     THREE_IMU_V4_KEY,
     THREE_IMU_V5_KEY,
+    THREE_IMU_V6_KEY,
+    THREE_IMU_V7_KEY,
+    THREE_IMU_V8_KEY,
     ModelInferenceError,
     ModelSpec,
     active_research_dataset_root,
@@ -149,17 +152,20 @@ def test_discovery_exposes_only_active_v3_and_v2_rollback(monkeypatch, tmp_path)
     models = discover_compatible_models(REPO_ROOT, lifecycle_only=True)
     assert [model.key for model in models] == [THREE_IMU_V3_KEY, THREE_IMU_V2_KEY]
     assert models[0].kind == "three_imu_v3"
-    assert models[0].label == "IMU v3 (Active)"
+    assert models[0].label == "PHC-3IMU v1 (Active)"
     assert models[1].kind == "three_imu_v2"
-    assert models[1].label == "IMU v2 (Rollback)"
+    assert models[1].label == "PBF-3IMU v1 (Rollback)"
     assert models[0].required_sensor_roles == ("L", "R", "C")
     assert models[1].required_sensor_roles == ("L", "R", "C")
 
     research = {model.key: model for model in discover_compatible_models(REPO_ROOT)}
-    assert research[THREE_IMU_V4_KEY].label == "IMU v4 (Research - Rejected)"
-    assert research[THREE_IMU_V5_KEY].label == "IMU v5 (Research - Development Candidate)"
-    assert research[THREE_IMU_V5_KEY].kind == "three_imu_v5"
-    assert research[THREE_IMU_V5_KEY].experimental
+    assert THREE_IMU_V4_KEY not in research
+    assert THREE_IMU_V5_KEY not in research
+    assert THREE_IMU_V6_KEY not in research
+    assert THREE_IMU_V7_KEY not in research
+    assert research[THREE_IMU_V8_KEY].label == "SOF-3IMU v2 (Research - Development Candidate)"
+    assert research[THREE_IMU_V8_KEY].kind == "three_imu_v8"
+    assert research[THREE_IMU_V8_KEY].experimental
 
 
 def test_custom_recipe_uses_its_own_label_without_current_best_short_circuit(tmp_path):
