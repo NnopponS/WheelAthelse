@@ -392,3 +392,47 @@ def test_group_name_can_be_renamed_with_confirmation(monkeypatch):
     window.close()
     window.deleteLater()
     _APP.processEvents()
+
+
+def test_results_table_action_buttons_do_not_overlap():
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    window.show()
+    window.start()
+    window.stack.setCurrentIndex(2)
+    _APP.processEvents()
+
+    results = window.results
+    card = results._topic_cards[0]
+    if not card.table_container.isVisible():
+        card.set_expanded(True)
+    _APP.processEvents()
+
+    cell_widget = card.table.cellWidget(0, 9)
+    assert cell_widget is not None
+    p_btn = cell_widget.findChild(QPushButton, "previewTableBtn")
+    m_btn = cell_widget.findChild(QPushButton, "modelRowBtn")
+    assert p_btn is not None and m_btn is not None
+
+    p_right = p_btn.geometry().x() + p_btn.geometry().width()
+    m_left = m_btn.geometry().x()
+    assert m_left >= p_right, f"Buttons overlap! Preview right={p_right}, Model left={m_left}"
+
+    results.view_tabs.setCurrentIndex(1)
+    _APP.processEvents()
+    flat_cell = results.table.cellWidget(0, 10)
+    assert flat_cell is not None
+    p_btn_flat = flat_cell.findChild(QPushButton, "previewTableBtn")
+    m_btn_flat = flat_cell.findChild(QPushButton, "modelRowBtn")
+    assert p_btn_flat is not None and m_btn_flat is not None
+
+    p_right_flat = p_btn_flat.geometry().x() + p_btn_flat.geometry().width()
+    m_left_flat = m_btn_flat.geometry().x()
+    assert m_left_flat >= p_right_flat, (
+        f"Flat table buttons overlap! Preview right={p_right_flat}, Model left={m_left_flat}"
+    )
+
+    controller.close()
+    window.close()
+    window.deleteLater()
+    _APP.processEvents()

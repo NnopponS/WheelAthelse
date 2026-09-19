@@ -481,9 +481,7 @@ QPushButton#seeMoreButton:hover {
 QPushButton#previewTableBtn {
     min-height: 24px;
     max-height: 26px;
-    min-width: 82px;
-    max-width: 82px;
-    padding: 0 8px;
+    padding: 0 6px;
     border-radius: 6px;
     border: 1px solid #0f766e;
     color: #0f766e;
@@ -499,6 +497,21 @@ QPushButton#previewTableBtn[active="true"] {
     background-color: #0f766e;
     color: #ffffff;
     border-color: #0f766e;
+}
+QPushButton#modelRowBtn {
+    min-height: 24px;
+    max-height: 26px;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: 1px solid #0f766e;
+    background-color: #0f766e;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+}
+QPushButton#modelRowBtn:hover {
+    background-color: #115e59;
+    border-color: #115e59;
 }
 QPushButton#editTableBtn {
     min-height: 24px;
@@ -604,8 +617,8 @@ def _table_action_button(
     container = QWidget()
     container.setStyleSheet("background: transparent;")
     layout = QHBoxLayout(container)
-    layout.setContentsMargins(0, 2, 0, 2)
-    layout.setSpacing(4)
+    layout.setContentsMargins(2, 2, 2, 2)
+    layout.setSpacing(6)
     layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
     btn = QPushButton(text)
     btn.setObjectName(name)
@@ -625,10 +638,6 @@ def _table_action_button(
         m_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         m_btn.setFixedHeight(26)
         m_btn.setFixedWidth(54)
-        m_btn.setStyleSheet(
-            "QPushButton#modelRowBtn { background-color: #0f766e; color: #ffffff; border-radius: 4px; font-weight: 600; font-size: 11px; padding: 2px 4px; border: none; } "
-            "QPushButton#modelRowBtn:hover { background-color: #115e59; }"
-        )
         m_btn.clicked.connect(model_callback)
         layout.addWidget(m_btn)
 
@@ -2106,7 +2115,7 @@ class TopicCard(Card):
         self.table.horizontalHeader().setSectionResizeMode(
             9, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(9, 140)
+        self.table.setColumnWidth(9, 160)
         self.table.horizontalHeaderItem(9).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
@@ -2610,7 +2619,7 @@ class ResultsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             10, QHeaderView.ResizeMode.Fixed
         )
-        self.table.setColumnWidth(10, 140)
+        self.table.setColumnWidth(10, 160)
         self.table.horizontalHeaderItem(10).setTextAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
