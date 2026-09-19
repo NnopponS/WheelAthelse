@@ -615,7 +615,8 @@ def _table_action_button(
     model_callback=None,
 ) -> QWidget:
     container = QWidget()
-    container.setStyleSheet("background: transparent;")
+    container.setObjectName("tableActionCellWidget")
+    container.setStyleSheet("QWidget#tableActionCellWidget { background: transparent; }")
     layout = QHBoxLayout(container)
     layout.setContentsMargins(2, 2, 2, 2)
     layout.setSpacing(6)
@@ -638,6 +639,21 @@ def _table_action_button(
         m_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         m_btn.setFixedHeight(26)
         m_btn.setFixedWidth(54)
+        m_btn.setStyleSheet(
+            "QPushButton#modelRowBtn { "
+            "background-color: #0f766e; "
+            "color: #ffffff; "
+            "border: 1px solid #0f766e; "
+            "border-radius: 6px; "
+            "font-size: 11px; "
+            "font-weight: 700; "
+            "padding: 0 4px; "
+            "} "
+            "QPushButton#modelRowBtn:hover { "
+            "background-color: #115e59; "
+            "border-color: #115e59; "
+            "}"
+        )
         m_btn.clicked.connect(model_callback)
         layout.addWidget(m_btn)
 
