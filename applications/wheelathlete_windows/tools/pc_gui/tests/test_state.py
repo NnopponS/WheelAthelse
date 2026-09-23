@@ -101,6 +101,61 @@ def test_board_view_exposes_specific_check_fault_and_active_retry():
     assert recovered.fault_summary is None
 
 
+def test_board_view_marks_fifo_and_malformed_packet_faults_unhealthy():
+    fifo_fault = BoardView.from_status(
+        "L",
+        {"connected": True, "health": {"state": 2, "fifo_faults": 1}},
+    )
+    malformed_packet = BoardView.from_status(
+        "R",
+        {"connected": True, "health": {"state": 2}, "malformed_packets": 1},
+    )
+
+    assert not fifo_fault.healthy
+    assert fifo_fault.fault_summary == "firmware FIFO fault: 1"
+    assert not malformed_packet.healthy
+    assert malformed_packet.fault_summary == "malformed BLE packet: 1"
+
+
+def test_board_loss_count_does_not_double_count_firmware_drops_and_sequence_gaps():
+    board = BoardView.from_status(
+        "R",
+        {
+            "connected": True,
+            "sequence_gaps": 100,
+            "queue_overflow_faults": 2,
+            "health": {
+                "state": 2,
+                "queue_drops": 110,
+                "fifo_dropped_samples": 3,
+            },
+        },
+    )
+
+    assert board.loss_count == 113
+    assert board.fault_summary == (
+        "firmware sample loss: 113 (queue 110, FIFO 3); "
+        "host notification queue overflow: 2; host sequence gap: 100"
+    )
+    assert not board.healthy
+
+
+def test_board_loss_count_includes_host_queue_overflow_without_sequence_gap():
+    board = BoardView.from_status(
+        "L",
+        {
+            "connected": True,
+            "sequence_gaps": 0,
+            "queue_overflow_faults": 2,
+            "health": {"state": 2, "queue_drops": 0},
+        },
+    )
+
+    assert board.loss_count == 2
+    assert board.fault_summary == "host notification queue overflow: 2"
+    assert not board.healthy
+
+
 def test_app_state_preserves_both_wheels_and_ipc_counters():
     state = AppViewState()
     state.apply_status(

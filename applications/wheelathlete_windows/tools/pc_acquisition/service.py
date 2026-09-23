@@ -903,6 +903,7 @@ class AcquisitionService:
             "sample_rate_hz",
             "duration_s",
             "quality",
+            "reasons",
             "sample_counts",
             "journal_path",
             "started_utc_ms",

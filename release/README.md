@@ -1,6 +1,8 @@
-# WheelAthlete v1.8.3 release
+# WheelAthlete v1.8.4 release
 
-WheelAthlete 1.8.3 is a **Windows-first** release line. The current public GitHub Release is source-only until trusted Windows signing is configured. No mobile binary or mobile update offer belongs to this release.
+WheelAthlete v1.8.4 is a **Windows-first** release. This release publishes signed Windows assets only; Android/mobile source and binaries are outside its scope.
+
+The release workflow runs only for the exact `v1.8.4` tag. It fails closed when trusted signing configuration is missing or the Windows signing report does not mark the installer ready. It publishes no unsigned installer or stable update manifest.
 
 ## Stable Windows update manifest
 
@@ -10,7 +12,7 @@ Installed Windows clients use:
 https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 ```
 
-A source-only Release does not publish `latest.json`, so installed clients receive no update offer. When a trusted signed Windows release is available, the manifest contains the signed installer URL, exact byte size and SHA-256. The client accepts only HTTPS GitHub Release URLs belonging to this repository and verifies both size and hash before installation.
+The manifest describes the signed installer, exact byte size, SHA-256 and release URL. The client accepts only HTTPS GitHub Release URLs belonging to this repository and rejects manifests that do not mark the Windows artifact as signed.
 
 ## Public signing requirements
 
@@ -23,9 +25,9 @@ GitHub variable: WHEELATHLETE_TIMESTAMP_URL
 GitHub variable: WHEELATHLETE_SIGN_CERT_SUBJECT
 ```
 
-The PFX must contain exactly one usable private-key signing identity. The build validates an RSA certificate with Code Signing EKU, current validity and the exact expected publisher subject. It signs/verifies packaged EXE/DLL/PYD files and the installed PowerShell helper, signs the generated Inno Setup uninstaller and outer installer, requires timestamps, and writes `signing-report.json` plus `SHA256SUMS.txt`.
+The PFX must contain exactly one usable private-key signing identity. The build validates an RSA certificate with Code Signing EKU, current validity and the exact expected publisher subject. It signs and verifies packaged executable components and the generated uninstaller/installer, requires timestamps, and writes a signing report.
 
-Missing or incomplete signing configuration fails closed. Do not commit a PFX, password, private key or certificate material to the repository.
+Never commit a PFX, password, private key or certificate material to the repository.
 
 ## Release gates
 
@@ -33,28 +35,26 @@ Before publishing Windows binaries:
 
 1. `python scripts/verify_project.py` passes.
 2. The complete Windows application/acquisition test suite passes at the exact release commit.
-3. Release/manifest generator checks pass.
-4. Maintained firmware host tests/builds pass for the intended release identity.
+3. Release-manifest generator checks pass.
+4. Maintained firmware host tests and builds pass for the intended release identity.
 5. Installer lifecycle behavior remains safe: install/upgrade/uninstall/reinstall, graceful daemon shutdown and user-data preservation.
-6. Every executable component in `signing-report.json` is valid/timestamped as required and `public_release_ready=true`.
-7. The final diff contains no recordings, private paths, credentials, generated packages, new mobile application source changes or `BiWheel3D` files.
+6. Every executable component is valid and timestamped as required, and `public_release_ready=true`.
+7. The final diff contains no recordings, private logs, absolute user paths, credentials, generated packages, mobile changes or `BiWheel3D` files.
 
-Physical L/R/C acceptance remains a separate hardware evidence gate. Source/build tests must not be presented as physical RF/orientation/accuracy validation.
+Physical L/R/C acceptance is recorded separately. Software/build checks are not physical RF, orientation or trajectory-accuracy evidence.
 
-## Signed assets when the trust gate is available
+## Signed Windows assets
 
 ```text
-WheelAthleteSetup-1.8.3.exe
-WheelAthlete-1.8.3-portable.zip
+WheelAthleteSetup-1.8.4.exe
+WheelAthlete-1.8.4-portable.zip
 SHA256SUMS.txt
-signing-report.json
+windows-signing-report.json
 latest.json
 ```
 
-Until trusted signing exists, the v1.8.3 page should contain GitHub's source archives only.
-
 ## Branch and version policy
 
-`main` is the integrated source line. `release/main-v1.8.3` is the public release branch pointing at the exact tested v1.8.3 commit. Historical version tags are retained for traceability; obsolete remote development/release branches do not need to remain visible after their work is fully merged.
+`main` is the integrated source line. `release/main-v1.8.4` must point at the exact tested release commit. Do not force-push `main`. Historical tags remain for traceability.
 
-See [RELEASE_NOTES_1.8.3.md](RELEASE_NOTES_1.8.3.md) and [`../applications/wheelathlete_windows/packaging/windows/README.md`](../applications/wheelathlete_windows/packaging/windows/README.md).
+See [RELEASE_NOTES_1.8.4.md](RELEASE_NOTES_1.8.4.md) and [`../applications/wheelathlete_windows/packaging/windows/README.md`](../applications/wheelathlete_windows/packaging/windows/README.md).

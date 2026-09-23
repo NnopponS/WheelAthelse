@@ -30,20 +30,10 @@ void setup() {
     digitalWrite(LED_GREEN, HIGH); // OFF
 
     Serial.println("\n=== WheelAthlete Firmware (Xiao BLE Sense) ===");
-    Serial.printf("Wheel: %c\n", WHEEL);
 
     // Initialize configuration store (NVS equivalent using LittleFS on nRF52)
     configStore().begin(WHEEL);
-
-    // Ensure the role and name match this build
-    const char* expected_name = (WHEEL == 'C') ? "WheelAthlete-XIAO-C" :
-                                (WHEEL == 'R') ? "WheelAthlete-XIAO-R" :
-                                                 "WheelAthlete-XIAO-L";
-    if (configStore().wheelChar() != WHEEL || strcmp(configStore().name(), expected_name) != 0) {
-        configStore().setWheel(static_cast<uint8_t>(WHEEL));
-        configStore().setName(expected_name);
-        configStore().save();
-    }
+    Serial.printf("Wheel: %c\n", configStore().wheelChar());
 
     // Initialize IMU reader (LSM6DS3)
     if (!imu().begin(configStore().rateHz())) {
@@ -63,7 +53,7 @@ void setup() {
     }
 
     // Initialize BLE GATT server
-    ble().begin(WHEEL);
+    ble().begin(configStore().wheelChar());
 
     Serial.println("[MAIN] Setup complete — waiting for BLE START command");
 }
@@ -81,7 +71,7 @@ void loop() {
         while (imu().popSample(s)) {
             Serial.printf("%lu,%c,%lu,%lu,%d,%d,%d,%d,%d,%d,0\n",
                           static_cast<unsigned long>(s.seq),
-                          WHEEL,
+                          configStore().wheelChar(),
                           static_cast<unsigned long>(millis()),
                           static_cast<unsigned long>(s.t_device_us),
                           s.ax, s.ay, s.az,

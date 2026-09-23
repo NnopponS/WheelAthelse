@@ -20,7 +20,7 @@ def _wait(ms: int) -> None:
     loop.exec()
 
 
-def test_final_start_cue_survives_recording_state_race(monkeypatch):
+def test_start_cue_waits_one_second_after_confirmed_recording(monkeypatch):
     tones: list[tuple[int, int]] = []
     monkeypatch.setattr(
         main_window, "_play_tone", lambda frequency, duration: tones.append((frequency, duration))
@@ -42,13 +42,21 @@ def test_final_start_cue_survives_recording_state_race(monkeypatch):
     acquisition.update_state(state)
     assert tones == [(700, 120)]
 
-    # Simulate the daemon's recording event winning the race against the
-    # visual countdown timer.  The independent T0 timer must remain armed.
+    # A confirmed recording event starts a fresh one-second cue delay.
     state.recording = True
     state.recording_starting = False
     state.countdown = None
     acquisition.update_state(state)
-    _wait(120)
+    assert tones == [(700, 120)]
+    assert acquisition._start_cue_timer.isActive()
+    remaining = acquisition._start_cue_timer.remainingTime()
+    assert 800 <= remaining <= 1000
+
+    # Repeated recording updates must not restart the delay.
+    _wait(150)
+    acquisition.update_state(state)
+    assert acquisition._start_cue_timer.remainingTime() < remaining - 100
+    _wait(900)
 
     assert tones.count((1200, 500)) == 1
 
@@ -85,12 +93,18 @@ def test_cancelled_countdown_cancels_pending_start_cue(monkeypatch):
     state.recording_started_utc_ms = time.time_ns() // 1_000_000 + 80
     acquisition.update_state(state)
 
+    state.recording = True
     state.recording_starting = False
     state.countdown = None
+    acquisition.update_state(state)
+    assert acquisition._start_cue_timer.isActive()
+
+    state.recording = False
+    state.recording_starting = False
     state.recording_target_pc_ns = None
     state.recording_started_utc_ms = None
     acquisition.update_state(state)
-    _wait(140)
+    _wait(1100)
 
     assert (1200, 500) not in tones
 
@@ -150,10 +164,19 @@ def test_countdown_shows_timing_5_4_3_2_1_without_hold_and_beeps(monkeypatch):
     assert "hold" not in acquisition.countdown_label.text().lower()
     assert tones == [(700, 120), (700, 120), (700, 120), (700, 120), (700, 120)]
 
-    # 0: triggers start cue with 'START!' and long start beep (1200, 500)
+    # 0: wait for the daemon's confirmed start; do not play the start cue yet.
     acquisition._countdown_tick()
-    assert acquisition.countdown_label.text() == "START!"
-    assert tones[-1] == (1200, 500)
+    assert acquisition.countdown_label.text() == "Waiting for wheel start…"
+    assert tones == [(700, 120)] * 5
+    assert not acquisition._start_cue_timer.isActive()
+
+    state.recording = True
+    state.recording_starting = False
+    state.countdown = None
+    acquisition.update_state(state)
+    assert acquisition._start_cue_timer.isActive()
+    _wait(1050)
+    assert tones.count((1200, 500)) == 1
 
     controller.close()
     window.close()

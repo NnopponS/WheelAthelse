@@ -190,6 +190,63 @@ def test_custom_recipe_uses_its_own_label_without_current_best_short_circuit(tmp
     assert spec.kind == "recipe"
 
 
+def test_phase_e_sif_artifact_is_recognized_as_optional_3d_model(tmp_path):
+    artifact = tmp_path / "model.json"
+    artifact.write_text(json.dumps({
+        "schema_version": 1,
+        "model_id": "biwheel3d:sif_yaw_consensus",
+        "sensor_layout": "LRC",
+        "base_model": {},
+        "yaw_consensus": {"blend": 0.15},
+    }), encoding="utf-8")
+
+    spec = custom_model_spec(artifact)
+    assert spec.kind == "sif_yaw_consensus"
+    assert spec.required_sensor_roles == ("L", "R", "C")
+    assert ("z_m", "m") in spec.output_capabilities
+    assert not model_spec_runtime_status(spec)[0]
+
+
+def test_local_phase_e_sif_model_runs_from_finalized_lrc_contract():
+    artifact = REPO_ROOT / "BiWheel3D/models/experimental/sif_yaw_consensus/model.json"
+    if not artifact.is_file():
+        pytest.skip("optional local research repository is unavailable")
+    spec = custom_model_spec(artifact)
+    assert any(model.key == spec.key for model in discover_compatible_models(REPO_ROOT))
+    session = {
+        "session_id": "synthetic_lrc",
+        "sample_rate_hz": 100,
+        "samples": {"L": _samples(600, gz_dps=0),
+                    "R": _samples(600, gz_dps=0),
+                    "C": _samples(600, gz_dps=0)},
+    }
+    for i in range(600):
+        session["samples"]["L"][i]["gz"] = float(180 * np.sin(i * 0.02))
+        session["samples"]["R"][i]["gz"] = float(-180 * np.sin(i * 0.02))
+    result = run_session_model(REPO_ROOT, spec, session)
+    assert result["point_count"] == len(result["xyz"]) == 600
+    assert np.isfinite(np.asarray(result["xyz"])).all()
+    assert np.asarray(result["xyz"])[:, :2] == pytest.approx(np.asarray(result["xy"]))
+    assert result["path_length_m"] > 1.0
+    from biwheel3d.sif_yaw_consensus import SIFYawConsensus
+    from biwheel3d.unified_3d_v1 import SensorSeries
+
+    def research_si(role):
+        values = np.asarray([[row[k] for k in ("ax", "ay", "az", "gx", "gy", "gz")]
+                             for row in session["samples"][role]], dtype=float)
+        values[:, :3] *= 9.80665
+        values[:, 3:] *= np.deg2rad(0.070 / (2000.0 / 32768.0))
+        return values
+
+    expected = SIFYawConsensus.load(artifact).predict(SensorSeries(
+        t=np.arange(600) / 100.0,
+        left=research_si("L"), right=research_si("R"), center=research_si("C"),
+    ))[0]
+    np.testing.assert_allclose(result["xyz"], expected, atol=1e-8)
+    with pytest.raises(ModelInferenceError, match="center.*sensor data"):
+        run_session_model(REPO_ROOT, spec, {**session, "samples": {k: v for k, v in session["samples"].items() if k != "C"}})
+
+
 def test_model_library_discovers_onnx_and_recipe(monkeypatch, tmp_path):
     monkeypatch.setenv("WHEELATHLETE_MODEL_DIR", str(tmp_path))
     onnx_path = tmp_path / "my_future_model.onnx"

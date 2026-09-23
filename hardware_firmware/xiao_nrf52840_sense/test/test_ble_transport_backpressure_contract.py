@@ -19,6 +19,18 @@ def test_xiao_batches_for_slow_dual_board_links_and_backs_off_retries():
     assert "if (transport_failures_ > 0) acq_state = AcqState::Retry" not in source
 
 
+def test_xiao_uses_full_mtu_batches_when_the_sample_queue_is_backed_up():
+    source = (ROOT / "src" / "ble_service.cpp").read_text(encoding="utf-8")
+    ble_task = source[
+        source.index("void BleService::bleTask()") :
+        source.index("void BleService::finalizeStopIfDrained()")
+    ]
+
+    assert "uint8_t target = targetBatchCount(mtu_, imu().rateHz());" in ble_task
+    assert "if (imu().queueDepth() >= target) target = max_count;" in ble_task
+    assert "while (pending_count_ < target && pending_count_ < max_count" in ble_task
+
+
 def test_xiao_stop_drains_late_samples_before_final_health():
     header = (ROOT / "src" / "ble_service.h").read_text(encoding="utf-8")
     source = (ROOT / "src" / "ble_service.cpp").read_text(encoding="utf-8")

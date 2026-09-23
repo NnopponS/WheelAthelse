@@ -188,19 +188,18 @@ class BoardView:
 
     @property
     def loss_count(self) -> int:
-        values = [
-            self.sequence_gaps,
-            self.queue_overflow_faults,
-            self.firmware_queue_drops or 0,
-            self.fifo_dropped_samples or 0,
-        ]
-        return sum(values)
+        firmware_loss = (self.firmware_queue_drops or 0) + (self.fifo_dropped_samples or 0)
+        # Sequence gaps and firmware counters often describe the same packets.
+        return max(self.sequence_gaps, firmware_loss, self.queue_overflow_faults)
 
     @property
     def healthy(self) -> bool:
         return (
             self.connected
             and self.loss_count == 0
+            and self.queue_overflow_faults == 0
+            and (self.fifo_faults or 0) == 0
+            and self.malformed_packets == 0
             and self.fatal_fault is None
             and self.acquisition_state not in {3, 4}
         )
@@ -209,17 +208,26 @@ class BoardView:
     def fault_summary(self) -> str | None:
         if self.fatal_fault:
             return str(self.fatal_fault.get("message") or self.fatal_fault.get("code") or "Host acquisition fault")
-        faults = [
-            (self.sequence_gaps, "host sequence gap"),
+        queue_drops = self.firmware_queue_drops or 0
+        fifo_drops = self.fifo_dropped_samples or 0
+        faults = []
+        if queue_drops and not fifo_drops:
+            faults.append(f"firmware sample queue drop: {queue_drops}")
+        elif fifo_drops and not queue_drops:
+            faults.append(f"firmware FIFO sample loss: {fifo_drops}")
+        elif queue_drops or fifo_drops:
+            total = queue_drops + fifo_drops
+            faults.append(f"firmware sample loss: {total} (queue {queue_drops}, FIFO {fifo_drops})")
+        for count, label in (
             (self.queue_overflow_faults, "host notification queue overflow"),
-            (self.firmware_queue_drops or 0, "firmware sample queue drop"),
-            (self.fifo_dropped_samples or 0, "firmware FIFO sample loss"),
+            (self.sequence_gaps, "host sequence gap"),
             (self.fifo_faults or 0, "firmware FIFO fault"),
             (self.malformed_packets, "malformed BLE packet"),
-        ]
-        for count, label in faults:
+        ):
             if count:
-                return f"{label}: {count}"
+                faults.append(f"{label}: {count}")
+        if faults:
+            return "; ".join(faults)
         if self.acquisition_state == 3:
             return f"BLE notification retry active; cumulative failures: {self.transport_failures or 0}"
         if self.acquisition_state == 4:

@@ -53,7 +53,7 @@ class AnalysisTimeline(QWidget):
         self.analysis = None
         self.last_statistics = None
         self._exporting = False
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(340)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)

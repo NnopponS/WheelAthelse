@@ -100,6 +100,8 @@ def parse_manifest(payload: bytes) -> UpdateManifest:
     windows = platforms.get("windows") if isinstance(platforms, dict) else None
     if not isinstance(windows, dict):
         raise UpdateError("Update manifest is missing the Windows artifact")
+    if windows.get("is_signed") is not True:
+        raise UpdateError("Unsigned Windows update manifests are not accepted")
     artifact_version = str(windows.get("version", "")).strip()
     if artifact_version != version:
         raise UpdateError("Windows artifact version does not match manifest version")

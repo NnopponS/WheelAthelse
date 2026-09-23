@@ -12,6 +12,7 @@ os.environ.setdefault(
 )
 
 from tools.pc_gui.controller import DemoController
+from tools.pc_gui.analysis_contract import build_analysis
 from tools.pc_gui.main_window import MainWindow
 
 
@@ -104,6 +105,7 @@ def test_model_page_renders_trajectory_and_summary_metrics():
     assert model.metric_path.text() == "1.72 m"
     assert model.metric_endpoint.text() == "1.61 m"
     assert model.metric_yaw.text() == "12.5 deg"
+    assert model.metric_vertical.text() == "—"
     assert model.metric_session.text() == "Sprint Â· Trial 1 Â· Test Athlete Â· GOOD"
     assert "Sprint" in model.chart.title()
     assert "native 100 Hz" in model.status_label.text()
@@ -135,11 +137,11 @@ def test_model_page_uses_current_best_and_exposes_model_browser():
     assert model.model_combo.itemText(0) == "Kinematic Trajectory (XY + Yaw)"
     model.model_combo.setCurrentIndex(0)
     _APP.processEvents()
-    assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.text()
+    assert "BiWheel3D-XY-Yaw-current_best.json" in model.model_detail.toolTip()
     assert "recipe ready" in model.runtime_label.text()
     assert "biwheel3d_dual_hub_v1" in model.model_detail.text()
-    assert model.model_detail.isHidden()
-    assert model.runtime_label.isHidden()
+    assert not model.model_detail.isHidden()
+    assert not model.runtime_label.isHidden()
     assert not model.browse_model_button.isHidden()
     assert "ONNX" in model.browse_model_button.toolTip()
 
@@ -163,6 +165,92 @@ def test_model_page_renders_c3d_overlay_for_research_trial():
     assert model.chart.legend().isVisible()
     assert "C3D full-cache diagnostic ATE 0.082 m" in model.status_label.text()
     assert "full-cache diagnostic ATE 0.082 m" in model.status_label.toolTip()
+    _close(controller, window)
+
+
+def test_model_page_opens_orbitable_view_only_for_true_xyz():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["xyz"] = [(x, y, z) for (x, y), z in zip(result["xy"], (0.0, 0.2, 0.4, 0.6))]
+    model._on_analysis_ready(result)
+    assert model.plot_tabs.currentWidget() is model.trajectory_3d_view
+    assert model.trajectory_3d_view.has_vertical
+    assert model.trajectory_3d_view.points[-1][2] == pytest.approx(0.6)
+    assert model.metric_vertical.text() == "0.60 m"
+
+    model._on_analysis_ready(_sample_result())
+    assert model.plot_tabs.currentWidget() is model.chart_view
+    assert not model.trajectory_3d_view.has_vertical
+    assert "Z unavailable" in model.trajectory_3d_view.accessibleDescription()
+
+    model.comp_dual_hub.setChecked(True)
+    compared_result = _sample_result()
+    compared_result["xyz"] = [
+        (x, y, z) for (x, y), z in zip(compared_result["xy"], (0.0, 0.2, 0.4, 0.6))
+    ]
+    model._on_analysis_ready(compared_result)
+    assert model.plot_tabs.currentWidget() is model.chart_view
+    _close(controller, window)
+
+
+def test_invalid_recording_reasons_are_visible_in_results_preview_and_model():
+    controller, window = _window()
+    session = {
+        "session_id": "invalid-demo",
+        "topic": "Sprint",
+        "trial_number": 1,
+        "athlete": "Test Athlete",
+        "sample_rate_hz": 100,
+        "duration_s": 1.0,
+        "quality": "INVALID",
+        "sample_counts": {"L": 100, "R": 96, "C": 100},
+        "reasons": [
+            {"code": "R sequence gaps", "detail": "4,824 samples"}
+        ],
+    }
+    controller.load_session_data = lambda _session_id: {
+        **session,
+        "samples": {"L": [], "R": [], "C": []},
+        "gaps": [],
+        "total_missing_samples": 0,
+    }
+    window.results.update_sessions([session])
+    quality_cell = window.results.table.item(0, 1)
+    assert "R sequence gaps: 4,824 samples" in quality_cell.toolTip()
+
+    window.results.preview_drawer.load_session(session["session_id"])
+    assert "INVALID" in window.results.preview_drawer.integrity_badge.text()
+    assert "4,824 samples" in window.results.preview_drawer.integrity_detail.text()
+
+    window.model.update_sessions([session])
+    result = _sample_result()
+    result["session_id"] = session["session_id"]
+    model = window.model
+    model._on_analysis_ready(result)
+    assert "INVALID" in model.status_label.text()
+    assert "4,824 samples" in model.status_label.text()
+
+    _close(controller, window)
+
+
+def test_model_timeline_moves_3d_cursor_and_selected_segment():
+    controller, window = _window()
+    model = window.model
+    result = _sample_result()
+    result["xyz"] = [(x, y, z) for (x, y), z in zip(result["xy"], (0.0, 0.2, 0.4, 0.6))]
+    result["analysis"] = build_analysis(
+        times=[0.0, 0.05, 0.10, 0.15],
+        xy=[list(point) for point in result["xy"]],
+        flags=[[] for _ in result["xy"]],
+    )
+    model._on_analysis_ready(result)
+    assert model.trajectory_3d_view.cursor_point == result["xyz"][0]
+    model.timeline.cursor.setValue(2)
+    assert model.trajectory_3d_view.cursor_point == result["xyz"][2]
+    model.timeline.start.setValue(0.05)
+    model.timeline.stop.setValue(0.10)
+    assert model.trajectory_3d_view.window_indices == (1, 2)
     _close(controller, window)
 
 
@@ -402,7 +490,7 @@ def test_model_page_csv_export(tmp_path, monkeypatch):
     assert os.path.isfile(target_file)
     with open(target_file, "r", encoding="utf-8") as f:
         content = f.read()
-    assert "time_s,x_m,y_m,signed_speed_mps" in content
+    assert "time_s,x_m,y_m,z_m,signed_speed_mps" in content
     assert "1.4" in content  # points from sample result
 
     model._invalidate_analysis()
@@ -445,6 +533,28 @@ def test_model_page_image_export(tmp_path, monkeypatch):
     _APP.processEvents()
     assert not model.export_image_button.isEnabled()
 
+    _close(controller, window)
+
+
+def test_3d_export_preserves_height_and_selected_view(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    controller, window = _window()
+    model = window.model
+    window.stack.setCurrentWidget(model)
+    result = _sample_result()
+    result["xyz"] = [(x, y, z) for (x, y), z in zip(result["xy"], (0.0, 0.1, 0.2, 0.3))]
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+    assert model.plot_tabs.currentWidget() is model.trajectory_3d_view
+
+    targets = iter((str(tmp_path / "path.csv"), str(tmp_path / "view.png")))
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (next(targets), ""))
+    model.export_trajectory_csv()
+    model.export_trajectory_image()
+    assert "z_m" in (tmp_path / "path.csv").read_text(encoding="utf-8")
+    assert "0.300000" in (tmp_path / "path.csv").read_text(encoding="utf-8")
+    assert (tmp_path / "view.png").stat().st_size > 0
     _close(controller, window)
 
 
@@ -507,3 +617,41 @@ def test_model_page_multi_model_and_c3d_comparison():
 
     _close(controller, window)
 
+
+def test_model_page_responsive_layout_and_scrolling():
+    controller, window = _window()
+    model = window.model
+    window.stack.setCurrentWidget(model)
+    _APP.processEvents()
+
+    # Window minimum size allows compact displays (768p and high DPI scaling)
+    assert window.minimumWidth() <= 980
+    assert window.minimumHeight() <= 560
+
+    # Model page has a dedicated scroll area for small screens
+    assert hasattr(model, "scroll_area")
+    assert model.scroll_area.widgetResizable()
+
+    # Compare checkboxes and export buttons live on separate rows and are visible
+    assert model.comp_dual_hub.isVisible()
+    assert model.comp_v8.isVisible()
+    assert model.import_c3d_button.isVisible()
+    assert model.export_image_button.isVisible()
+    assert model.export_csv_button.isVisible()
+
+    # Resize window to compact screen resolution (980x560)
+    window.resize(980, 560)
+    _APP.processEvents()
+
+    # Verify trajectory generation and layout stability at compact size
+    result = _sample_result()
+    model._on_analysis_ready(result)
+    _APP.processEvents()
+
+    assert model.chart_view.isVisible()
+    plot = model.chart.plotArea()
+    assert plot.width() > 0
+    assert plot.height() > 0
+    assert plot.width() == pytest.approx(plot.height(), abs=1.0)
+
+    _close(controller, window)

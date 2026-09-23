@@ -26,6 +26,7 @@ THREE_IMU_V5_KEY = "biwheel3d:three_imu_odometry_v5"
 THREE_IMU_V4_KEY = "biwheel3d:three_imu_odometry_v4"
 THREE_IMU_V3_KEY = "biwheel3d:three_imu_odometry_v3"
 THREE_IMU_V2_KEY = "biwheel3d:three_imu_odometry_v2"
+SIF_YAW_CONSENSUS_KEY = "biwheel3d:sif_yaw_consensus"
 ACTIVE_MODEL_KEY = THREE_IMU_V3_KEY
 ROLLBACK_MODEL_KEY = THREE_IMU_V2_KEY
 MODEL_BUNDLE_MANIFEST = "wheelathlete-model.json"
@@ -379,6 +380,24 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
             return model_bundle_spec(resolved)
         try:
             payload = json.loads(resolved.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and payload.get("model_id") == SIF_YAW_CONSENSUS_KEY:
+                if (payload.get("schema_version") != 1 or payload.get("sensor_layout") != "LRC"
+                        or not isinstance(payload.get("base_model"), dict)
+                        or not isinstance(payload.get("yaw_consensus"), dict)):
+                    raise ModelInferenceError("Invalid SIF yaw-consensus L/R/C model artifact.")
+                return ModelSpec(
+                    key=SIF_YAW_CONSENSUS_KEY,
+                    label="SIF yaw consensus (3D research)",
+                    checkpoint=resolved,
+                    description="Local SIF 3D research model. Requires synchronized Left, Right and Center IMU.",
+                    kind="sif_yaw_consensus",
+                    model_version="1",
+                    preprocessing_id="sif_lrc_100hz_si_v1",
+                    required_sensor_roles=("L", "R", "C"),
+                    output_capabilities=(("x_m", "m"), ("y_m", "m"), ("z_m", "m"), ("yaw_rad", "rad")),
+                    runtime_requirements=("numpy", "scipy"),
+                    experimental=True,
+                )
             if isinstance(payload, dict) and payload.get("model_type") == "unified_hybrid":
                 return ModelSpec(
                     key=str(payload.get("model_id") or f"unified_hybrid:{resolved}"),
@@ -395,6 +414,7 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
                     output_capabilities=(
                         ("x_m", "m"),
                         ("y_m", "m"),
+                        ("z_m", "m"),
                         ("signed_speed_mps", "m/s"),
                         ("yaw_rad", "rad"),
                         ("yaw_rate_radps", "rad/s"),
@@ -402,7 +422,9 @@ def custom_model_spec(checkpoint: Path) -> ModelSpec:
                     runtime_requirements=("numpy", "scipy", "biwheel3d"),
                     experimental=True,
                 )
-        except Exception:
+        except ModelInferenceError:
+            raise
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
         spec = _recipe_spec(resolved, bundled=False, strict=True)
         assert spec is not None
@@ -705,6 +727,21 @@ def discover_compatible_models(
         seen_paths.add(spec.checkpoint)
         seen_keys.add(spec.key)
 
+    # The research lifecycle registry, unlike the legacy model registry, names the
+    # current frozen 3D candidate. Keep this optional for installed app builds.
+    lifecycle = Path(repo_root) / "BiWheel3D" / "registry" / "model_lifecycle.json"
+    if lifecycle.is_file() and SIF_YAW_CONSENSUS_KEY not in seen_keys:
+        try:
+            entries = json.loads(lifecycle.read_text(encoding="utf-8"))["models"]
+            entry = next(item for item in entries if item.get("model_id") == SIF_YAW_CONSENSUS_KEY
+                         and item.get("paper_candidate") is True)
+            artifact = (lifecycle.parent.parent / entry["path"] / "model.json").resolve()
+            artifact.relative_to(lifecycle.parent.parent.resolve())
+            if hashlib.sha256(artifact.read_bytes()).hexdigest() == entry["artifact_sha256"]:
+                learned_specs.append(custom_model_spec(artifact))
+        except (OSError, ValueError, KeyError, StopIteration, json.JSONDecodeError, ModelInferenceError):
+            pass
+
     return discovered + learned_specs
 
 
@@ -745,6 +782,19 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
     for requirement in spec.runtime_requirements:
         if importlib.util.find_spec(requirement) is None:
             return False, f"This model requires the Python package {requirement}."
+    if spec.kind == "sif_yaw_consensus":
+        research_root = _research_sif_runtime_root(spec.checkpoint)
+        if research_root is None:
+            return False, "Local BiWheel3D SIF research runtime is unavailable; this artifact is not bundled with the app."
+        try:
+            if str(research_root) not in sys.path:
+                sys.path.insert(0, str(research_root))
+            from biwheel3d.sif_yaw_consensus import SIFYawConsensus
+
+            SIFYawConsensus.load(spec.checkpoint)
+        except Exception as exc:
+            return False, f"SIF 3D artifact is invalid or its research runtime cannot load: {exc}"
+        return True, "Local SIF 3D research runtime ready (L/R/C)."
     if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5", "three_imu_v6", "three_imu_v7", "three_imu_v8"}:
         module = _runtime_root() / f"three_imu_odometry_v{spec.model_version}.py"
         if not module.is_file():
@@ -786,6 +836,12 @@ def model_spec_runtime_status(spec: ModelSpec) -> tuple[bool, str]:
             return False, "SciPy is required for Unified Hybrid trajectory optimization."
         return True, "Unified Hybrid InEKF + RTS runtime ready."
     return False, f"Unsupported model kind: {spec.kind}"
+
+
+def _research_sif_runtime_root(checkpoint: Path) -> Path | None:
+    del checkpoint
+    root = Path(__file__).resolve().parents[4] / "BiWheel3D"
+    return root if (root / "biwheel3d" / "sif_yaw_consensus.py").is_file() else None
 
 
 def prepare_dual_windows(
@@ -1523,6 +1579,7 @@ def _run_unified_hybrid_model(
 
     return {
         "xy": np.asarray(aligned_xyz[:, :2], dtype=np.float64),
+        "xyz": np.asarray(aligned_xyz, dtype=np.float64).tolist(),
         "signed_speed_mps": v.tolist(),
         "yaw_rad": yaw.tolist(),
         "yaw_rate_radps": omega.tolist(),
@@ -1633,7 +1690,7 @@ def _prepare_three_imu_session(
         "missing_samples": int(session_data.get("total_missing_samples", 0) or 0),
         "warnings": list(dict.fromkeys([
             *warnings,
-            "Three-IMU v2-v8 runtime uses L/R/C only; C3D is never used for inference.",
+            "Three-IMU runtime uses L/R/C only; C3D is never used for inference.",
         ])),
         "time_s": imu.t.tolist(),
         "overlap_start_s": start,
@@ -1645,6 +1702,57 @@ def _prepare_three_imu_session(
         "physical_sync_verified": False,
     }
     return imu, preprocess, flat_input
+
+
+def _run_sif_yaw_consensus_model(spec: ModelSpec, session_data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    """Run a local SIF artifact on synchronized physical L/R/C samples."""
+    import numpy as np
+
+    research_root = _research_sif_runtime_root(spec.checkpoint)
+    if research_root is None:
+        raise ModelInferenceError("Local BiWheel3D SIF research runtime is unavailable.")
+    if str(research_root) not in sys.path:
+        sys.path.insert(0, str(research_root))
+    from biwheel3d.sif_yaw_consensus import SIFYawConsensus
+    from biwheel3d.unified_3d_v1 import SensorSeries
+
+    imu, preprocess, model_input = _prepare_three_imu_session(session_data)
+    physical = {}
+    for role in ("L", "R", "C"):
+        values = np.asarray(imu.raw[role], dtype=np.float64).copy()
+        values[:, :3] *= ACCEL_G_TO_MS2 * 4.0 / 32768.0
+        # SIF's frozen research preprocessing used 0.070 dps/count.
+        # Keep the app's physical-to-count conversion above unchanged.
+        values[:, 3:] *= np.deg2rad(0.070)
+        physical[role] = values
+    series = SensorSeries(t=np.asarray(imu.t, dtype=np.float64),
+                          left=physical["L"], right=physical["R"], center=physical["C"],
+                          source=str(session_data.get("session_id") or "finalized_session"))
+    try:
+        xyz, heading, rates, _pack = SIFYawConsensus.load(spec.checkpoint).predict(series)
+    except Exception as exc:
+        raise ModelInferenceError(f"SIF 3D model could not load or infer: {exc}") from exc
+    xyz, heading, rates = (np.asarray(value, dtype=np.float64) for value in (xyz, heading, rates))
+    if (xyz.shape != (len(imu.t), 3) or heading.shape != (len(imu.t),)
+            or rates.shape != (len(imu.t), 3)
+            or not all(np.isfinite(value).all() for value in (xyz, heading, rates))):
+        raise ModelInferenceError("SIF 3D model returned invalid trajectory or rate dimensions.")
+    return {
+        "xy": xyz[:, :2],
+        "xyz": xyz.tolist(),
+        "signed_speed_mps": rates[:, 0].tolist(),
+        "yaw_rad": heading.tolist(),
+        "yaw_rate_radps": rates[:, 1].tolist(),
+        "xy_frame": "initial_chair_heading",
+        "yaw_frame": "initial_chair_heading",
+        "net_yaw_deg": float(np.degrees(heading[-1] - heading[0])),
+        "yaw_source": "sif_yaw_consensus",
+        "yaw_delay_frames": 0,
+        "wheel_radius_m": CURRENT_BEST_WHEEL_RADIUS_M,
+        "track_width_m": CURRENT_BEST_TRACK_WIDTH_M,
+        "runtime_source": "local_biwheel3d_sif_yaw_consensus",
+        "warnings": ["Research-only 3D estimate; physical accuracy requires prospective validation."],
+    }, preprocess, model_input
 
 
 def _run_three_imu_model(spec: ModelSpec, session_data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], Any]:
@@ -1773,7 +1881,10 @@ def run_session_model(
     from .analysis_contract import file_identity
 
     checkpoint_before = file_identity(spec.checkpoint)
-    if spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5", "three_imu_v6", "three_imu_v7", "three_imu_v8"}:
+    if spec.kind == "sif_yaw_consensus":
+        model_result, preprocess, model_input = _run_sif_yaw_consensus_model(spec, session_data)
+        model_input_layout = "little-endian float32 (T,18), synchronized L/R/C virtual calibration counts"
+    elif spec.kind in {"three_imu_v2", "three_imu_v3", "three_imu_v4", "three_imu_v5", "three_imu_v6", "three_imu_v7", "three_imu_v8"}:
         model_result, preprocess, model_input = _run_three_imu_model(spec, session_data)
         model_input_layout = (
             "little-endian float32 (T,18), virtual calibration counts; "
@@ -1803,6 +1914,11 @@ def run_session_model(
             "Model file changed during analysis; discard result and retry"
         )
     xy = np.asarray(model_result.pop("xy"), dtype=np.float64)
+    if model_result.get("xyz") is not None:
+        xyz = np.asarray(model_result["xyz"], dtype=np.float64)
+        if (xyz.shape != (len(xy), 3) or not np.isfinite(xyz).all()
+                or not np.allclose(xyz[:, :2], xy, atol=1e-9, rtol=0)):
+            raise ModelInferenceError("Model XYZ output does not match its planar trajectory.")
     model_warnings = list(model_result.pop("warnings", []) or [])
     from .analysis_contract import build_analysis
 
@@ -1898,6 +2014,11 @@ def run_processed_trial_model(
     if not resolved.is_file() or resolved.suffix.lower() != ".npz":
         raise ModelInferenceError(
             f"Choose a processed BiWheel3D .npz trial inside {data_root}"
+        )
+    if "C" in spec.required_sensor_roles:
+        raise ModelInferenceError(
+            "This processed NPZ contains dual-hub model windows only. "
+            "Choose a finalized L/R/C recording for this three-IMU model."
         )
 
     ready, detail = model_spec_runtime_status(spec)

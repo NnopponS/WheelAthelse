@@ -109,6 +109,16 @@ class BoardSummaryCard(Card):
         ]
         for index, (key, label) in enumerate(definitions):
             tile = MetricTile(label)
+            if key == "loss":
+                tooltip = (
+                    "Conservative lower-bound indicator, not an exact lost-sample total. "
+                    "It uses the largest available sequence, device queue/FIFO, or host "
+                    "notification-overflow count to avoid double-counting; host counts "
+                    "are notifications, not samples."
+                )
+                tile.setToolTip(tooltip)
+                tile.label.setToolTip(tooltip)
+                tile.value.setToolTip(tooltip)
             self.metrics[key] = tile
             grid.addWidget(tile, index // 4, index % 4)
         root.addLayout(grid)

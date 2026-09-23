@@ -819,7 +819,8 @@ void BleService::bleTask() {
         if (pending_count_ > 0) notifyPendingBatch();
         return;
     }
-    const uint8_t target = targetBatchCount(mtu_, imu().rateHz());
+    uint8_t target = targetBatchCount(mtu_, imu().rateHz());
+    if (imu().queueDepth() >= target) target = max_count;
     ImuSample sample;
     while (pending_count_ < target && pending_count_ < max_count && imu().popSample(sample)) {
         if (pending_count_ == 0) batch_started_ms_ = millis();

@@ -97,6 +97,7 @@ except Exception:
     load_c3d_reference = None  # type: ignore
     _local_reference = None  # type: ignore
 from .analysis_timeline import AnalysisTimeline
+from .trajectory_3d_view import Trajectory3DView
 from .state import AppViewState
 from .update_controller import UpdateController, UpdateViewState
 from .widgets import (
@@ -148,6 +149,31 @@ def _session_date_bucket(session: dict[str, Any]) -> tuple[int, str]:
         return (-1, "Date unavailable")
     local_dt = datetime.fromtimestamp(utc_ms / 1000.0, tz=timezone.utc).astimezone()
     return (local_dt.date().toordinal(), local_dt.strftime("%A, %d %B %Y"))
+
+
+def _format_qc_reasons(reasons: Any) -> str:
+    if not isinstance(reasons, (list, tuple)):
+        return ""
+    details = []
+    for reason in reasons:
+        if isinstance(reason, dict):
+            code = str(reason.get("code") or "check").strip()
+            detail = str(reason.get("detail") or "").strip()
+            details.append(f"{code}: {detail}" if detail else code)
+        elif str(reason).strip():
+            details.append(str(reason).strip())
+    return "\n".join(details)
+
+
+def _session_qc_tooltip(session: dict[str, Any]) -> str:
+    detail = _format_qc_reasons(session.get("reasons"))
+    if detail:
+        return detail
+    return (
+        "All recorded integrity checks passed."
+        if str(session.get("quality") or "").upper() == "GOOD"
+        else "No QC reason details were recorded."
+    )
 
 
 class CheckBoxDelegate(QStyledItemDelegate):
@@ -418,6 +444,44 @@ QScrollArea {
 }
 QScrollArea > QWidget > QWidget {
     background-color: #f6f8fc;
+}
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 2px 0px 2px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #cbd5e1;
+    min-height: 24px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #0f766e;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0px 2px 0px 2px;
+}
+QScrollBar::handle:horizontal {
+    background: #cbd5e1;
+    min-width: 24px;
+    border-radius: 4px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #0f766e;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
 }
 QFrame#dateHeader {
     background-color: #eef7f5;
@@ -943,7 +1007,22 @@ class DashboardPage(QWidget):
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
         self.controller = controller
-        root = QVBoxLayout(self)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setObjectName("dashboardScrollArea")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content.setObjectName("pageContent")
+        root = QVBoxLayout(content)
+        root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(16)
         root.addLayout(_page_header("Dashboard"))
 
@@ -1053,6 +1132,9 @@ class DashboardPage(QWidget):
         self.devices.setAccessibleName("deviceTable")
         device_layout.addWidget(self.devices)
         root.addWidget(device_card, 1)
+
+        self.scroll_area.setWidget(content)
+        outer_layout.addWidget(self.scroll_area)
 
         self.connect_button.clicked.connect(self._connect_all)
         self.devices.cellDoubleClicked.connect(self._connect_row)
@@ -1169,7 +1251,21 @@ class AcquisitionPage(QWidget):
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
         self.controller = controller
-        root = QVBoxLayout(self)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setObjectName("acquisitionScrollArea")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content.setObjectName("pageContent")
+        root = QVBoxLayout(content)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(14)
         root.addLayout(_page_header("Live preview & recording"))
@@ -1336,6 +1432,9 @@ class AcquisitionPage(QWidget):
         main_layout.addLayout(right_col, 1)
         root.addLayout(main_layout, 1)
 
+        self.scroll_area.setWidget(content)
+        outer_layout.addWidget(self.scroll_area)
+
         # 100ms render timer for live charts and sensor cards
         self._render = QTimer(self)
         self._render.setInterval(100)
@@ -1388,22 +1487,13 @@ class AcquisitionPage(QWidget):
         _prewarm_audio()
         self.controller.start_record(self.metadata())
 
-    def _schedule_start_cue(
-        self, *, target_pc_ns: int | None, target_utc_ms: int | None, fallback_seconds: int
-    ) -> None:
-        """Arm the final start cue independently from the visual countdown."""
-        self._start_cue_timer.stop()
-        self._start_cue_played = False
-        if target_pc_ns is not None:
-            delay_ms = max(0, (int(target_pc_ns) - time.perf_counter_ns()) // 1_000_000)
-        elif target_utc_ms is not None:
-            delay_ms = max(0, int(target_utc_ms) - (time.time_ns() // 1_000_000))
-        else:
-            delay_ms = max(0, int(fallback_seconds) * 1000)
-        self._start_cue_timer.start(int(delay_ms))
+    def _schedule_start_cue(self) -> None:
+        """Play the PC cue one second after the daemon confirms wheel start."""
+        if not self._start_cue_played and not self._start_cue_timer.isActive():
+            self._start_cue_timer.start(1000)
 
     def _play_start_cue(self) -> None:
-        if self._start_cue_played:
+        if self._start_cue_played or not self.controller.state.recording:
             return
         self._start_cue_played = True
         self.countdown_label.setText("START!")
@@ -1417,13 +1507,17 @@ class AcquisitionPage(QWidget):
             _play_tone(700, 120)
             return
         self._countdown_timer.stop()
-        # Fallback for legacy/no-T0 state.  _play_start_cue is idempotent, so
-        # this cannot duplicate the precise T0 timer cue.
-        self._play_start_cue()
+        if self.controller.state.recording:
+            self._schedule_start_cue()
+        else:
+            self.countdown_label.setText("Waiting for wheel start…")
 
     def _update_record_clock(self) -> None:
         state = self.controller.state
         if not state.recording or state.recording_started_utc_ms is None:
+            return
+        if self._start_cue_timer.isActive() and not self._start_cue_played:
+            self.countdown_label.setText("Recording · start cue in 1 s")
             return
         now_utc_ms = time.time_ns() // 1_000_000
         elapsed_ms = max(0, now_utc_ms - int(state.recording_started_utc_ms))
@@ -1474,31 +1568,19 @@ class AcquisitionPage(QWidget):
 
         if state.recording:
             self._countdown_timer.stop()
-            # Do not stop _start_cue_timer here.  The real recording event may
-            # arrive a few milliseconds before the GUI's final countdown tick.
-            # Keeping the independent T0 timer alive fixes the intermittent
-            # missing final beep.
-            was_counting_down = self._countdown_started
             self._countdown_started = False
-            if was_counting_down and not self._start_cue_played:
-                # The daemon's recording event is the authoritative actual-start
-                # edge. Fire immediately if the scheduled GUI timer has not
-                # already done so; the idempotent guard prevents duplicates.
-                self._play_start_cue()
+            self._schedule_start_cue()
             if not self._record_clock_timer.isActive():
                 self._record_clock_timer.start()
             self._update_record_clock()
         elif state.countdown is not None and not self._countdown_started:
             self._record_clock_timer.stop()
+            self._start_cue_timer.stop()
+            self._start_cue_played = False
             self._countdown_started = True
             self._countdown_remaining = state.countdown
             self.countdown_label.setText(f"{state.countdown}")
             _play_tone(700, 120)
-            self._schedule_start_cue(
-                target_pc_ns=state.recording_target_pc_ns,
-                target_utc_ms=state.recording_started_utc_ms,
-                fallback_seconds=state.countdown,
-            )
             self._countdown_timer.start()
         elif not state.recording_starting:
             self._countdown_timer.stop()
@@ -1554,18 +1636,11 @@ class AcquisitionPage(QWidget):
         self.result_meta.setText("   •   ".join(meta_parts))
         self.result_meta.setVisible(True)
 
-        if reasons:
-            text = "\n".join(
-                f"• {item.get('code', 'check')}: {item.get('detail', '')}"
-                for item in reasons
-                if isinstance(item, dict)
-            )
-        else:
-            text = (
-                "All recorded integrity checks passed."
-                if quality == "GOOD"
-                else "No additional QC reason was supplied."
-            )
+        text = _format_qc_reasons(reasons) or (
+            "All recorded integrity checks passed."
+            if quality == "GOOD"
+            else "No additional QC reason was supplied."
+        )
         if result.get("demo"):
             text = "DEMO ONLY — synthetic preview was not written as research evidence."
         self.result_detail.setText(text)
@@ -1835,13 +1910,21 @@ class SessionPreviewDrawer(Card):
 
         gaps = data.get("gaps", [])
         total_missing = data.get("total_missing_samples", 0)
-        if not gaps and total_missing == 0:
+        session_summary = next(
+            (item for item in self.controller.sessions if str(item.get("session_id")) == session_id),
+            {},
+        )
+        quality = str(data.get("quality") or session_summary.get("quality") or "UNKNOWN").upper()
+        reasons = _format_qc_reasons(
+            data.get("reasons") or session_summary.get("reasons")
+        )
+        if not gaps and total_missing == 0 and quality == "GOOD":
             self.integrity_badge.setText("Lossless (100% contiguous data)")
             self.integrity_badge.setObjectName("previewLossGood")
             self.integrity_detail.setText(
                 "All packets arrived sequentially without drops."
             )
-        else:
+        elif gaps or total_missing:
             gap_summary = ", ".join(
                 f"t={g['time_s']:.1f}s ({g['side']}: -{g.get('missing', 1)})"
                 for g in gaps[:5]
@@ -1853,6 +1936,16 @@ class SessionPreviewDrawer(Card):
             )
             self.integrity_badge.setObjectName("previewLossWarn")
             self.integrity_detail.setText(f"Detected drops at: {gap_summary}")
+            if reasons:
+                self.integrity_detail.setText(
+                    f"{self.integrity_detail.text()}\nQC: {reasons}"
+                )
+        else:
+            self.integrity_badge.setText(f"QC {quality}")
+            self.integrity_badge.setObjectName("previewLossWarn")
+            self.integrity_detail.setText(
+                reasons or f"No sequence gaps were reconstructed; session QC is {quality}."
+            )
 
         self.integrity_badge.style().unpolish(self.integrity_badge)
         self.integrity_badge.style().polish(self.integrity_badge)
@@ -2185,6 +2278,8 @@ class TopicCard(Card):
                 if col in (2, 3):
                     flags |= Qt.ItemFlag.ItemIsEditable
                     cell.setToolTip("Double-click to edit")
+                elif col == 1:
+                    cell.setToolTip(_session_qc_tooltip(item))
                 cell.setFlags(flags)
                 if col in (1, 2):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -2502,9 +2597,9 @@ class ResultsPage(QWidget):
 
         # Filters & Actions Bar
         filter_card = Card()
-        filter_layout = QHBoxLayout(filter_card)
+        filter_layout = QVBoxLayout(filter_card)
         filter_layout.setContentsMargins(16, 10, 16, 10)
-        filter_layout.setSpacing(10)
+        filter_layout.setSpacing(8)
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search athlete, topic, session ID…")
@@ -2532,16 +2627,25 @@ class ResultsPage(QWidget):
             "Delete selected", "deleteSessionButton", danger=True
         )
 
-        filter_layout.addWidget(QLabel("Filter:"))
-        filter_layout.addWidget(self.search, 2)
-        filter_layout.addWidget(self.topic_filter, 1)
-        filter_layout.addWidget(self.trial_filter, 1)
-        filter_layout.addWidget(self.expand_all_btn)
-        filter_layout.addWidget(self.select_all_btn)
-        filter_layout.addWidget(self.deselect_all_btn)
-        filter_layout.addWidget(self.model_button)
-        filter_layout.addWidget(self.export_button)
-        filter_layout.addWidget(self.delete_button)
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
+        filter_row.addWidget(QLabel("Filter:"))
+        filter_row.addWidget(self.search, 2)
+        filter_row.addWidget(self.topic_filter, 1)
+        filter_row.addWidget(self.trial_filter, 1)
+        filter_layout.addLayout(filter_row)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        action_row.addWidget(self.expand_all_btn)
+        action_row.addWidget(self.select_all_btn)
+        action_row.addWidget(self.deselect_all_btn)
+        action_row.addStretch(1)
+        action_row.addWidget(self.model_button)
+        action_row.addWidget(self.export_button)
+        action_row.addWidget(self.delete_button)
+        filter_layout.addLayout(action_row)
+
         root.addWidget(filter_card)
         self.selection_summary = QLabel("No recordings selected")
         self.selection_summary.setWordWrap(True)
@@ -2787,6 +2891,8 @@ class ResultsPage(QWidget):
                 if col in (2, 3, 4):
                     flags |= Qt.ItemFlag.ItemIsEditable
                     cell.setToolTip("Double-click to edit")
+                elif col == 1:
+                    cell.setToolTip(_session_qc_tooltip(item))
                 cell.setFlags(flags)
                 if col in (1, 3):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3274,7 +3380,20 @@ class ModelPage(QWidget):
         self._loaded_c3d_points: list[tuple[float, float]] | None = None
         self._loaded_c3d_name: str = ""
 
-        root = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setObjectName("modelScrollArea")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content.setObjectName("pageContent")
+        root = QVBoxLayout(content)
         root.setContentsMargins(16, 10, 16, 10)
         root.setSpacing(7)
         root.addLayout(_page_header("Model"))
@@ -3326,7 +3445,7 @@ class ModelPage(QWidget):
             "Open a trusted processed .npz inside BiWheel3D/data for read-only model/GT review"
         )
         self.generate_button = _button(
-            "Generate 2D trajectory", "generateTrajectoryButton", primary=True
+            "Generate trajectory", "generateTrajectoryButton", primary=True
         )
         self.generate_button.setAccessibleName("generateTrajectoryButton")
 
@@ -3339,12 +3458,12 @@ class ModelPage(QWidget):
         self.runtime_label.setWordWrap(True)
         self.runtime_label.hide()
 
-        options_row = QHBoxLayout()
-        options_row.setSpacing(8)
+        compare_row = QHBoxLayout()
+        compare_row.setSpacing(8)
 
         compare_label = QLabel("Compare:")
         compare_label.setObjectName("mutedText")
-        options_row.addWidget(compare_label)
+        compare_row.addWidget(compare_label)
 
         self.comp_dual_hub = QCheckBox("Dual-Hub 2-IMU")
         self.comp_dual_hub.setObjectName("modelCompareCheckbox")
@@ -3353,76 +3472,74 @@ class ModelPage(QWidget):
             "Overlay Dual-Hub (2-IMU) kinematic baseline in Amber dash-dot line"
         )
         self.compare_checkbox = self.comp_dual_hub
-        options_row.addWidget(self.comp_dual_hub)
+        compare_row.addWidget(self.comp_dual_hub)
 
         self.comp_v8 = QCheckBox("SOF-3IMU v2")
         self.comp_v8.setObjectName("compV8Checkbox")
         self.comp_v8.setAccessibleName("compV8Checkbox")
         self.comp_v8.setToolTip("Overlay latest frozen generic research architecture: SOF-3IMU v2")
-        options_row.addWidget(self.comp_v8)
+        compare_row.addWidget(self.comp_v8)
 
         self.comp_v7 = QCheckBox("SOF-3IMU v1")
         self.comp_v7.setObjectName("compV7Checkbox")
         self.comp_v7.setAccessibleName("compV7Checkbox")
         self.comp_v7.setToolTip("Overlay frozen research-only SOF-3IMU v7 development candidate")
-        options_row.addWidget(self.comp_v7)
+        compare_row.addWidget(self.comp_v7)
         self.comp_v7.hide()
 
         self.comp_v6 = QCheckBox("GRF-3IMU v3")
         self.comp_v6.setObjectName("compV6Checkbox")
         self.comp_v6.setAccessibleName("compV6Checkbox")
         self.comp_v6.setToolTip("Overlay research-only WA-CAIF v6 development candidate")
-        options_row.addWidget(self.comp_v6)
+        compare_row.addWidget(self.comp_v6)
         self.comp_v6.hide()
 
         self.comp_v5 = QCheckBox("GRF-3IMU v2")
         self.comp_v5.setObjectName("compV5Checkbox")
         self.comp_v5.setAccessibleName("compV5Checkbox")
         self.comp_v5.setToolTip("Overlay research-only 3-IMU v5 trajectory")
-        options_row.addWidget(self.comp_v5)
+        compare_row.addWidget(self.comp_v5)
         self.comp_v5.hide()
 
         self.comp_v4 = QCheckBox("GRF-3IMU v1")
         self.comp_v4.setObjectName("compV4Checkbox")
         self.comp_v4.setAccessibleName("compV4Checkbox")
         self.comp_v4.setToolTip("Overlay 3-IMU v4 trajectory in Teal line")
-        options_row.addWidget(self.comp_v4)
+        compare_row.addWidget(self.comp_v4)
         self.comp_v4.hide()
 
         self.comp_v3 = QCheckBox("PHC-3IMU v1")
         self.comp_v3.setObjectName("compV3Checkbox")
         self.comp_v3.setAccessibleName("compV3Checkbox")
         self.comp_v3.setToolTip("Overlay 3-IMU v3 trajectory in Blue dotted line")
-        options_row.addWidget(self.comp_v3)
+        compare_row.addWidget(self.comp_v3)
 
         self.comp_v2 = QCheckBox("PBF-3IMU v1")
         self.comp_v2.setObjectName("compV2Checkbox")
         self.comp_v2.setAccessibleName("compV2Checkbox")
         self.comp_v2.setToolTip("Overlay 3-IMU v2 trajectory in Purple dash-dot line")
-        options_row.addWidget(self.comp_v2)
+        compare_row.addWidget(self.comp_v2)
 
         self.comp_c3d = QCheckBox("C3D GT")
         self.comp_c3d.setObjectName("compC3DCheckbox")
         self.comp_c3d.setAccessibleName("compC3DCheckbox")
         self.comp_c3d.setToolTip("Overlay C3D optical Ground Truth in Slate dashed line")
-        options_row.addWidget(self.comp_c3d)
+        compare_row.addWidget(self.comp_c3d)
 
         self.import_c3d_button = _button("Import C3D…", "importC3dButton")
         self.import_c3d_button.setAccessibleName("importC3dButton")
         self.import_c3d_button.setToolTip(
             "Import external C3D file for comparison (saved to Documents/WheelAthlete/C3D)"
         )
-        options_row.addWidget(self.import_c3d_button)
-
-        options_row.addStretch()
+        compare_row.addWidget(self.import_c3d_button)
+        compare_row.addStretch(1)
 
         self.export_image_button = _button(
             "Export trajectory image…", "exportTrajectoryImageButton"
         )
         self.export_image_button.setAccessibleName("exportTrajectoryImageButton")
         self.export_image_button.setEnabled(False)
-        self.export_image_button.setToolTip("Export 2D planar trajectory chart as PNG image")
-        options_row.addWidget(self.export_image_button)
+        self.export_image_button.setToolTip("Export the selected 2D or 3D trajectory view as an image")
 
         self.export_csv_button = _button(
             "Export trajectory CSV…", "exportTrajectoryCsvButton"
@@ -3430,7 +3547,15 @@ class ModelPage(QWidget):
         self.export_csv_button.setAccessibleName("exportTrajectoryCsvButton")
         self.export_csv_button.setEnabled(False)
         self.export_csv_button.setToolTip("Export trajectory coordinates, speed, and heading to CSV")
-        options_row.addWidget(self.export_csv_button)
+
+        export_row = QHBoxLayout()
+        export_row.setSpacing(8)
+        export_label = QLabel("Export:")
+        export_label.setObjectName("mutedText")
+        export_row.addWidget(export_label)
+        export_row.addWidget(self.export_image_button)
+        export_row.addWidget(self.export_csv_button)
+        export_row.addStretch(1)
 
         controls_layout.addWidget(model_label, 0, 0)
         controls_layout.addWidget(self.model_combo, 0, 1)
@@ -3442,7 +3567,8 @@ class ModelPage(QWidget):
         controls_layout.addWidget(self.generate_button, 1, 3)
         controls_layout.addWidget(self.model_detail, 2, 0, 1, 4)
         controls_layout.addWidget(self.runtime_label, 3, 0, 1, 4)
-        controls_layout.addLayout(options_row, 4, 0, 1, 4)
+        controls_layout.addLayout(compare_row, 4, 0, 1, 4)
+        controls_layout.addLayout(export_row, 5, 0, 1, 4)
         controls_layout.setColumnStretch(1, 2)
         root.addWidget(controls)
 
@@ -3457,12 +3583,14 @@ class ModelPage(QWidget):
         self.metric_path = QLabel("—")
         self.metric_endpoint = QLabel("—")
         self.metric_yaw = QLabel("—")
+        self.metric_vertical = QLabel("—")
         metric_items = [
             ("Model", self.metric_model),
             ("Recording", self.metric_session),
             ("Model points", self.metric_points),
-            ("Path length", self.metric_path),
-            ("Endpoint", self.metric_endpoint),
+            ("Planar path", self.metric_path),
+            ("Planar endpoint", self.metric_endpoint),
+            ("Vertical range", self.metric_vertical),
             ("Net yaw", self.metric_yaw),
         ]
         for column, (title, value) in enumerate(metric_items):
@@ -3619,15 +3747,22 @@ class ModelPage(QWidget):
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.chart_view.setMinimumHeight(280)
         style_chart_surface(self.chart, self.chart_view)
+        self.trajectory_3d_view = Trajectory3DView()
+        self.plot_tabs = QTabWidget()
+        self.plot_tabs.setObjectName("trajectoryViewTabs")
+        self.plot_tabs.addTab(self.chart_view, "Planar 2D")
+        self.plot_tabs.addTab(self.trajectory_3d_view, "Orbitable 3D")
         self.timeline = AnalysisTimeline()
         self.timeline_scroll = QScrollArea()
         self.timeline_scroll.setWidgetResizable(True)
         self.timeline_scroll.setWidget(self.timeline)
-        self.timeline_scroll.setMinimumWidth(480)
+        self.timeline_scroll.setMinimumWidth(350)
         self.analysis_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.analysis_splitter.addWidget(self.chart_view)
+        self.analysis_splitter.addWidget(self.plot_tabs)
         self.analysis_splitter.addWidget(self.timeline_scroll)
-        self.analysis_splitter.setSizes([820, 600])
+        self.analysis_splitter.setSizes([650, 420])
+        self.analysis_splitter.setStretchFactor(0, 3)
+        self.analysis_splitter.setStretchFactor(1, 2)
         self.analysis_splitter.setChildrenCollapsible(False)
         trajectory_layout.addWidget(self.analysis_splitter, 1)
         self.timeline.cursor_changed.connect(self._highlight_analysis_point)
@@ -3639,7 +3774,12 @@ class ModelPage(QWidget):
         self.status_label.setObjectName("mutedText")
         self.status_label.setWordWrap(True)
         trajectory_layout.addWidget(self.status_label)
+        trajectory_card.setMinimumHeight(380)
         root.addWidget(trajectory_card, 1)
+
+        self.scroll_area.setWidget(content)
+        outer_layout.addWidget(self.scroll_area)
+        self.chart_view.installEventFilter(self)
 
         self.model_combo.currentIndexChanged.connect(self._update_model_detail)
         self.browse_model_button.clicked.connect(self.browse_model)
@@ -3840,22 +3980,24 @@ class ModelPage(QWidget):
                 f"inputs {'/'.join(spec.required_sensor_roles)} via {spec.preprocessing_id} · "
                 f"outputs {outputs}"
             )
-            desc = spec.description or ""
-            if "classical kinematic planar" in desc.lower() or "biwheel3d classical" in desc.lower():
-                desc_text = ""
-            elif desc:
-                desc_text = f"{desc}  ·  "
-            else:
-                desc_text = ""
             self.model_detail.setText(
-                f"{desc_text}{technical}  ·  {spec.checkpoint}"
+                f"{maturity} · {spec.label} · inputs {'/'.join(spec.required_sensor_roles)} "
+                f"· outputs {outputs} · {spec.preprocessing_id}"
             )
+            self.model_detail.setToolTip(f"{spec.description}\n{technical}\n{spec.checkpoint}")
             ready, detail = model_spec_runtime_status(spec)
             role_mismatch = session_is_2imu and ("C" in spec.required_sensor_roles)
+            processed_mismatch = (isinstance(current_data, dict)
+                                  and current_data.get("kind") == "processed_npz"
+                                  and "C" in spec.required_sensor_roles)
             if role_mismatch:
                 ready = False
                 detail = "⚠️ Requires Wheel C · Recording has 2 IMUs only. Choose 'Kinematic Trajectory (XY + Yaw)' or 'Mobile M4'"
                 self.generate_button.setToolTip("Selected model requires 3 IMUs (Wheel C), but this recording only has Left and Right wheels.")
+            elif processed_mismatch:
+                ready = False
+                detail = "Processed NPZ has dual-hub model windows only. Choose a finalized L/R/C recording for this 3D model."
+                self.generate_button.setToolTip(detail)
             else:
                 self.generate_button.setToolTip("")
 
@@ -3877,8 +4019,8 @@ class ModelPage(QWidget):
             self.model_combo.setToolTip(f"Model folder: {model_library_root()}")
             self.generate_button.setEnabled(False)
             self.generate_button.setToolTip("")
-        self.model_detail.hide()
-        self.runtime_label.hide()
+        self.model_detail.show()
+        self.runtime_label.show()
 
     def browse_model(self) -> None:
         current = self.model_combo.currentData()
@@ -3918,10 +4060,11 @@ class ModelPage(QWidget):
         self._models.append(spec)
         self.model_combo.addItem(spec.label, spec)
         self.model_combo.setCurrentIndex(self.model_combo.count() - 1)
-        self.status_label.setText(
-            f"Selected {spec.label}. Compatibility is validated locally before inference."
-        )
         self._update_model_detail()
+        ready, detail = model_spec_runtime_status(spec)
+        self.status_label.setText(
+            f"Selected {spec.label}. {detail}" if ready else f"Model unavailable · {detail}"
+        )
 
     def browse_research_trial(self) -> None:
         data_root = (self.repo_root / "BiWheel3D" / "data").resolve()
@@ -4233,7 +4376,7 @@ class ModelPage(QWidget):
             if isinstance(spec, ModelSpec):
                 ready, _ = model_spec_runtime_status(spec)
             self.generate_button.setEnabled(ready and self.session_combo.count() > 0)
-            self.generate_button.setText("Generate 2D trajectory")
+            self.generate_button.setText("Generate trajectory")
 
     def _on_analysis_failed(self, message) -> None:
         self._set_running(False)
@@ -4287,6 +4430,12 @@ class ModelPage(QWidget):
         if self._trajectory_bounds is not None:
             QTimer.singleShot(0, self._apply_equal_aspect_ranges)
 
+    def eventFilter(self, watched, event) -> bool:
+        if watched is getattr(self, "chart_view", None) and event.type() == QEvent.Type.Resize:
+            if self._trajectory_bounds is not None:
+                QTimer.singleShot(0, self._apply_equal_aspect_ranges)
+        return super().eventFilter(watched, event)
+
     def _on_analysis_ready(self, result: dict[str, Any]) -> None:
         self._set_running(False)
         if (
@@ -4302,6 +4451,11 @@ class ModelPage(QWidget):
         if not points:
             self.status_label.setText("MODEL returned no trajectory points.")
             return
+        xyz = result.get("xyz")
+        if xyz is not None:
+            self.trajectory_3d_view.set_trajectory(xyz, has_vertical=True)
+        else:
+            self.trajectory_3d_view.set_trajectory(points, has_vertical=False)
 
         # Keep the visual responsive for long recordings while metrics retain all points.
         stride = max(1, len(points) // 5000)
@@ -4346,6 +4500,21 @@ class ModelPage(QWidget):
             self.comp_v2.blockSignals(False)
 
         self._update_all_series()
+        comparisons = (
+            self.comp_dual_hub,
+            self.comp_v8,
+            self.comp_v7,
+            self.comp_v6,
+            self.comp_v5,
+            self.comp_v4,
+            self.comp_v3,
+            self.comp_v2,
+            self.comp_c3d,
+        )
+        show_3d = xyz is not None and not any(box.isChecked() for box in comparisons)
+        self.plot_tabs.setCurrentWidget(
+            self.trajectory_3d_view if show_3d else self.chart_view
+        )
         self.export_csv_button.setEnabled(True)
         self.export_image_button.setEnabled(True)
 
@@ -4353,6 +4522,17 @@ class ModelPage(QWidget):
         session_id = str(result.get("session_id") or "")
         topic = str(result.get("topic") or "Recording")
         trial = result.get("trial_number", "")
+        session_summary = next(
+            (item for item in self._all_sessions if str(item.get("session_id") or "") == session_id),
+            {},
+        )
+        recording_quality = str(session_summary.get("quality") or "").upper()
+        qc_reasons = _format_qc_reasons(session_summary.get("reasons"))
+        qc_summary = ""
+        if recording_quality and recording_quality != "GOOD":
+            qc_summary = f"Input recording QC {recording_quality}"
+            if qc_reasons:
+                qc_summary += ": " + qc_reasons.replace("\n", "; ")
         recording_label = str(result.get("recording_label") or "").strip()
         if not recording_label and session_id == str(
             self.session_combo.currentData() or ""
@@ -4371,6 +4551,10 @@ class ModelPage(QWidget):
         self.metric_endpoint.setText(f"{float(result.get('endpoint_m') or 0.0):.2f} m")
         net_yaw = result.get("net_yaw_deg")
         self.metric_yaw.setText("—" if net_yaw is None else f"{float(net_yaw):.1f} deg")
+        z_values = [float(point[2]) for point in xyz] if xyz else []
+        self.metric_vertical.setText(
+            f"{max(z_values) - min(z_values):.2f} m" if z_values else "—"
+        )
         self._apply_equal_aspect_ranges()
         QTimer.singleShot(0, self._apply_equal_aspect_ranges)
 
@@ -4449,6 +4633,8 @@ class ModelPage(QWidget):
             detail += (
                 "  Dual-wheel input prepared at the model's native 100 Hz contract."
             )
+        if qc_summary and qc_summary not in detail:
+            detail += f"  {qc_summary}."
         self.status_label.setToolTip(detail)
         if result.get("analysis") is not None:
             suffix = ""
@@ -4462,6 +4648,8 @@ class ModelPage(QWidget):
                     if course_constraint.get("applied")
                     else " | SL course no-op"
                 )
+            if qc_summary:
+                suffix += f" | {qc_summary}"
             self.status_label.setText(
                 f"Experimental offline estimate | {len(points):,} samples{suffix} | "
                 "Compare models and C3D ground truth using options above."
@@ -4474,6 +4662,7 @@ class ModelPage(QWidget):
         self._generation += 1
         self._analysis_result = None
         self._trajectory_bounds = None
+        self.trajectory_3d_view.set_trajectory([], has_vertical=False)
         self.timeline.set_analysis(None)
         for series in (
             self.trajectory_series,
@@ -4501,6 +4690,7 @@ class ModelPage(QWidget):
             self.metric_points,
             self.metric_path,
             self.metric_endpoint,
+            self.metric_vertical,
             self.metric_yaw,
         ):
             label.setText("—")
@@ -4513,6 +4703,7 @@ class ModelPage(QWidget):
         row = analysis["samples"][index]
         self.cursor_series.clear()
         self.cursor_series.append(row["x_m"], row["y_m"])
+        self.trajectory_3d_view.set_cursor(index)
 
     def _highlight_analysis_window(self, first, last):
         analysis = self.timeline.analysis
@@ -4524,6 +4715,7 @@ class ModelPage(QWidget):
         if display and display[-1] is not rows[-1]:
             display.append(rows[-1])
         self.window_series.replace([QPointF(row["x_m"], row["y_m"]) for row in display])
+        self.trajectory_3d_view.set_window(first, last)
 
     def export_trajectory_csv(self) -> None:
         if not self._analysis_result:
@@ -4543,6 +4735,7 @@ class ModelPage(QWidget):
 
         analysis = self._analysis_result.get("analysis") or {}
         samples = analysis.get("samples")
+        xyz = self._analysis_result.get("xyz")
         try:
             with open(output, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -4550,6 +4743,7 @@ class ModelPage(QWidget):
                     "time_s",
                     "x_m",
                     "y_m",
+                    "z_m",
                     "signed_speed_mps",
                     "speed_mps",
                     "yaw_rad",
@@ -4557,13 +4751,14 @@ class ModelPage(QWidget):
                     "yaw_rate_radps",
                 ])
                 if samples:
-                    for s in samples:
+                    for i, s in enumerate(samples):
                         yaw_rad = s.get("yaw_rad")
                         yaw_deg = math.degrees(yaw_rad) if yaw_rad is not None else ""
                         writer.writerow([
                             s.get("time_s", ""),
                             f"{s['x_m']:.6f}" if s.get("x_m") is not None else "",
                             f"{s['y_m']:.6f}" if s.get("y_m") is not None else "",
+                            f"{xyz[i][2]:.6f}" if xyz is not None and i < len(xyz) else "",
                             f"{s['signed_speed_mps']:.4f}" if s.get("signed_speed_mps") is not None else "",
                             f"{s['speed_mps']:.4f}" if s.get("speed_mps") is not None else "",
                             f"{yaw_rad:.6f}" if yaw_rad is not None else "",
@@ -4573,7 +4768,9 @@ class ModelPage(QWidget):
                 else:
                     xy = self._analysis_result.get("xy") or []
                     for i, (x, y) in enumerate(xy):
-                        writer.writerow([f"{i * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}", "", "", "", "", ""])
+                        writer.writerow([f"{i * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}",
+                                         f"{xyz[i][2]:.6f}" if xyz is not None and i < len(xyz) else "",
+                                         "", "", "", "", ""])
             self.status_label.setText(f"Trajectory exported to {output}")
         except Exception as exc:
             self.status_label.setText(f"Failed to export CSV · {exc}")
@@ -4596,7 +4793,7 @@ class ModelPage(QWidget):
         )
         if not output:
             return
-        pixmap = self.chart_view.grab()
+        pixmap = self.plot_tabs.currentWidget().grab()
         if pixmap.save(output):
             self.status_label.setText(
                 f"Exported trajectory image to {Path(output).name}."
@@ -4955,7 +5152,21 @@ class DiagnosticsPage(QWidget):
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
         self.controller = controller
-        root = QVBoxLayout(self)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setObjectName("diagnosticsScrollArea")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content.setObjectName("pageContent")
+        root = QVBoxLayout(content)
         root.setContentsMargins(24, 22, 24, 22)
         root.setSpacing(14)
         root.addLayout(_page_header("Diagnostics"))
@@ -4985,6 +5196,7 @@ class DiagnosticsPage(QWidget):
             3, QHeaderView.ResizeMode.ResizeToContents
         )
         self.tree.setAlternatingRowColors(True)
+        self.tree.setMinimumHeight(240)
         self.tree.setAccessibleName("diagnosticsTree")
         root.addWidget(self.tree, 1)
 
@@ -5011,6 +5223,9 @@ class DiagnosticsPage(QWidget):
             box.addWidget(value)
             ipc_layout.addLayout(box, 0, col)
         root.addWidget(self.ipc_card)
+
+        self.scroll_area.setWidget(content)
+        outer_layout.addWidget(self.scroll_area)
         self.refresh.clicked.connect(controller.refresh_status)
         self.export.clicked.connect(self._export)
         self.recover.clicked.connect(self._recover)
@@ -5110,8 +5325,15 @@ class MainWindow(QMainWindow):
         self.controller = controller
         self.demo = demo
         self.setWindowTitle("WheelAthlete")
-        self.resize(1500, 930)
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(980, 560)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            init_w = min(1500, max(980, avail.width() - 40))
+            init_h = min(930, max(560, avail.height() - 60))
+            self.resize(init_w, init_h)
+        else:
+            self.resize(1200, 720)
         self.setStyleSheet(APP_QSS)
         self.setAccessibleName("WheelAthlete")
         self.update_controller = UpdateController(

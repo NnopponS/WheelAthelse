@@ -33,6 +33,7 @@ def _manifest(*, version: str = "1.8.1", url: str | None = None) -> bytes:
                 or f"https://github.com/NnopponS/WheelAthelse/releases/download/v{version}/WheelAthleteSetup-{version}.exe",
                 "sha256": hashlib.sha256(artifact).hexdigest(),
                 "size": len(artifact),
+                "is_signed": True,
             }
         },
     }
@@ -71,6 +72,18 @@ def test_manifest_rejects_version_or_hash_mismatch() -> None:
     value["platforms"]["windows"]["version"] = "1.8.2"
     with pytest.raises(UpdateError):
         parse_manifest(json.dumps(value).encode())
+
+
+def test_manifest_rejects_unsigned_or_unmarked_windows_release() -> None:
+    for signed in (False, None):
+        value = json.loads(_manifest())
+        windows = value["platforms"]["windows"]
+        if signed is None:
+            windows.pop("is_signed")
+        else:
+            windows["is_signed"] = signed
+        with pytest.raises(UpdateError, match="signed"):
+            parse_manifest(json.dumps(value).encode())
 
     value = json.loads(_manifest())
     value["platforms"]["windows"]["sha256"] = "xyz"

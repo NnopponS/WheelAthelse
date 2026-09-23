@@ -1,6 +1,15 @@
 # WheelAthlete current status
 
-Updated: 2026-09-19
+Updated: 2026-09-24
+
+## Current user-requested reliability work: v1.8.4 candidate
+
+The supplied 100 Hz, 17.7-minute three-wheel diagnostic was INVALID. Its largest supported loss source was XIAO R: about 4.8k sequence gaps alongside about 4.8k device sample-queue drops and about 2.0k BLE transport failures; the Windows notification queue and journal did not overflow. This supports device-side BLE-notification backpressure filling the XIAO sample queue, but the exact radio/controller failure reason was not captured. XIAO firmware 1.8.3 fills packets to 12 samples only while queued data backs up and preserves a valid saved L/R/C identity when a shared image is flashed. M5 firmware remains 1.8.2.
+
+The Windows countdown waits for daemon-confirmed recording start, then plays its cue one second later. Model/Results adds an optional local XYZ model view, clearer invalid-session explanations and QC reasons, and keeps selected comparisons visible in 2D. The loss metric is explicitly a conservative lower-bound indicator because host notification and sample counters may overlap or count different units.
+
+Verification passed: 231 Windows tests, 5 skipped; project hygiene; 21 XIAO host tests; left/right/center builds. All three connected boards were flashed and reported firmware 1.8.3 with L/R/C roles intact. The stationary 100 Hz stress capture ran 1080.326 seconds and finalized GOOD: 331,815 journal samples (L 110,601; R 110,608; C 110,606), zero sequence gaps, device queue/FIFO drops, transport failures, host overflows, malformed packets, or QC reasons; writer overflow was zero and queue high-water was 29. This is acquisition/RF stress evidence, not physical motion or model-accuracy evidence. Signed Windows assets remain pending the exact-tag CI signing workflow; no unsigned package will be published.
+
 
 ## Release line
 

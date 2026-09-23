@@ -1,6 +1,15 @@
 # Current engineering handoff
 
-Updated: 2026-09-19
+Updated: 2026-09-24
+
+## Current priority: WheelAthlete v1.8.4 recording reliability
+
+The user's supplied 100 Hz, 17.7-minute diagnostic supports XIAO-side BLE-notification backpressure: device queue drops and transport failures dominated while Windows notification/journal queues did not overflow. The exact controller failure reason was not logged. XIAO firmware 1.8.3 fills BLE packets to 12 samples only when its queue backs up, preserves valid stored L/R/C identity across a shared flash, and prints the resolved role after configuration loads. M5 firmware stays 1.8.2.
+
+Windows recording now waits for the daemon's confirmed start event and delays the PC cue by one second. Model/Results includes an optional local XYZ view, QC reason visibility, input-quality warnings, comparison-aware 2D/3D selection, and a tooltip explaining the loss counter's limits. Checks passed: 231 Windows tests, 5 skipped; project verification; 21 XIAO host tests; all three role builds. The three connected boards were flashed and reported the correct L/R/C identities and 1.8.3 firmware. An 18-minute stationary L/R/C record ran 1080.326 s and finalized GOOD with 331,815 journal samples, zero gaps/device drops/transport failures/host overflows, no QC reasons and no journal overflow. This validates this acquisition run, not trajectory accuracy.
+
+The source is release-ready after final staged verification. Push the tested commit to `main` and `release/main-v1.8.4`, create exact tag `v1.8.4` without force-pushing, and monitor the Windows workflow for a signed setup.exe, portable ZIP, checksums, signing report and stable update manifest. Signing secret readiness is unknown; if CI signing fails, leave the release unpublished rather than use unsigned assets.
+
 
 ## v1.8.3 repository state
 
