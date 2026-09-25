@@ -31,6 +31,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import json
           from pathlib import Path
 
           version = Path('VERSION').read_text(encoding='utf-8').strip()
@@ -40,8 +41,14 @@ jobs:
               raise SystemExit(
                   f'Release workflow must run on exact tag v{version}; got {ref!r}'
               )
-          if version == '1.8.4' and event != 'push':
-              raise SystemExit('v1.8.4 source-only release must be triggered by a tag push')
+          if version == '1.8.4':
+              payload = json.loads(
+                  Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8')
+              )
+              if event != 'push' or payload.get('deleted'):
+                  raise SystemExit(
+                      'v1.8.4 source-only release must be triggered by a non-deleted tag push'
+                  )
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
               stream.write(f'version={version}\n')

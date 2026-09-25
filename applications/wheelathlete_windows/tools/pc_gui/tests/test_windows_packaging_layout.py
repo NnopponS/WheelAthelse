@@ -87,7 +87,9 @@ def test_build_signs_and_verifies_every_distributed_executable() -> None:
     assert "Release workflow must run on exact tag" in workflow
     assert "source_only: ${{ steps.meta.outputs.source_only }}" in workflow
     assert 'source_only={str(version == "1.8.4").lower()}' in workflow
-    assert "v1.8.4 source-only release must be triggered by a tag push" in workflow
+    assert "GITHUB_EVENT_PATH" in workflow
+    assert "payload.get('deleted')" in workflow
+    assert "v1.8.4 source-only release must be triggered by a non-deleted tag push" in workflow
     assert workflow.count("if: needs.metadata.outputs.source_only != 'true'") == 2
     source_only_publish = workflow.split("  publish_source_only:", 1)[1]
     assert "body_path: release/RELEASE_NOTES_1.8.4.md" in source_only_publish

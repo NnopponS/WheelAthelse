@@ -20,7 +20,7 @@ Updated: 2026-09-25
 - Restored only the orbitable 3D trajectory view and equal-distance dynamic XYZ scaling from the later candidate. The default model and XY-only behavior remain unchanged.
 - Added managed WheelAthlete CSV import/date assignment/export, asynchronous progress/error status for Results and Model trajectory exports, per-recording BLE counter deltas, sanitized Windows/Bluetooth diagnostics, graceful daemon shutdown, and opt-in scoped cleanup.
 - A close request during Results or Model CSV export is blocked with a wait message; trajectory and imported-CSV destinations appear only after the full write completes.
-- The candidate includes a source-only v1.8.4 tag-push workflow; it rejects manual dispatch, skips Windows and Android artifact jobs, and publishes no binary assets. The previous `v1.8.4` tag pointed to `eab67ca23edfa078cd866008e2e1f1c81648b08c`, whose workflow did not have this guard, so replace the tag and release branch from the final tested commit before release.
+- The candidate includes a source-only v1.8.4 tag-push workflow; it rejects manual dispatch and tag-deletion events, skips Windows and Android artifact jobs, and publishes no binary assets. The previous `v1.8.4` tag pointed to `eab67ca23edfa078cd866008e2e1f1c81648b08c`, whose workflow did not have this guard, so replace the tag and release branch from the final tested commit before release.
 - No mobile source/assets, `BiWheel3D/`, or locked paper-test cohort changes are included.
 - Cross-computer BLE testing is not available in this run. Firmware queue drops on the reference firmware remain an unresolved acceptance item; no transport fix is claimed.
 
