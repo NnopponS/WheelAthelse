@@ -4,6 +4,8 @@ import csv
 import io
 import math
 import shutil
+import os
+import tempfile
 import struct
 import sys
 import time
@@ -3448,11 +3450,13 @@ def _write_trajectory_csv(
     if not total:
         raise ValueError("No trajectory samples to export")
 
-    created = False
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=".wa-", suffix=".tmp", dir=output.parent
+    )
+    temp_path = Path(temp_name)
     step = max(1, math.ceil(total / 100))
     try:
-        with output.open("x", newline="", encoding="utf-8") as handle:
-            created = True
+        with os.fdopen(descriptor, "w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 [
@@ -3488,14 +3492,28 @@ def _write_trajectory_csv(
                     ]
                 else:
                     x, y = sample
-                    row = [f"{index * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}", "", "", "", "", ""]
+                    row = [
+                        f"{index * 0.05:.3f}",
+                        f"{x:.6f}",
+                        f"{y:.6f}",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                    ]
                 writer.writerow(row)
                 if (index + 1) % step == 0 or index + 1 == total:
                     progress(index + 1, total)
-    except BaseException:
-        if created:
-            output.unlink(missing_ok=True)
-        raise
+        if os.name == "nt":
+            temp_path.rename(output)
+        else:
+            os.link(temp_path, output)
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     return output
 
 
@@ -5817,6 +5835,14 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{command}: {message}", 8000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if getattr(getattr(self, "model", None), "_exporting_csv", False):
+            QMessageBox.information(
+                self,
+                "Export in progress",
+                "Wait for the trajectory CSV export to finish before closing WheelAthlete.",
+            )
+            event.ignore()
+            return
         if self._shutdown_ready or self.demo:
             self._accept_close(event)
             return

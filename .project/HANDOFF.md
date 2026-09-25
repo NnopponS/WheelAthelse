@@ -17,11 +17,11 @@ Keep existing `main` history; never force-push. The previous v1.8.4 remote tag/r
 - v1.8.4 restores only the 3D orbitable trajectory view and dynamic equal-distance scaling from the later candidate; the frozen default model remains unchanged.
 - Results supports app-managed WheelAthlete CSV imports, a manual date for undated imports, and export through the existing flow. Results and Model trajectory CSV writes run off the GUI thread with progress and visible completion/error state.
 - Active-recording BLE counters are deltas from the start of each run; Diagnostics retains lifetime totals and exports sanitized Windows/Bluetooth driver details.
-- Window close finalizes a recording and waits for daemon shutdown acknowledgement. Cleanup options are opt-in, confirmed, and limited to managed WheelAthlete locations.
+- Window close is blocked with a wait message during trajectory export; recording close finalizes the journal and waits for daemon shutdown acknowledgement. Cleanup options are opt-in, confirmed, and limited to managed WheelAthlete locations.
 - The candidate's v1.8.4 tag-push workflow rejects manual dispatch, skips Windows/Android artifact builds, and publishes release notes only. The former remote `v1.8.4` tag resolved to `eab67ca23edfa078cd866008e2e1f1c81648b08c` and does not contain this guard; replace that old tag and release branch from the final tested commit before the tag push triggers publishing.
 - No mobile source/assets, `BiWheel3D/`, firmware queue-backlog fix, or locked paper-test cohort change is included.
 
-Candidate software acceptance: Windows suite **241 passed, 6 skipped**; M5 host tests **147 passed**; XIAO host tests **19 passed**; PlatformIO builds succeeded for M5/XIAO left, right, and center; Python compile check and working-tree/staged project hygiene passed. Commit/ref publication remains pending. Inno Setup is not installed here, so packaging-layout tests passed but the installer script was not compiled. These checks do not prove physical or cross-computer BLE acceptance.
+Candidate software acceptance: Windows suite **241 passed, 6 skipped**; M5 host tests **147 passed**; XIAO host tests **19 passed**; PlatformIO builds succeeded for M5/XIAO left, right, and center; Python compile check and working-tree/staged project hygiene passed. The GitHub API reports no existing v1.8.4 Release object. Commit/ref publication remains pending. Inno Setup is not installed here, so packaging-layout tests passed but the installer script was not compiled. These checks do not prove physical or cross-computer BLE acceptance.
 
 ## Historical v1.8.3 verification
 

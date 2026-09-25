@@ -379,7 +379,8 @@ def test_model_page_csv_export(tmp_path, monkeypatch):
     from threading import Event
     import time
 
-    from PySide6.QtWidgets import QFileDialog
+    from PySide6.QtGui import QCloseEvent
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
     from tools.pc_gui import main_window as main_window_module
 
     controller, window = _window()
@@ -404,15 +405,28 @@ def test_model_page_csv_export(tmp_path, monkeypatch):
     write_csv = main_window_module._write_trajectory_csv
 
     def delayed_write(output, result, progress):
-        started.set()
-        assert resume.wait(2)
-        return write_csv(output, result, progress)
+        def hold_after_first_row(done, count):
+            progress(done, count)
+            if done == 1:
+                started.set()
+                assert resume.wait(2)
+
+        return write_csv(output, result, hold_after_first_row)
 
     monkeypatch.setattr(main_window_module, "_write_trajectory_csv", delayed_write)
     model.export_trajectory_csv()
     assert started.wait(1)
     assert model._exporting_csv
     assert not model.export_csv_progress.isHidden()
+    assert not os.path.exists(target_file)
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+    close_event = QCloseEvent()
+    window.closeEvent(close_event)
+    assert not close_event.isAccepted()
     assert not os.path.exists(target_file)
     resume.set()
     deadline = time.monotonic() + 2
