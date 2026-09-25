@@ -35,10 +35,13 @@ jobs:
 
           version = Path('VERSION').read_text(encoding='utf-8').strip()
           ref = os.environ.get('GITHUB_REF_NAME', '')
+          event = os.environ.get('GITHUB_EVENT_NAME', '')
           if ref != f'v{version}':
               raise SystemExit(
                   f'Release workflow must run on exact tag v{version}; got {ref!r}'
               )
+          if version == '1.8.4' and event != 'push':
+              raise SystemExit('v1.8.4 source-only release must be triggered by a tag push')
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
               stream.write(f'version={version}\n')

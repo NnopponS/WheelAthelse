@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
 from threading import Thread
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import (
     QAbstractItemModel,
@@ -3435,11 +3435,78 @@ def _is_three_imu_session(session: dict[str, Any]) -> bool:
     return False
 
 
+def _write_trajectory_csv(
+    output: Path,
+    result: dict[str, Any],
+    progress: Callable[[int, int], None],
+) -> Path:
+    analysis = result.get("analysis") or {}
+    samples = analysis.get("samples") or []
+    xy = result.get("xy") or []
+    rows = samples or xy
+    total = len(rows)
+    if not total:
+        raise ValueError("No trajectory samples to export")
+
+    created = False
+    step = max(1, math.ceil(total / 100))
+    try:
+        with output.open("x", newline="", encoding="utf-8") as handle:
+            created = True
+            writer = csv.writer(handle)
+            writer.writerow(
+                [
+                    "time_s",
+                    "x_m",
+                    "y_m",
+                    "signed_speed_mps",
+                    "speed_mps",
+                    "yaw_rad",
+                    "yaw_deg",
+                    "yaw_rate_radps",
+                ]
+            )
+            for index, sample in enumerate(rows):
+                if samples:
+                    yaw_rad = sample.get("yaw_rad")
+                    yaw_deg = math.degrees(yaw_rad) if yaw_rad is not None else ""
+                    row = [
+                        sample.get("time_s", ""),
+                        f"{sample['x_m']:.6f}" if sample.get("x_m") is not None else "",
+                        f"{sample['y_m']:.6f}" if sample.get("y_m") is not None else "",
+                        f"{sample['signed_speed_mps']:.4f}"
+                        if sample.get("signed_speed_mps") is not None
+                        else "",
+                        f"{sample['speed_mps']:.4f}"
+                        if sample.get("speed_mps") is not None
+                        else "",
+                        f"{yaw_rad:.6f}" if yaw_rad is not None else "",
+                        f"{yaw_deg:.3f}" if yaw_deg != "" else "",
+                        f"{sample['yaw_rate_radps']:.6f}"
+                        if sample.get("yaw_rate_radps") is not None
+                        else "",
+                    ]
+                else:
+                    x, y = sample
+                    row = [f"{index * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}", "", "", "", "", ""]
+                writer.writerow(row)
+                if (index + 1) % step == 0 or index + 1 == total:
+                    progress(index + 1, total)
+    except BaseException:
+        if created:
+            output.unlink(missing_ok=True)
+        raise
+    return output
+
+
 class ModelPage(QWidget):
     """Experimental offline BiWheel3D trajectory analysis for finalized recordings."""
 
     analysis_ready = Signal(object)
     analysis_failed = Signal(object)
+    csv_export_progress = Signal(int, int)
+    csv_export_ready = Signal(str)
+    csv_export_failed = Signal(str)
 
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
@@ -3447,6 +3514,7 @@ class ModelPage(QWidget):
         self.repo_root = Path(__file__).resolve().parents[4]
         self._models: list[ModelSpec] = []
         self._running = False
+        self._exporting_csv = False
         self._generation = 0
         self._analysis_result = None
         self._research_trial_path: Path | None = None
@@ -3826,6 +3894,11 @@ class ModelPage(QWidget):
         self.status_label.setObjectName("mutedText")
         self.status_label.setWordWrap(True)
         trajectory_layout.addWidget(self.status_label)
+        self.export_csv_progress = QProgressBar()
+        self.export_csv_progress.setAccessibleName("trajectoryCsvExportProgress")
+        self.export_csv_progress.setRange(0, 100)
+        self.export_csv_progress.hide()
+        trajectory_layout.addWidget(self.export_csv_progress)
         root.addWidget(trajectory_card, 1)
 
         self.model_combo.currentIndexChanged.connect(self._update_model_detail)
@@ -3847,6 +3920,9 @@ class ModelPage(QWidget):
         self.comp_c3d.toggled.connect(self._on_comparison_toggled)
         self.analysis_ready.connect(self._on_analysis_ready)
         self.analysis_failed.connect(self._on_analysis_failed)
+        self.csv_export_progress.connect(self._on_csv_export_progress)
+        self.csv_export_ready.connect(self._on_csv_export_ready)
+        self.csv_export_failed.connect(self._on_csv_export_failed)
         controller.sessions_changed.connect(self.update_sessions)
         self.session_search.textChanged.connect(self._on_session_search_changed)
         self.session_combo.currentIndexChanged.connect(self._auto_match_model_for_session)
@@ -4406,7 +4482,9 @@ class ModelPage(QWidget):
         self.comp_c3d.setEnabled(not running)
         self.import_c3d_button.setEnabled(not running)
         self.export_csv_button.setEnabled(
-            not running and self._analysis_result is not None
+            not running
+            and not self._exporting_csv
+            and self._analysis_result is not None
         )
         self.export_image_button.setEnabled(
             not running and self._analysis_result is not None
@@ -4541,7 +4619,7 @@ class ModelPage(QWidget):
             self.comp_v2.blockSignals(False)
 
         self._update_all_series()
-        self.export_csv_button.setEnabled(True)
+        self.export_csv_button.setEnabled(not self._exporting_csv)
         self.export_image_button.setEnabled(True)
 
         model_label = str(result.get("model_label") or "Model")
@@ -4726,7 +4804,7 @@ class ModelPage(QWidget):
             self.trajectory_3d_view.set_window(first, last)
 
     def export_trajectory_csv(self) -> None:
-        if not self._analysis_result:
+        if not self._analysis_result or self._exporting_csv:
             return
         session_id = str(self._analysis_result.get("session_id") or "trajectory")
         default_dir = str(Path.home() / "Documents" / "WheelAthlete" / "Exports")
@@ -4741,42 +4819,59 @@ class ModelPage(QWidget):
         if not output:
             return
 
-        analysis = self._analysis_result.get("analysis") or {}
-        samples = analysis.get("samples")
-        try:
-            with open(output, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    "time_s",
-                    "x_m",
-                    "y_m",
-                    "signed_speed_mps",
-                    "speed_mps",
-                    "yaw_rad",
-                    "yaw_deg",
-                    "yaw_rate_radps",
-                ])
-                if samples:
-                    for s in samples:
-                        yaw_rad = s.get("yaw_rad")
-                        yaw_deg = math.degrees(yaw_rad) if yaw_rad is not None else ""
-                        writer.writerow([
-                            s.get("time_s", ""),
-                            f"{s['x_m']:.6f}" if s.get("x_m") is not None else "",
-                            f"{s['y_m']:.6f}" if s.get("y_m") is not None else "",
-                            f"{s['signed_speed_mps']:.4f}" if s.get("signed_speed_mps") is not None else "",
-                            f"{s['speed_mps']:.4f}" if s.get("speed_mps") is not None else "",
-                            f"{yaw_rad:.6f}" if yaw_rad is not None else "",
-                            f"{yaw_deg:.3f}" if yaw_deg != "" else "",
-                            f"{s['yaw_rate_radps']:.6f}" if s.get("yaw_rate_radps") is not None else "",
-                        ])
-                else:
-                    xy = self._analysis_result.get("xy") or []
-                    for i, (x, y) in enumerate(xy):
-                        writer.writerow([f"{i * 0.05:.3f}", f"{x:.6f}", f"{y:.6f}", "", "", "", "", ""])
-            self.status_label.setText(f"Trajectory exported to {output}")
-        except Exception as exc:
-            self.status_label.setText(f"Failed to export CSV · {exc}")
+        result = self._analysis_result
+        total = len((result.get("analysis") or {}).get("samples") or result.get("xy") or [])
+        if not total:
+            self.status_label.setText("Failed to export CSV · No trajectory samples to export")
+            return
+        self._exporting_csv = True
+        self.export_csv_button.setEnabled(False)
+        self.export_csv_progress.setRange(0, total)
+        self.export_csv_progress.setValue(0)
+        self.export_csv_progress.setFormat("Writing trajectory CSV · %p%")
+        self.export_csv_progress.show()
+        self.status_label.setText("Exporting trajectory CSV…")
+
+        def work() -> None:
+            def report_progress(done: int, count: int) -> None:
+                try:
+                    self.csv_export_progress.emit(done, count)
+                except RuntimeError:
+                    pass
+
+            try:
+                path = _write_trajectory_csv(
+                    Path(output),
+                    result,
+                    report_progress,
+                )
+                try:
+                    self.csv_export_ready.emit(str(path))
+                except RuntimeError:
+                    pass
+            except Exception as exc:
+                try:
+                    self.csv_export_failed.emit(str(exc))
+                except RuntimeError:
+                    pass
+
+        Thread(target=work, name="wheelathlete-trajectory-csv-export", daemon=True).start()
+
+    def _on_csv_export_progress(self, done: int, total: int) -> None:
+        self.export_csv_progress.setValue(min(done, total))
+
+    def _on_csv_export_ready(self, path: str) -> None:
+        self._exporting_csv = False
+        self.export_csv_button.setEnabled(self._analysis_result is not None and not self._running)
+        self.export_csv_progress.setValue(self.export_csv_progress.maximum())
+        self.export_csv_progress.setFormat("Trajectory CSV export complete")
+        self.status_label.setText(f"Trajectory exported to {path}")
+
+    def _on_csv_export_failed(self, error: str) -> None:
+        self._exporting_csv = False
+        self.export_csv_button.setEnabled(self._analysis_result is not None and not self._running)
+        self.export_csv_progress.hide()
+        self.status_label.setText(f"Failed to export CSV · {error}")
 
     def export_trajectory_image(self) -> None:
         if not self._analysis_result:

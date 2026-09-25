@@ -376,7 +376,11 @@ def test_model_page_comparison_overlay():
 
 
 def test_model_page_csv_export(tmp_path, monkeypatch):
+    from threading import Event
+    import time
+
     from PySide6.QtWidgets import QFileDialog
+    from tools.pc_gui import main_window as main_window_module
 
     controller, window = _window()
     model = window.model
@@ -396,14 +400,46 @@ def test_model_page_csv_export(tmp_path, monkeypatch):
         QFileDialog, "getSaveFileName", lambda *args, **kwargs: (target_file, "CSV files (*.csv)")
     )
 
+    started, resume = Event(), Event()
+    write_csv = main_window_module._write_trajectory_csv
+
+    def delayed_write(output, result, progress):
+        started.set()
+        assert resume.wait(2)
+        return write_csv(output, result, progress)
+
+    monkeypatch.setattr(main_window_module, "_write_trajectory_csv", delayed_write)
     model.export_trajectory_csv()
+    assert started.wait(1)
+    assert model._exporting_csv
+    assert not model.export_csv_progress.isHidden()
+    assert not os.path.exists(target_file)
+    resume.set()
+    deadline = time.monotonic() + 2
+    while model._exporting_csv and time.monotonic() < deadline:
+        _APP.processEvents()
+        time.sleep(0.01)
     _APP.processEvents()
 
+    assert not model._exporting_csv
     assert os.path.isfile(target_file)
+    assert model.export_csv_progress.value() == 4
+    assert model.status_label.text().startswith("Trajectory exported to ")
     with open(target_file, "r", encoding="utf-8") as f:
         content = f.read()
     assert "time_s,x_m,y_m,signed_speed_mps" in content
     assert "1.4" in content  # points from sample result
+
+    monkeypatch.setattr(main_window_module, "_write_trajectory_csv", write_csv)
+    Path(target_file).write_text("preserve existing data", encoding="utf-8")
+    model.export_trajectory_csv()
+    deadline = time.monotonic() + 2
+    while model._exporting_csv and time.monotonic() < deadline:
+        _APP.processEvents()
+        time.sleep(0.01)
+    _APP.processEvents()
+    assert model.status_label.text().startswith("Failed to export CSV · ")
+    assert Path(target_file).read_text(encoding="utf-8") == "preserve existing data"
 
     model._invalidate_analysis()
     _APP.processEvents()
