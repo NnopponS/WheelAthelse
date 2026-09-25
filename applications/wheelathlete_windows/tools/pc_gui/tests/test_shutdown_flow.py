@@ -71,6 +71,23 @@ def test_closing_idle_window_waits_for_shutdown_ack(monkeypatch):
     window.deleteLater()
 
 
+def test_closing_during_results_export_keeps_window_open(monkeypatch):
+    controller = _CloseController()
+    controller._export_active = True
+    window = MainWindow(controller, demo=False)
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda *a, **k: QMessageBox.StandardButton.Ok
+    )
+    event = QCloseEvent()
+
+    window.closeEvent(event)
+
+    assert not event.isAccepted()
+    assert controller.shutdown_calls == 0
+    assert controller.close_calls == 0
+    window.deleteLater()
+
+
 def test_shutdown_failure_keeps_window_open(monkeypatch):
     controller = _CloseController()
     window = MainWindow(controller, demo=False)

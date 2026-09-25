@@ -112,6 +112,47 @@ def test_failed_csv_copy_removes_only_its_partial_destination(tmp_path, monkeypa
     assert not (library / "source.csv").exists()
 
 
+def test_csv_copy_publishes_only_after_the_temporary_copy_is_complete(tmp_path, monkeypatch):
+    import tools.pc_gui.csv_import as csv_import
+    from threading import Event, Thread
+
+    source = tmp_path / "source.csv"
+    source.write_bytes(b"complete source csv contents")
+    destination = tmp_path / "Exports"
+    started, resume, finished = Event(), Event(), Event()
+    result, errors = [], []
+    copy_fileobj = csv_import.shutil.copyfileobj
+
+    def hold_after_partial_copy(input_file, output, *, length):
+        content = input_file.read(length)
+        output.write(content[:8])
+        started.set()
+        assert resume.wait(2)
+        output.write(content[8:])
+        copy_fileobj(input_file, output, length=length)
+
+    def copy_in_background():
+        try:
+            result.append(csv_import._copy_create_only(source, destination, source.name))
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(csv_import.shutil, "copyfileobj", hold_after_partial_copy)
+    worker = Thread(target=copy_in_background, daemon=True)
+    worker.start()
+    assert started.wait(1)
+    assert not (destination / source.name).exists()
+    resume.set()
+    assert finished.wait(2)
+    worker.join(1)
+
+    assert not errors
+    assert result[0].read_bytes() == source.read_bytes()
+    assert not list(destination.glob(".wa-*.tmp"))
+
+
 def test_delete_removes_only_the_managed_copy_and_sidecar(tmp_path):
     source = tmp_path / "source.csv"
     library = tmp_path / "WheelAthlete"

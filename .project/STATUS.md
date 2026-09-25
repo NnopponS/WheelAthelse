@@ -19,14 +19,14 @@ Updated: 2026-09-25
 - M5/XIAO source matches the supplied firmware snapshot; firmware identity remains `1.8.2` and BLE protocol remains `1.8.0`.
 - Restored only the orbitable 3D trajectory view and equal-distance dynamic XYZ scaling from the later candidate. The default model and XY-only behavior remain unchanged.
 - Added managed WheelAthlete CSV import/date assignment/export, asynchronous progress/error status for Results and Model trajectory exports, per-recording BLE counter deltas, sanitized Windows/Bluetooth diagnostics, graceful daemon shutdown, and opt-in scoped cleanup.
-- A close request during trajectory export is blocked with a wait message; a temporary CSV is published to the destination only after writing completes.
+- A close request during Results or Model CSV export is blocked with a wait message; trajectory and imported-CSV destinations appear only after the full write completes.
 - The candidate includes a source-only v1.8.4 tag-push workflow; it rejects manual dispatch, skips Windows and Android artifact jobs, and publishes no binary assets. The previous `v1.8.4` tag pointed to `eab67ca23edfa078cd866008e2e1f1c81648b08c`, whose workflow did not have this guard, so replace the tag and release branch from the final tested commit before release.
 - No mobile source/assets, `BiWheel3D/`, or locked paper-test cohort changes are included.
 - Cross-computer BLE testing is not available in this run. Firmware queue drops on the reference firmware remain an unresolved acceptance item; no transport fix is claimed.
 
 ## v1.8.4 verification
 
-- Windows suite: **241 passed, 6 skipped**.
+- Windows suite: **243 passed, 6 skipped**.
 - M5 host tests: **147 passed**; XIAO host tests: **19 passed**.
 - PlatformIO builds: M5 left/right/center and XIAO left/right/center all **succeeded** against the snapshot source.
 - Python compile check, working-tree project hygiene, staged project hygiene, and Git diff checks: **passed**. Commit/ref publication remains pending.

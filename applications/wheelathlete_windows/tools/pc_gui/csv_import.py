@@ -5,8 +5,10 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timezone
 import json
+import os
 import shutil
 from pathlib import Path
+import tempfile
 from typing import Any
 from uuid import uuid4
 
@@ -119,19 +121,31 @@ def _copy_create_only(source: Path, target_directory: Path, requested_name: str)
     while True:
         name = requested.name if index == 1 else f"{stem}_{index}{suffix}"
         target = target_directory / name
-        created = False
+        if target.exists():
+            index += 1
+            continue
+        descriptor, temp_name = tempfile.mkstemp(
+            prefix=".wa-", suffix=".tmp", dir=target_directory
+        )
+        temp_path = Path(temp_name)
         try:
-            with target.open("xb") as output:
-                created = True
+            with os.fdopen(descriptor, "wb") as output:
                 with source.open("rb") as input_file:
                     shutil.copyfileobj(input_file, output, length=1024 * 1024)
+            try:
+                if os.name == "nt":
+                    temp_path.rename(target)
+                else:
+                    os.link(temp_path, target)
+            except FileExistsError:
+                index += 1
+                continue
             return target
-        except FileExistsError:
-            index += 1
-        except Exception:
-            if created:
-                target.unlink(missing_ok=True)
-            raise
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def import_wheelathlete_csv(

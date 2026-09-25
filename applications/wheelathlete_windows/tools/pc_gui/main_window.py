@@ -5835,11 +5835,13 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{command}: {message}", 8000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if getattr(getattr(self, "model", None), "_exporting_csv", False):
+        if getattr(getattr(self, "model", None), "_exporting_csv", False) or getattr(
+            self.controller, "_export_active", False
+        ):
             QMessageBox.information(
                 self,
-                "Export in progress",
-                "Wait for the trajectory CSV export to finish before closing WheelAthlete.",
+                "CSV export in progress",
+                "Wait for the CSV export to finish before closing WheelAthlete.",
             )
             event.ignore()
             return
