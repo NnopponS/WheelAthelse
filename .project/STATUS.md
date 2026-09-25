@@ -20,7 +20,7 @@ Updated: 2026-09-25
 - Restored only the orbitable 3D trajectory view and equal-distance dynamic XYZ scaling from the later candidate. The default model and XY-only behavior remain unchanged.
 - Added managed WheelAthlete CSV import/date assignment/export, asynchronous progress/error status for Results and Model trajectory exports, per-recording BLE counter deltas, sanitized Windows/Bluetooth diagnostics, graceful daemon shutdown, and opt-in scoped cleanup.
 - A close request during Results or Model CSV export is blocked with a wait message; trajectory and imported-CSV destinations appear only after the full write completes.
-- The candidate includes a source-only v1.8.4 tag-push workflow; it rejects manual dispatch and tag-deletion events, skips Windows and Android artifact jobs, and publishes no binary assets. The previous `v1.8.4` tag pointed to `eab67ca23edfa078cd866008e2e1f1c81648b08c`, whose workflow did not have this guard, so replace the tag and release branch from the final tested commit before release.
+- The source-only v1.8.4 release is published from tested commit `80cae399f7dd5909c93e2dd6acdc927871518c8b`. Its workflow rejects manual dispatch and tag-deletion events, skips Windows and Android artifact jobs, and published a release with zero binary assets. The prior tag and release branch at `eab67ca23edfa078cd866008e2e1f1c81648b08c` were moved to the tested commit.
 - No mobile source/assets, `BiWheel3D/`, or locked paper-test cohort changes are included.
 - Cross-computer BLE testing is not available in this run. Firmware queue drops on the reference firmware remain an unresolved acceptance item; no transport fix is claimed.
 
@@ -29,7 +29,7 @@ Updated: 2026-09-25
 - Windows suite: **243 passed, 6 skipped**.
 - M5 host tests: **147 passed**; XIAO host tests: **19 passed**.
 - PlatformIO builds: M5 left/right/center and XIAO left/right/center all **succeeded** against the snapshot source.
-- Python compile check, working-tree project hygiene, staged project hygiene, and Git diff checks: **passed**. Commit/ref publication remains pending.
+- Python compile check, working-tree project hygiene, staged project hygiene, and Git diff checks: **passed**. Main, release branch, and `v1.8.4` tag all resolve to the tested release commit; source-only GitHub Release publication succeeded with no assets.
 - The Inno Setup compiler is not installed in this environment, so the `.iss` installer was covered by Windows packaging-layout tests but could not be compiled here.
 - These results are software checks only; they do not establish BLE acceptance across computers or physical hardware acceptance.
 
@@ -99,7 +99,7 @@ Private recordings, generated packages, local evidence, signing material, absolu
 
 ## Source/repository acceptance
 
-Repository-side v1.8.4 publication is complete only when the exact tested commit is visible through `main`, `release/main-v1.8.4`, and source-only tag/Release `v1.8.4`. Existing `main` history must be preserved without force-pushing. Until then, v1.8.4 is a candidate, not a published release.
+Repository-side v1.8.4 publication is complete: exact tested commit `80cae399f7dd5909c93e2dd6acdc927871518c8b` is visible through `main`, `release/main-v1.8.4`, and source-only tag/Release `v1.8.4`. Existing `main` history was preserved without force-pushing.
 
 ## Deferred external acceptance
 
