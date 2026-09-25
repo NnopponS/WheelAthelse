@@ -18,6 +18,7 @@ Keep existing `main` history; never force-push. The previous v1.8.4 remote tag/r
 - Results supports app-managed WheelAthlete CSV imports, a manual date for undated imports, and export through the existing flow. CSV writing runs off the GUI thread with progress and visible completion/error state.
 - Active-recording BLE counters are deltas from the start of each run; Diagnostics retains lifetime totals and exports sanitized Windows/Bluetooth driver details.
 - Window close finalizes a recording and waits for daemon shutdown acknowledgement. Cleanup options are opt-in, confirmed, and limited to managed WheelAthlete locations.
+- The v1.8.4 tag workflow skips Windows/Android artifact builds and publishes the source-only release notes without binary assets.
 - No mobile source/assets, `BiWheel3D/`, firmware queue-backlog fix, or locked paper-test cohort change is included.
 
 Candidate software acceptance: Windows suite **241 passed, 6 skipped**; M5 host tests **147 passed**; XIAO host tests **19 passed**; PlatformIO builds succeeded for M5/XIAO left, right, and center; Python compile check and working-tree/staged project hygiene passed. Commit/ref publication remains pending. Inno Setup is not installed here, so packaging-layout tests passed but the installer script was not compiled. These checks do not prove physical or cross-computer BLE acceptance.

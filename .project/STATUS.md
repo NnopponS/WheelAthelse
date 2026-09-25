@@ -19,6 +19,7 @@ Updated: 2026-09-25
 - M5/XIAO source matches the supplied firmware snapshot; firmware identity remains `1.8.2` and BLE protocol remains `1.8.0`.
 - Restored only the orbitable 3D trajectory view and equal-distance dynamic XYZ scaling from the later candidate. The default model and XY-only behavior remain unchanged.
 - Added managed WheelAthlete CSV import/date assignment/export, asynchronous progress/error status, per-recording BLE counter deltas, sanitized Windows/Bluetooth diagnostics, graceful daemon shutdown, and opt-in scoped cleanup.
+- The exact v1.8.4 tag uses a source-only release workflow; Windows and Android artifact jobs are skipped and the release publishes no binary assets.
 - No mobile source/assets, `BiWheel3D/`, or locked paper-test cohort changes are included.
 - Cross-computer BLE testing is not available in this run. Firmware queue drops on the reference firmware remain an unresolved acceptance item; no transport fix is claimed.
 

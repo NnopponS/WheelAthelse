@@ -85,6 +85,12 @@ def test_build_signs_and_verifies_every_distributed_executable() -> None:
     assert "contents: write" in workflow
     assert "public_release_ready" in workflow
     assert "Release workflow must run on exact tag" in workflow
+    assert "source_only: ${{ steps.meta.outputs.source_only }}" in workflow
+    assert 'source_only={str(version == "1.8.4").lower()}' in workflow
+    assert workflow.count("if: needs.metadata.outputs.source_only != 'true'") == 2
+    source_only_publish = workflow.split("  publish_source_only:", 1)[1]
+    assert "body_path: release/RELEASE_NOTES_1.8.4.md" in source_only_publish
+    assert "          files:" not in source_only_publish
 
 
 def test_setup_cleanup_choices_are_opt_in_confirmed_and_scoped() -> None:

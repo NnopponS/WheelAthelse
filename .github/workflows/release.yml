@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      source_only: ${{ steps.meta.outputs.source_only }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +42,12 @@ jobs:
           out = Path(os.environ['GITHUB_OUTPUT'])
           with out.open('a', encoding='utf-8') as stream:
               stream.write(f'version={version}\n')
+              stream.write(f'source_only={str(version == "1.8.4").lower()}\n')
           PY
 
   windows:
     needs: metadata
+    if: needs.metadata.outputs.source_only != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -133,6 +136,7 @@ jobs:
 
   android:
     needs: metadata
+    if: needs.metadata.outputs.source_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -356,3 +360,19 @@ jobs:
             dist/release/android-signing-report.json
             dist/release/SHA256SUMS.txt
             dist/release/latest.json
+
+  publish_source_only:
+    needs: metadata
+    if: needs.metadata.outputs.source_only == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish source-only GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.metadata.outputs.version }}
+          name: WheelAthlete v${{ needs.metadata.outputs.version }}
+          body_path: release/RELEASE_NOTES_1.8.4.md
