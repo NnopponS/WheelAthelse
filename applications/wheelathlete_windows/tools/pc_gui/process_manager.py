@@ -98,6 +98,8 @@ class DaemonProcessManager(QObject):
             return
         if self.process.state() == QProcess.ProcessState.NotRunning:
             return
+        if self.process.waitForFinished(2500):
+            return
         self.process.terminate()
         if not self.process.waitForFinished(2000):
             self.process.kill()

@@ -126,16 +126,17 @@ class BoardSummaryCard(Card):
             else "Not connected"
         )
         if board.connected:
-            fault = board.fault_summary
+            fault = board.active_fault_summary if active else board.fault_summary
+            healthy = board.active_healthy if active else board.healthy
             self.status.setText(
                 "STREAMING"
-                if active and board.healthy
+                if active and healthy
                 else "CONNECTED"
-                if board.healthy
+                if healthy
                 else f"CHECK · {fault or 'unknown fault'}"
             )
             self.status.setToolTip(fault or "Sensor is healthy")
-            self.status.setProperty("state", "good" if board.healthy else "warning")
+            self.status.setProperty("state", "good" if healthy else "warning")
         elif board.reconnecting:
             self.status.setText("RECONNECTING")
             self.status.setToolTip("Auto-reconnecting to sensor...")
@@ -150,7 +151,9 @@ class BoardSummaryCard(Card):
         self.metrics["rssi"].set_value(fmt(board.rssi, " dBm", 0))
         self.metrics["mtu"].set_value(fmt(board.mtu, "", 0))
         self.metrics["battery"].set_value(fmt(board.battery_percent, "%", 0))
-        self.metrics["loss"].set_value(str(board.loss_count))
+        self.metrics["loss"].set_value(
+            str(board.active_loss_count if active else board.loss_count)
+        )
         self.metrics["queue"].set_value(f"{board.queue_depth} / {board.queue_high_water}")
         self.metrics["rtt"].set_value(fmt(board.best_rtt_ms, " ms", 2))
         self.metrics["drift"].set_value(fmt(board.drift_ppm, " ppm", 2))

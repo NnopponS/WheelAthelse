@@ -1,26 +1,44 @@
 # WheelAthlete current status
 
-Updated: 2026-09-19
+Updated: 2026-09-25
 
 ## Release line
 
-- Product: **WheelAthlete 1.8.3**
+- Product: **WheelAthlete 1.8.4**
 - Primary branch: `main`
-- Public release branch: `release/main-v1.8.3`
-- Windows application: `1.8.3`
+- Public release branch target: `release/main-v1.8.4`
+- Windows application: `1.8.4`
 - M5StickC Plus2 firmware: `1.8.2`
 - XIAO nRF52840 Sense firmware: `1.8.2`
 - BLE protocol: `1.8.0`
 - Flutter source: `1.8.3+13`, maintenance only and excluded from the current release publication
 
-## Consolidation state
+## v1.8.4 rebuild state
 
-The 1.8.3 release repairs, acquisition countdown audio timing overhaul, QC metadata visibility, earlier dual-IMU coaching-analysis work, and Windows trust-hardening work are all integrated into `main`. The trust-hardening merge was normal/non-force and conflict-free. No mobile application source or `BiWheel3D` file was introduced by this consolidation.
+- Windows source is based on the exact `v1.8.3` tag commit `9bc62677f2cf5555d00616ec8270fee8b7869368`.
+- M5/XIAO source matches the supplied firmware snapshot; firmware identity remains `1.8.2` and BLE protocol remains `1.8.0`.
+- Restored only the orbitable 3D trajectory view and equal-distance dynamic XYZ scaling from the later candidate. The default model and XY-only behavior remain unchanged.
+- Added managed WheelAthlete CSV import/date assignment/export, asynchronous progress/error status, per-recording BLE counter deltas, sanitized Windows/Bluetooth diagnostics, graceful daemon shutdown, and opt-in scoped cleanup.
+- No mobile source/assets, `BiWheel3D/`, or locked paper-test cohort changes are included.
+- Cross-computer BLE testing is not available in this run. Firmware queue drops on the reference firmware remain an unresolved acceptance item; no transport fix is claimed.
+
+## v1.8.4 verification
+
+- Windows suite: **241 passed, 6 skipped**.
+- M5 host tests: **147 passed**; XIAO host tests: **19 passed**.
+- PlatformIO builds: M5 left/right/center and XIAO left/right/center all **succeeded** against the snapshot source.
+- Python compile check, working-tree project hygiene, staged project hygiene, and Git diff checks: **passed**. Commit/ref publication remains pending.
+- The Inno Setup compiler is not installed in this environment, so the `.iss` installer was covered by Windows packaging-layout tests but could not be compiled here.
+- These results are software checks only; they do not establish BLE acceptance across computers or physical hardware acceptance.
+
+## v1.8.3 release history
+
+The v1.8.3 repairs, acquisition countdown audio timing overhaul, QC metadata visibility, earlier dual-IMU coaching-analysis work, and Windows trust-hardening work remain in `main` history. The trust-hardening merge was normal/non-force and conflict-free. No mobile application source or `BiWheel3D` file was introduced by that release.
 
 All obsolete remote development/archive/release branches were verified as ancestors of the integrated `main` before removal. The intended final GitHub branch surface is only:
 
 - `main`
-- `release/main-v1.8.3`
+- `release/main-v1.8.4` (target after verification)
 
 Old visible GitHub Release entries were removed so the Releases page contains only `v1.8.3`. Historical version tags are retained for traceability. The `v1.8.3` release/tag is source-only and is finalized at the exact consolidated release commit; no unsigned Windows or mobile assets belong to it.
 
@@ -49,7 +67,7 @@ Implemented 1.8.3 release features include:
 - synchronized recording countdown audio and visual cue streamlining (clear 5-4-3-2-1 timing display without calibration hold message, in-memory PCM WAV audio queue worker with pre-warming that guarantees audible 1 s interval beeps at 700 Hz on every count without Windows audio DAC sleep truncation, and a 500 ms long start tone at 1200 Hz);
 - final QC result card displaying recording quality, duration, Experiment topic, and Trial number, with preserved metadata across acquisition daemon IPC, LiveController, and DemoController.
 
-Fresh 1.8.3 verification passed **215/215** active Windows unit and GUI tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. XIAO and M5 L/R/C PlatformIO environments all produced fresh build artifacts. A full local unsigned Windows package build also completed through PyInstaller, Inno Setup, portable ZIP, checksums, and signing-report generation.
+The v1.8.3 baseline verification passed **215/215** active Windows unit and GUI tests, **4/4** Windows packaging-layout tests, **19/19** XIAO host tests, **147/147** M5 host tests, release-manifest unit tests, Python compile checks, project hygiene, staged publication hygiene, and Git diff checks. The v1.8.4 verification results are recorded below after this rebuild completes.
 
 ## Firmware and optional center sensor
 
@@ -65,9 +83,9 @@ The installed Windows default remains the frozen classical L/R XY+yaw model. Exp
 
 ## Release and trust status
 
-The GitHub v1.8.3 page is intentionally **source-only**. Public Windows binaries and `latest.json` remain blocked until a trusted RSA Code Signing identity with Code Signing EKU, the exact expected publisher subject and a timestamp service are available. Local unsigned packages are development artifacts only and must not be presented as solving SmartScreen/Application Control trust.
+The v1.8.4 GitHub Release is intended to remain **source-only**. Public Windows binaries and `latest.json` remain blocked until a trusted RSA Code Signing identity with Code Signing EKU, the exact expected publisher subject and a timestamp service are available. Local unsigned packages are development artifacts only and must not be presented as solving SmartScreen/Application Control trust.
 
-The fresh unsigned-local packaging run generated a 63,571,038-byte installer (SHA-256 `BE5C2B8769E3DC87116A7CD491F54B780984BE2D12D03418A807635EE899F5C4`) and a 92,775,101-byte portable ZIP (SHA-256 `E662D1D9A43660966FB02121F1C4763AAAA8A20050B913820F4E2649B36497A7`). Its signing report is schema 2, covers 163 executable components, and correctly reports `public_release_ready=false` because no trusted signing identity is configured. These generated files remain ignored local evidence and must not be uploaded.
+The **historical v1.8.3** unsigned-local packaging run generated a 63,571,038-byte installer (SHA-256 `BE5C2B8769E3DC87116A7CD491F54B780984BE2D12D03418A807635EE899F5C4`) and a 92,775,101-byte portable ZIP (SHA-256 `E662D1D9A43660966FB02121F1C4763AAAA8A20050B913820F4E2649B36497A7`). Its signing report correctly recorded `public_release_ready=false`; those artifacts do not verify v1.8.4 and must not be uploaded.
 
 When signing is configured, the release build must return `public_release_ready=true` before Windows installer/portable/update assets are published.
 
@@ -79,7 +97,7 @@ Private recordings, generated packages, local evidence, signing material, absolu
 
 ## Source/repository acceptance
 
-Repository-side v1.8.3 consolidation is complete when the final commit is visible through `main`, `release/main-v1.8.3`, and tag/Release `v1.8.3`. Old remote branches and old visible Release entries are intentionally absent; historical tags remain.
+Repository-side v1.8.4 publication is complete only when the exact tested commit is visible through `main`, `release/main-v1.8.4`, and source-only tag/Release `v1.8.4`. Existing `main` history must be preserved without force-pushing. Until then, v1.8.4 is a candidate, not a published release.
 
 ## Deferred external acceptance
 

@@ -85,3 +85,14 @@ def test_build_signs_and_verifies_every_distributed_executable() -> None:
     assert "contents: write" in workflow
     assert "public_release_ready" in workflow
     assert "Release workflow must run on exact tag" in workflow
+
+
+def test_setup_cleanup_choices_are_opt_in_confirmed_and_scoped() -> None:
+    text = INSTALLER.read_text(encoding="utf-8")
+    assert 'Name: "cleanoldapp"' in text and 'Flags: unchecked' in text
+    assert 'Name: "deletedata"' in text and 'Flags: unchecked' in text
+    assert "MB_YESNO or MB_DEFBUTTON2" in text
+    assert "DeleteManagedData(DocumentsRoot, True)" in text
+    assert "DeleteManagedData(InstallRoot, False)" in text
+    assert 'DelTree(ExpandConstant(\'{app}\\Application\')' in text
+    assert 'Name: "{app}\\*"' not in text

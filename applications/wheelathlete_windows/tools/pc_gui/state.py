@@ -112,6 +112,8 @@ class BoardView:
     firmware_queue_depth: int | None = None
     fifo_faults: int | None = None
     fifo_dropped_samples: int | None = None
+    run_metrics: dict[str, int] | None = None
+    run_health: dict[str, Any] | None = None
     best_rtt_ms: float | None = None
     median_rtt_ms: float | None = None
     drift_ppm: float | None = None
@@ -165,6 +167,16 @@ class BoardView:
             firmware_queue_depth=_as_int(health.get("queue_depth")),
             fifo_faults=_as_int(health.get("fifo_faults")),
             fifo_dropped_samples=_as_int(health.get("fifo_dropped_samples")),
+            run_metrics=(
+                {str(key): int(value or 0) for key, value in data["run_metrics"].items()}
+                if isinstance(data.get("run_metrics"), dict)
+                else None
+            ),
+            run_health=(
+                dict(data["run_health"])
+                if isinstance(data.get("run_health"), dict)
+                else None
+            ),
             best_rtt_ms=(
                 float(clock["best_rtt_ns"]) / 1_000_000
                 if isinstance(clock.get("best_rtt_ns"), (int, float))
@@ -226,6 +238,57 @@ class BoardView:
             return "Firmware reported an acquisition error"
         return None
 
+    @property
+    def active_fault_summary(self) -> str | None:
+        if self.run_metrics is None:
+            return self.fault_summary
+        if self.fatal_fault:
+            return str(
+                self.fatal_fault.get("message")
+                or self.fatal_fault.get("code")
+                or "Host acquisition fault"
+            )
+        health = self.run_health or {}
+        faults = (
+            (int(health.get("queue_drops", 0) or 0), "firmware sample queue drop"),
+            (int(health.get("fifo_dropped_samples", 0) or 0), "firmware FIFO sample loss"),
+            (int(self.run_metrics.get("sequence_gaps", 0) or 0), "host sequence gap"),
+            (int(self.run_metrics.get("queue_overflow_faults", 0) or 0), "host notification queue overflow"),
+            (int(health.get("fifo_faults", 0) or 0), "firmware FIFO fault"),
+            (int(self.run_metrics.get("malformed_packets", 0) or 0), "malformed BLE packet"),
+        )
+        for count, label in faults:
+            if count:
+                return f"{label}: {count}"
+        if health.get("state") == 3:
+            return "BLE notification retry active during this recording"
+        if health.get("state") == 4:
+            return "Firmware reported an acquisition error during this recording"
+        return None
+
+    @property
+    def active_loss_count(self) -> int:
+        if self.run_metrics is None:
+            return self.loss_count
+        health = self.run_health or {}
+        return sum(
+            (
+                int(self.run_metrics.get("sequence_gaps", 0) or 0),
+                int(self.run_metrics.get("queue_overflow_faults", 0) or 0),
+                int(health.get("queue_drops", 0) or 0),
+                int(health.get("fifo_dropped_samples", 0) or 0),
+            )
+        )
+
+    @property
+    def active_healthy(self) -> bool:
+        return (
+            self.connected
+            and self.active_loss_count == 0
+            and self.fatal_fault is None
+            and self.acquisition_state not in {3, 4}
+        )
+
 
 @dataclass(slots=True)
 class AppViewState:
@@ -238,6 +301,7 @@ class AppViewState:
     recording_target_pc_ns: int | None = None
     live: bool = False
     live_sides: tuple[str, ...] = ()
+    recording_sides: tuple[str, ...] = ()
     live_busy: bool = False
     scanning: bool = False
     connecting: bool = False
@@ -267,6 +331,10 @@ class AppViewState:
         self.live_sides = tuple(
             str(side) for side in live_sides if side in {"L", "R", "C"}
         )
+        recording_sides = payload.get("recording_sides", [])
+        self.recording_sides = tuple(
+            str(side) for side in recording_sides if side in {"L", "R", "C"}
+        )
         self.session_id = str(payload["session_id"]) if payload.get("session_id") else None
         self.journal_root = str(payload.get("journal_root", ""))
         incomplete = payload.get("incomplete_sessions", [])
@@ -277,4 +345,12 @@ class AppViewState:
     def connected_sides(self) -> tuple[str, ...]:
         return tuple(
             side for side in ("L", "R", "C") if self.boards[side].connected
+        )
+
+    def side_is_active(self, side: str) -> bool:
+        return (
+            self.live and (not self.live_sides or side in self.live_sides)
+        ) or (
+            self.recording
+            and (not self.recording_sides or side in self.recording_sides)
         )

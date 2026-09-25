@@ -17,6 +17,7 @@ from typing import Any
 
 from PySide6.QtCore import (
     QAbstractItemModel,
+    QDate,
     QEvent,
     QLocale,
     QModelIndex,
@@ -44,6 +45,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
+    QDateEdit,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -57,6 +60,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
@@ -76,6 +80,12 @@ from PySide6.QtWidgets import (
 )
 
 from .controller import BaseController
+from .cleanup import (
+    cleanup_wheelathlete_data,
+    installed_application_data_root,
+    portable_application_root,
+    schedule_portable_application_removal,
+)
 from .model_inference import (
     CURRENT_BEST_KEY,
     THREE_IMU_V3_KEY,
@@ -97,6 +107,16 @@ except Exception:
     load_c3d_reference = None  # type: ignore
     _local_reference = None  # type: ignore
 from .analysis_timeline import AnalysisTimeline
+from .csv_import import (
+    ImportDateRequired,
+    copy_imported_csv_for_export,
+    default_import_library_root,
+    delete_imported_csv,
+    import_wheelathlete_csv,
+    list_imported_csvs,
+    read_wheelathlete_csv,
+)
+from .trajectory_3d_view import Trajectory3DView
 from .state import AppViewState
 from .update_controller import UpdateController, UpdateViewState
 from .widgets import (
@@ -148,6 +168,32 @@ def _session_date_bucket(session: dict[str, Any]) -> tuple[int, str]:
         return (-1, "Date unavailable")
     local_dt = datetime.fromtimestamp(utc_ms / 1000.0, tz=timezone.utc).astimezone()
     return (local_dt.date().toordinal(), local_dt.strftime("%A, %d %B %Y"))
+
+
+def _choose_import_date(parent: QWidget) -> int | None:
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Date for imported recording")
+    layout = QVBoxLayout(dialog)
+    layout.addWidget(QLabel("This CSV has no recording date. Choose the date to show in Results:"))
+    date_edit = QDateEdit(dialog)
+    date_edit.setCalendarPopup(True)
+    date_edit.setDisplayFormat("yyyy-MM-dd")
+    date_edit.setDate(QDate.currentDate())
+    layout.addWidget(date_edit)
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+        parent=dialog,
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    layout.addWidget(buttons)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    chosen = date_edit.date()
+    return int(
+        datetime(chosen.year(), chosen.month(), chosen.day(), 12, tzinfo=timezone.utc).timestamp()
+        * 1000
+    )
 
 
 class CheckBoxDelegate(QStyledItemDelegate):
@@ -1134,7 +1180,7 @@ class DashboardPage(QWidget):
     def update_state(self, state: AppViewState) -> None:
         for side in ("L", "R", "C"):
             self.board_cards[side].update_board(
-                state.boards[side], active=state.live or state.recording
+                state.boards[side], active=state.side_is_active(side)
             )
         busy = (
             state.scanning
@@ -2039,6 +2085,9 @@ class TopicCard(Card):
 
         qualities = [str(s.get("quality", "GOOD")) for s in self.sessions]
         overall_qc = (
+            "IMPORTED"
+            if qualities and all(value == "IMPORTED" for value in qualities)
+            else
             "INVALID"
             if "INVALID" in qualities
             else "DEGRADED"
@@ -2183,8 +2232,9 @@ class TopicCard(Card):
                 cell = QTableWidgetItem(val)
                 flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
                 if col in (2, 3):
-                    flags |= Qt.ItemFlag.ItemIsEditable
-                    cell.setToolTip("Double-click to edit")
+                    if not item.get("is_imported_csv"):
+                        flags |= Qt.ItemFlag.ItemIsEditable
+                        cell.setToolTip("Double-click to edit")
                 cell.setFlags(flags)
                 if col in (1, 2):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -2207,6 +2257,8 @@ class TopicCard(Card):
                 active=is_active,
                 model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
             )
+            if item.get("is_imported_csv"):
+                action_widget.setEnabled(False)
             self.table.setCellWidget(row, 9, action_widget)
 
         self._block_signals = False
@@ -2227,6 +2279,8 @@ class TopicCard(Card):
                     active=is_active,
                     model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
                 )
+                if item.get("is_imported_csv"):
+                    action_widget.setEnabled(False)
                 self.table.setCellWidget(row, 9, action_widget)
 
     def toggle_expanded(self) -> None:
@@ -2464,6 +2518,7 @@ class ResultsPage(QWidget):
         self._topic_cards: list[TopicCard] = []
         self._date_headers: list[QFrame] = []
         self._block_table_signals = False
+        self._export_pending = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
@@ -2492,12 +2547,14 @@ class ResultsPage(QWidget):
             "Open session folder", "openSessionFolderButton"
         )
         self.refresh_button = _button("Refresh", "refreshSessionsButton")
+        self.import_button = _button("Import WheelAthlete CSV…", "importSessionCsvButton")
 
         folder_layout.addWidget(folder_title)
         folder_layout.addWidget(self.folder_label, 1)
         folder_layout.addWidget(self.change_folder_button)
         folder_layout.addWidget(self.open_folder_button)
         folder_layout.addWidget(self.refresh_button)
+        folder_layout.addWidget(self.import_button)
         root.addWidget(folder_card)
 
         # Filters & Actions Bar
@@ -2547,6 +2604,12 @@ class ResultsPage(QWidget):
         self.selection_summary.setWordWrap(True)
         self.selection_summary.setAccessibleName("selectionSummary")
         root.addWidget(self.selection_summary)
+        self.export_progress_bar = QProgressBar()
+        self.export_progress_bar.setObjectName("exportProgressBar")
+        self.export_progress_bar.setAccessibleName("CSV export progress")
+        self.export_progress_bar.setTextVisible(True)
+        self.export_progress_bar.hide()
+        root.addWidget(self.export_progress_bar)
 
         # Telemetry Preview Drawer (Collapsible)
         self.preview_drawer = SessionPreviewDrawer(self.controller, self)
@@ -2668,6 +2731,7 @@ class ResultsPage(QWidget):
         self.deselect_all_btn.clicked.connect(self._deselect_all)
         self.expand_all_btn.clicked.connect(self._toggle_expand_all)
         self.refresh_button.clicked.connect(controller.refresh_sessions)
+        self.import_button.clicked.connect(self._import_csv)
         self.change_folder_button.clicked.connect(self._change_folder)
         self.open_folder_button.clicked.connect(self._open_folder)
         self.model_button.clicked.connect(self._open_selected_in_model)
@@ -2676,6 +2740,9 @@ class ResultsPage(QWidget):
         self.table.itemChanged.connect(self._on_table_item_changed)
         self.preview_drawer.closed.connect(self._on_preview_closed)
         self.preview_drawer.model_requested.connect(self.model_requested.emit)
+        self.controller.export_progress.connect(self._on_export_progress)
+        self.controller.export_completed.connect(self._on_export_completed)
+        self.controller.export_failed.connect(self._on_export_failed)
 
         self._active_session_id = ""
         controller.sessions_changed.connect(self.update_sessions)
@@ -2687,7 +2754,13 @@ class ResultsPage(QWidget):
         self.folder_label.setText(state.journal_root or "Default folder")
 
     def update_sessions(self, sessions: list[dict[str, Any]]) -> None:
-        self._sessions = list({str(item["session_id"]): item for item in sessions if item.get("session_id")}.values())
+        combined = [
+            *[dict(item) for item in sessions if item.get("session_id")],
+            *list_imported_csvs(default_import_library_root()),
+        ]
+        self._sessions = list(
+            {str(item["session_id"]): item for item in combined}.values()
+        )
         self._selected_ids.intersection_update(str(item["session_id"]) for item in self._sessions)
 
         # Update topic filter combo
@@ -2785,8 +2858,9 @@ class ResultsPage(QWidget):
                 cell = QTableWidgetItem(value)
                 flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
                 if col in (2, 3, 4):
-                    flags |= Qt.ItemFlag.ItemIsEditable
-                    cell.setToolTip("Double-click to edit")
+                    if not item.get("is_imported_csv"):
+                        flags |= Qt.ItemFlag.ItemIsEditable
+                        cell.setToolTip("Double-click to edit")
                 cell.setFlags(flags)
                 if col in (1, 3):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -2809,6 +2883,8 @@ class ResultsPage(QWidget):
                 active=is_active,
                 model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
             )
+            if item.get("is_imported_csv"):
+                action_widget.setEnabled(False)
             self.table.setCellWidget(row, 10, action_widget)
 
         self._block_table_signals = False
@@ -2880,6 +2956,15 @@ class ResultsPage(QWidget):
     def preview_session(self, session_id: str) -> None:
         if not session_id:
             return
+        session = next(
+            (item for item in self._sessions if str(item.get("session_id")) == session_id),
+            None,
+        )
+        if session and session.get("is_imported_csv"):
+            self.controller.message.emit(
+                "Imported CSVs can be selected and exported; telemetry preview is unavailable."
+            )
+            return
         if self.preview_drawer.isVisible() and self._active_session_id == session_id:
             # Preview is an explicit action, not a toggle. Re-clicking the active
             # row must never make telemetry or its button disappear.
@@ -2917,6 +3002,8 @@ class ResultsPage(QWidget):
                         active=is_active,
                         model_callback=lambda _=None, s=sess_id: self.model_requested.emit(s),
                     )
+                    if sess.get("is_imported_csv"):
+                        action_widget.setEnabled(False)
                     self.table.setCellWidget(row, 10, action_widget)
 
     def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
@@ -3047,9 +3134,12 @@ class ResultsPage(QWidget):
         return f"{len(selected)} recording(s) selected · {scope}" if selected else "No recordings selected"
 
     def _update_action_counts(self) -> None:
-        count = len(self._get_selected_sessions())
+        selected = self._get_selected_sessions()
+        count = len(selected)
         self.selection_summary.setText(self._selection_text())
-        self.model_button.setEnabled(count == 1)
+        self.model_button.setEnabled(
+            count == 1 and not selected[0].get("is_imported_csv")
+        )
         self.model_button.setToolTip(
             "Open the selected recording for offline model analysis"
             if count == 1
@@ -3144,6 +3234,11 @@ class ResultsPage(QWidget):
                 "Select exactly one recording before opening MODEL"
             )
             return
+        if selected[0].get("is_imported_csv"):
+            self.controller.message.emit(
+                "Imported CSVs are available for export; model review requires an original recording."
+            )
+            return
         session_id = str(selected[0].get("session_id") or "")
         if not session_id:
             self.controller.message.emit("Selected recording has no session ID")
@@ -3188,7 +3283,39 @@ class ResultsPage(QWidget):
                 self, "Session Folder", f"Folder does not exist yet:\n\n{root}"
             )
 
+    def _import_csv(self) -> None:
+        source, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import WheelAthlete CSV",
+            str(Path.home() / "Documents" / "WheelAthlete"),
+            "CSV files (*.csv)",
+        )
+        if not source:
+            return
+        try:
+            summary = read_wheelathlete_csv(source)
+            date_if_missing_ms = None
+            if summary["started_utc_ms"] is None:
+                date_if_missing_ms = _choose_import_date(self)
+                if date_if_missing_ms is None:
+                    return
+            imported = import_wheelathlete_csv(
+                source,
+                default_import_library_root(),
+                date_if_missing_ms=date_if_missing_ms,
+            )
+            self.update_sessions(self.controller.sessions)
+            self._selected_ids.add(str(imported["session_id"]))
+            self._sync_selection_widgets()
+            self.controller.message.emit(
+                f"Imported {Path(source).name}; the original file was left unchanged."
+            )
+        except (OSError, ValueError, ImportDateRequired) as exc:
+            QMessageBox.critical(self, "CSV import failed", str(exc))
+
     def _export_selected(self) -> None:
+        if self._export_pending:
+            return
         selected = self._get_selected_sessions()
         if not selected:
             _show_info_dialog(
@@ -3205,12 +3332,54 @@ class ResultsPage(QWidget):
         if not chosen_dir:
             return
 
-        exported = self.controller.export_sessions(selected, chosen_dir)
-        _show_info_dialog(
-            self,
-            "Export Complete",
-            f"Successfully exported {len(exported)} session CSV(s) organized by experiment folders to:\n\n{chosen_dir}",
+        self._export_pending = True
+        self.export_button.setEnabled(False)
+        self.export_progress_bar.setRange(0, len(selected))
+        self.export_progress_bar.setValue(0)
+        self.export_progress_bar.setFormat("Preparing CSV export…")
+        self.export_progress_bar.show()
+        self.controller.export_sessions(selected, chosen_dir)
+
+    def _on_export_progress(self, done: int, total: int, path: str) -> None:
+        if not self._export_pending and total > 0:
+            self._export_pending = True
+            self.export_progress_bar.show()
+        if done == 0 and total == 1:
+            self.export_progress_bar.setRange(0, 0)
+            self.export_progress_bar.setFormat("Exporting CSV…")
+            return
+        self.export_progress_bar.setRange(0, max(1, total))
+        self.export_progress_bar.setValue(done)
+        self.export_progress_bar.setFormat(
+            f"Exporting CSVs · {done} of {total} complete"
         )
+        if path:
+            self.export_progress_bar.setToolTip(Path(path).name)
+
+    def _on_export_completed(self, paths: list[str]) -> None:
+        self._export_pending = False
+        self.export_button.setEnabled(bool(self._get_selected_sessions()))
+        self.delete_button.setEnabled(bool(self._get_selected_sessions()))
+        if paths:
+            self.export_progress_bar.setRange(0, len(paths))
+            self.export_progress_bar.setValue(len(paths))
+            self.export_progress_bar.setFormat(
+                f"Export complete · {len(paths)} CSV file(s)"
+            )
+            self.export_progress_bar.setToolTip("\n".join(Path(p).name for p in paths))
+            self.export_progress_bar.show()
+        else:
+            self.export_progress_bar.hide()
+
+    def _on_export_failed(self, message: str) -> None:
+        self._export_pending = False
+        self.export_button.setEnabled(bool(self._get_selected_sessions()))
+        self.delete_button.setEnabled(bool(self._get_selected_sessions()))
+        self.export_progress_bar.setRange(0, 1)
+        self.export_progress_bar.setValue(1)
+        self.export_progress_bar.setFormat("CSV export failed")
+        self.export_progress_bar.setToolTip(message)
+        self.export_progress_bar.show()
 
     def _delete_selected(self) -> None:
         selected = self._get_selected_sessions()
@@ -3222,19 +3391,32 @@ class ResultsPage(QWidget):
             )
             return
 
-        session_ids = [
-            str(s.get("session_id", "")) for s in selected if s.get("session_id")
-        ]
         confirmed = _ask_confirm_dialog(
             self,
             "Delete recordings",
-            f"Delete {len(session_ids)} recording(s) and their raw research data?\n\nThis action cannot be undone.",
+            f"Delete {len(selected)} selected recording(s) and their app-managed data?\n\n"
+            "For imported CSVs, this removes only the WheelAthlete copy; the original file stays unchanged.\n\n"
+            "This action cannot be undone.",
             confirm_text="Yes, Delete",
             cancel_text="Cancel",
             danger=True,
         )
         if confirmed:
-            self.controller.delete_sessions(session_ids)
+            imported = [item for item in selected if item.get("is_imported_csv")]
+            session_ids = [
+                str(item.get("session_id", ""))
+                for item in selected
+                if item.get("session_id") and not item.get("is_imported_csv")
+            ]
+            try:
+                for item in imported:
+                    delete_imported_csv(item, default_import_library_root())
+            except OSError as exc:
+                QMessageBox.critical(self, "Delete failed", str(exc))
+                return
+            if session_ids:
+                self.controller.delete_sessions(session_ids)
+            self.update_sessions(self.controller.sessions)
 
 
 SessionsPage = ResultsPage
@@ -3619,13 +3801,18 @@ class ModelPage(QWidget):
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.chart_view.setMinimumHeight(280)
         style_chart_surface(self.chart, self.chart_view)
+        self.trajectory_3d_view = Trajectory3DView()
+        self.plot_tabs = QTabWidget()
+        self.plot_tabs.setObjectName("trajectoryViewTabs")
+        self.plot_tabs.addTab(self.chart_view, "Planar 2D")
+        self.plot_tabs.addTab(self.trajectory_3d_view, "Orbitable 3D")
         self.timeline = AnalysisTimeline()
         self.timeline_scroll = QScrollArea()
         self.timeline_scroll.setWidgetResizable(True)
         self.timeline_scroll.setWidget(self.timeline)
         self.timeline_scroll.setMinimumWidth(480)
         self.analysis_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.analysis_splitter.addWidget(self.chart_view)
+        self.analysis_splitter.addWidget(self.plot_tabs)
         self.analysis_splitter.addWidget(self.timeline_scroll)
         self.analysis_splitter.setSizes([820, 600])
         self.analysis_splitter.setChildrenCollapsible(False)
@@ -4302,6 +4489,14 @@ class ModelPage(QWidget):
         if not points:
             self.status_label.setText("MODEL returned no trajectory points.")
             return
+        xyz = result.get("xyz")
+        try:
+            self.trajectory_3d_view.set_trajectory(
+                xyz if xyz is not None else points,
+                has_vertical=xyz is not None,
+            )
+        except (TypeError, ValueError):
+            self.trajectory_3d_view.set_trajectory(points, has_vertical=False)
 
         # Keep the visual responsive for long recordings while metrics retain all points.
         stride = max(1, len(points) // 5000)
@@ -4474,6 +4669,7 @@ class ModelPage(QWidget):
         self._generation += 1
         self._analysis_result = None
         self._trajectory_bounds = None
+        self.trajectory_3d_view.set_trajectory([], has_vertical=False)
         self.timeline.set_analysis(None)
         for series in (
             self.trajectory_series,
@@ -4513,6 +4709,8 @@ class ModelPage(QWidget):
         row = analysis["samples"][index]
         self.cursor_series.clear()
         self.cursor_series.append(row["x_m"], row["y_m"])
+        if self.trajectory_3d_view.points:
+            self.trajectory_3d_view.set_cursor(index)
 
     def _highlight_analysis_window(self, first, last):
         analysis = self.timeline.analysis
@@ -4524,6 +4722,8 @@ class ModelPage(QWidget):
         if display and display[-1] is not rows[-1]:
             display.append(rows[-1])
         self.window_series.replace([QPointF(row["x_m"], row["y_m"]) for row in display])
+        if self.trajectory_3d_view.points:
+            self.trajectory_3d_view.set_window(first, last)
 
     def export_trajectory_csv(self) -> None:
         if not self._analysis_result:
@@ -4596,7 +4796,7 @@ class ModelPage(QWidget):
         )
         if not output:
             return
-        pixmap = self.chart_view.grab()
+        pixmap = self.plot_tabs.currentWidget().grab()
         if pixmap.save(output):
             self.status_label.setText(
                 f"Exported trajectory image to {Path(output).name}."
@@ -4952,6 +5152,8 @@ class ModelPage(QWidget):
 
 
 class DiagnosticsPage(QWidget):
+    cleanup_requested = Signal()
+
     def __init__(self, controller: BaseController) -> None:
         super().__init__()
         self.controller = controller
@@ -4962,11 +5164,13 @@ class DiagnosticsPage(QWidget):
         toolbar = QHBoxLayout()
         self.refresh = _button("Refresh", "refreshDiagnosticsButton")
         self.export = _button("Export report", "exportDiagnosticsButton", primary=True)
+        self.cleanup = _button("Clean up…", "cleanupWheelAthleteButton", danger=True)
         self.recover = _button("Recover incomplete journal", "recoverJournalButton")
         self.incomplete = QComboBox()
         self.incomplete.setAccessibleName("incompleteJournalCombo")
         toolbar.addWidget(self.refresh)
         toolbar.addWidget(self.export)
+        toolbar.addWidget(self.cleanup)
         toolbar.addStretch(1)
         toolbar.addWidget(self.incomplete)
         toolbar.addWidget(self.recover)
@@ -5013,6 +5217,7 @@ class DiagnosticsPage(QWidget):
         root.addWidget(self.ipc_card)
         self.refresh.clicked.connect(controller.refresh_status)
         self.export.clicked.connect(self._export)
+        self.cleanup.clicked.connect(self.cleanup_requested.emit)
         self.recover.clicked.connect(self._recover)
         controller.state_changed.connect(self.update_state)
         self.update_state(controller.state)
@@ -5118,6 +5323,16 @@ class MainWindow(QMainWindow):
             app_root=Path(__file__).resolve().parents[2], parent=self
         )
         self._installing_update = False
+        self._shutdown_ready = False
+        self._shutdown_pending = False
+        self._close_after_record = False
+        self._record_stop_sent = False
+        self._update_install_pending = False
+        self._pending_cleanup: tuple[bool, Path | None] | None = None
+        self._shutdown_timer = QTimer(self)
+        self._shutdown_timer.setSingleShot(True)
+        self._shutdown_timer.setInterval(12000)
+        self._shutdown_timer.timeout.connect(self._on_shutdown_timeout)
         _prewarm_audio()
         for candidate in (
             Path(__file__).resolve().parents[4] / "assets" / "wheelathlete-logo.png",
@@ -5213,10 +5428,16 @@ class MainWindow(QMainWindow):
 
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         controller.state_changed.connect(self._update_header)
+        controller.state_changed.connect(self._advance_close_after_record)
         controller.message.connect(self._show_message)
         controller.command_error.connect(self._show_error)
+        controller.command_error.connect(self._on_close_command_error)
+        controller.recording_finished.connect(self._on_recording_finished)
+        controller.shutdown_completed.connect(self._on_shutdown_completed)
+        controller.shutdown_failed.connect(self._on_shutdown_failed)
         controller.sessions_changed.connect(self.results.update_sessions)
         self.results.model_requested.connect(self._open_model_session)
+        self.diagnostics.cleanup_requested.connect(self._cleanup_action)
         self.update_button.clicked.connect(self._update_action)
         self.update_controller.changed.connect(self._update_update_ui)
         self._update_header(controller.state)
@@ -5275,17 +5496,8 @@ class MainWindow(QMainWindow):
                 "WheelAthlete will never interrupt active research acquisition for an update.",
             )
             return
-        try:
-            self.update_controller.install(silent=False)
-        except Exception as exc:
-            self.update_button.setText("Install verified update")
-            self.update_button.setEnabled(True)
-            QMessageBox.critical(self, "Update failed", str(exc))
-            return
-        self._installing_update = True
-        self.update_controller.stop()
-        self.controller.close()
-        QApplication.quit()
+        self._update_install_pending = True
+        self.close()
 
     def _update_action(self) -> None:
         state = self.update_controller.state
@@ -5305,6 +5517,66 @@ class MainWindow(QMainWindow):
             if (item_data if isinstance(item_data, str) else item_data[0]).upper() == "MODEL"
         )
         self.nav.setCurrentRow(model_index)
+
+    def _cleanup_action(self) -> None:
+        portable_root = portable_application_root(
+            Path(sys.executable).resolve(), frozen=bool(getattr(sys, "frozen", False))
+        )
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Clean up WheelAthlete")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(
+            QLabel(
+                "Choose which WheelAthlete files to remove. All choices start off; "
+                "data outside the managed WheelAthlete folders is left alone."
+            )
+        )
+        data_check = QCheckBox(
+            "Delete WheelAthlete data: recordings, imported/exported CSV, models, settings, and logs"
+        )
+        data_check.setObjectName("deleteWheelAthleteDataCheck")
+        data_check.setChecked(False)
+        layout.addWidget(data_check)
+        if portable_root is not None:
+            app_check = QCheckBox("Remove this portable application folder after exit")
+            app_check.setObjectName("removePortableAppCheck")
+            app_check.setChecked(False)
+            layout.addWidget(app_check)
+        else:
+            app_check = None
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        delete_data = data_check.isChecked()
+        remove_portable_app = bool(app_check and app_check.isChecked())
+        if not delete_data and not remove_portable_app:
+            return
+        items = []
+        if delete_data:
+            items.append("managed WheelAthlete data")
+        if remove_portable_app:
+            items.append("this portable application folder")
+        confirm = QMessageBox.warning(
+            self,
+            "Confirm permanent cleanup",
+            "The following will be permanently deleted after the daemon stops:\n\n"
+            + "\n".join(f"• {item}" for item in items)
+            + "\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._pending_cleanup = (
+            delete_data,
+            portable_root if remove_portable_app else None,
+        )
+        self.close()
 
     def _update_header(self, state: AppViewState) -> None:
         self.daemon_badge.setText(
@@ -5330,6 +5602,119 @@ class MainWindow(QMainWindow):
             f"Session {state.session_id}" if state.session_id else ""
         )
 
+    def _advance_close_after_record(self, state: AppViewState) -> None:
+        if not self._close_after_record:
+            return
+        if state.recording_starting:
+            self.statusBar().showMessage(
+                "Waiting for recording startup before stopping safely…"
+            )
+            return
+        if state.recording:
+            if not self._record_stop_sent:
+                self._record_stop_sent = True
+                self.statusBar().showMessage("Finalizing the active recording…")
+                self.controller.stop_record()
+            return
+        if not self._record_stop_sent:
+            self._close_after_record = False
+            self._begin_daemon_shutdown()
+
+    def _on_recording_finished(self, _result: object) -> None:
+        if not self._close_after_record:
+            return
+        self._close_after_record = False
+        self._record_stop_sent = False
+        self._begin_daemon_shutdown()
+
+    def _on_close_command_error(self, command: str, message: str) -> None:
+        if not self._close_after_record or command not in {
+            "record",
+            "start_record",
+            "end_record",
+        }:
+            return
+        self._close_after_record = False
+        self._record_stop_sent = False
+        self._pending_cleanup = None
+        QMessageBox.warning(
+            self,
+            "Recording could not be stopped",
+            f"WheelAthlete stayed open because the recording could not be finalized.\n\n{message}",
+        )
+
+    def _begin_daemon_shutdown(self) -> None:
+        if self._shutdown_pending:
+            return
+        if not self.controller.state.daemon_connected:
+            self._shutdown_ready = True
+            self.close()
+            return
+        self._shutdown_pending = True
+        self.statusBar().showMessage("Waiting for acquisition daemon shutdown…")
+        self._shutdown_timer.start()
+        self.controller.shutdown_daemon()
+
+    def _on_shutdown_completed(self) -> None:
+        if not self._shutdown_pending:
+            return
+        self._shutdown_timer.stop()
+        self._shutdown_pending = False
+        self._shutdown_ready = True
+        self.close()
+
+    def _on_shutdown_failed(self, message: str) -> None:
+        self._shutdown_timer.stop()
+        self._shutdown_pending = False
+        self._close_after_record = False
+        self._record_stop_sent = False
+        self._pending_cleanup = None
+        QMessageBox.critical(
+            self,
+            "Acquisition daemon did not stop",
+            "WheelAthlete stayed open because the daemon did not confirm a safe shutdown.\n\n"
+            + message,
+        )
+
+    def _on_shutdown_timeout(self) -> None:
+        if self._shutdown_pending:
+            self._on_shutdown_failed("Timed out waiting for the daemon to stop.")
+
+    def _accept_close(self, event: QCloseEvent) -> None:
+        self.update_controller.stop()
+        if self._update_install_pending:
+            try:
+                self.update_controller.install(silent=False)
+            except Exception as exc:
+                self._update_install_pending = False
+                self.update_button.setText("Install verified update")
+                self.update_button.setEnabled(True)
+                QMessageBox.critical(self, "Update failed", str(exc))
+                event.ignore()
+                return
+            self._installing_update = True
+        self.controller.close()
+        if self._pending_cleanup is not None:
+            delete_data, portable_root = self._pending_cleanup
+            try:
+                if delete_data:
+                    install_root = installed_application_data_root(
+                        Path(sys.executable).resolve(),
+                        frozen=bool(getattr(sys, "frozen", False)),
+                    )
+                    cleanup_wheelathlete_data(install_root=install_root)
+                if portable_root is not None:
+                    schedule_portable_application_removal(portable_root)
+            except (OSError, ValueError) as exc:
+                self._pending_cleanup = None
+                QMessageBox.critical(self, "Cleanup failed", str(exc))
+                event.ignore()
+                return
+            self._pending_cleanup = None
+        event.accept()
+        if self._installing_update:
+            QApplication.quit()
+
     def _show_message(self, text: str) -> None:
         self.statusBar().showMessage(text, 5000)
 
@@ -5337,25 +5722,43 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{command}: {message}", 8000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if (
-            (
-                self.controller.state.recording
-                or self.controller.state.recording_starting
+        if self._shutdown_ready or self.demo:
+            self._accept_close(event)
+            return
+        if self._shutdown_pending:
+            event.ignore()
+            return
+        if self._pending_cleanup is not None and not self.controller.state.daemon_connected:
+            self._pending_cleanup = None
+            QMessageBox.critical(
+                self,
+                "Cleanup unavailable",
+                "WheelAthlete could not confirm that the acquisition daemon stopped safely. "
+                "No data was deleted and the window stayed open.",
             )
-            and not self.demo
-            and not self._installing_update
-        ):
+            event.ignore()
+            return
+        if self.controller.state.recording or self.controller.state.recording_starting:
             confirmed = _ask_confirm_dialog(
                 self,
                 "Recording is still active",
-                "Close only the UI and leave the acquisition daemon recording?\n\nRaw data will continue to be owned by the daemon.",
-                confirm_text="Yes, Close UI",
+                "Stop the recording, finalize its journal, stop the acquisition daemon, and close WheelAthlete?",
+                confirm_text=("Stop & clean up" if self._pending_cleanup else "Stop & close"),
                 cancel_text="Cancel",
                 danger=True,
             )
             if not confirmed:
+                self._pending_cleanup = None
                 event.ignore()
                 return
-        self.update_controller.stop()
-        self.controller.close()
-        event.accept()
+            self._close_after_record = True
+            self._record_stop_sent = False
+            event.ignore()
+            self._advance_close_after_record(self.controller.state)
+            return
+        if self.controller.state.daemon_connected:
+            event.ignore()
+            self._begin_daemon_shutdown()
+            return
+        self._shutdown_ready = True
+        self._accept_close(event)

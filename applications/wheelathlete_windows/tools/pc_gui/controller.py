@@ -6,6 +6,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -15,12 +16,31 @@ import json
 from .ipc_client import DaemonClient
 from .process_manager import DaemonProcessManager
 from .state import AppViewState, BoardView, PreviewBuffer, PreviewSample
+from .csv_import import copy_imported_csv_for_export
 
 
 def sanitize_name(name: Any) -> str:
     text = str(name).strip() if name is not None else ""
     cleaned = "".join("_" if ord(ch) < 32 or ch in '<>:"/\\|?*' else ch for ch in text).strip(" .")
     return cleaned or "Untitled"
+
+
+def _session_export_path(
+    item: dict[str, Any], target_directory: Path, reserved: set[Path]
+) -> Path:
+    topic = sanitize_name(item.get("topic") or "General")
+    trial = item.get("trial_number", 1)
+    trial_str = f"Trial{trial}" if str(trial).isdigit() else sanitize_name(str(trial))
+    athlete = sanitize_name(item.get("athlete") or "")
+    name = f"{topic}_{trial_str}_{athlete}.csv" if athlete else f"{topic}_{trial_str}.csv"
+    folder = target_directory / topic
+    candidate = folder / name
+    suffix = 2
+    while candidate in reserved or candidate.exists():
+        candidate = folder / f"{Path(name).stem}_{suffix}.csv"
+        suffix += 1
+    reserved.add(candidate)
+    return candidate
 
 
 def _recorded_board_scale(
@@ -124,6 +144,11 @@ class BaseController(QObject):
     message = Signal(str)
     recording_finished = Signal(object)
     daemon_log = Signal(str)
+    shutdown_completed = Signal()
+    shutdown_failed = Signal(str)
+    export_progress = Signal(int, int, str)
+    export_completed = Signal(object)
+    export_failed = Signal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -163,6 +188,7 @@ class BaseController(QObject):
     ) -> None: ...
     def rename_topic_group(self, old_topic: str, new_topic: str) -> None: ...
     def export_diagnostics(self, output_path: str) -> None: ...
+    def shutdown_daemon(self) -> None: ...
     def recover_session(self, file_name: str) -> None: ...
     def start_record(self, metadata: dict[str, Any]) -> None: ...
     def stop_record(self) -> None: ...
@@ -170,6 +196,8 @@ class BaseController(QObject):
 
 class AcquisitionController(BaseController):
     """Orchestrates UI commands without owning any BLE/raw-data work."""
+
+    local_export_ready = Signal(object)
 
     def __init__(
         self,
@@ -215,6 +243,11 @@ class AcquisitionController(BaseController):
         self._poll.timeout.connect(self.refresh_status)
         self._started = False
         self._active_record_metadata: dict[str, Any] = {}
+        self._export_queue: list[tuple[dict[str, Any], Path]] = []
+        self._export_paths: list[str] = []
+        self._export_total = 0
+        self._export_active = False
+        self.local_export_ready.connect(self._on_local_export_ready)
 
     def start(self) -> None:
         if self._started:
@@ -229,6 +262,17 @@ class AcquisitionController(BaseController):
         self.client.close()
         self.process_manager.stop_if_owned(
             recording_active=self.state.recording or self.state.recording_starting
+        )
+
+    def shutdown_daemon(self) -> None:
+        if not self.client.ready:
+            self.shutdown_failed.emit("Acquisition daemon is not ready")
+            return
+        self._command(
+            "shutdown",
+            {},
+            lambda _result: self.shutdown_completed.emit(),
+            on_error=self.shutdown_failed.emit,
         )
 
     def scan(self) -> None:
@@ -425,41 +469,105 @@ class AcquisitionController(BaseController):
         )
 
     def export_session(self, session_id: str, output_path: str) -> None:
+        if self._export_active:
+            self.export_failed.emit("Another CSV export is already running")
+            return
+        self._export_active = True
+        self.export_progress.emit(0, 1, "")
         self._command(
             "export_session",
             {"session_id": session_id, "output_path": output_path},
-            lambda result: self.message.emit(
-                f"CSV exported: {result.get('output_path', output_path)}"
+            lambda result: self._finish_single_export(
+                str(result.get("output_path", output_path))
             ),
+            on_error=self._fail_export,
         )
 
     def export_sessions(
         self, sessions: list[dict[str, Any]], target_directory: str | Path
     ) -> list[str]:
         target_dir = Path(target_directory)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        exported_paths: list[str] = []
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, ValueError) as exc:
+            self.export_failed.emit(f"Cannot create export folder: {exc}")
+            return []
+        reserved: set[Path] = set()
+        jobs: list[tuple[dict[str, Any], Path]] = []
         for item in sessions:
-            session_id = str(item.get("session_id", "")).strip()
-            if not session_id:
-                continue
-            topic = sanitize_name(item.get("topic") or "General")
-            trial = item.get("trial_number", 1)
-            trial_str = f"Trial{trial}" if str(trial).isdigit() else sanitize_name(str(trial))
-            athlete = sanitize_name(item.get("athlete") or "")
-            topic_folder = target_dir / topic
-            topic_folder.mkdir(parents=True, exist_ok=True)
-            if athlete:
-                output_file = topic_folder / f"{topic}_{trial_str}_{athlete}.csv"
-            else:
-                output_file = topic_folder / f"{topic}_{trial_str}.csv"
-            self.export_session(session_id, str(output_file))
-            exported_paths.append(str(output_file))
-        if exported_paths:
-            self.message.emit(
-                f"Exporting {len(exported_paths)} session CSV(s) to {target_dir}"
-            )
-        return exported_paths
+            if item.get("session_id"):
+                jobs.append((dict(item), _session_export_path(item, target_dir, reserved)))
+        self._start_export_queue(jobs)
+        return [str(path) for _, path in jobs]
+
+    def _start_export_queue(self, jobs: list[tuple[dict[str, Any], Path]]) -> None:
+        if self._export_active:
+            self.export_failed.emit("Another CSV export is already running")
+            return
+        self._export_queue = list(jobs)
+        self._export_paths = []
+        self._export_total = len(jobs)
+        self._export_active = bool(jobs)
+        self.export_progress.emit(0, self._export_total, "")
+        if not jobs:
+            self.export_completed.emit([])
+            return
+        self._export_next()
+
+    def _export_next(self) -> None:
+        if not self._export_queue:
+            self._export_active = False
+            self.export_completed.emit(list(self._export_paths))
+            self.message.emit(f"Exported {len(self._export_paths)} CSV file(s)")
+            return
+        item, output = self._export_queue[0]
+        if item.get("is_imported_csv"):
+            def copy() -> None:
+                try:
+                    path = copy_imported_csv_for_export(
+                        item, output.parent, file_name=output.name
+                    )
+                    result = {"path": str(path)}
+                except Exception as exc:
+                    result = {"error": str(exc)}
+                self.local_export_ready.emit(result)
+
+            Thread(target=copy, name="WheelAthleteCsvExport", daemon=True).start()
+            return
+        self._command(
+            "export_session",
+            {"session_id": str(item["session_id"]), "output_path": str(output)},
+            lambda result: self._finish_export_item(
+                str(result.get("output_path", output))
+            ),
+            on_error=self._fail_export,
+        )
+
+    def _on_local_export_ready(self, result: dict[str, Any]) -> None:
+        if result.get("error"):
+            self._fail_export(str(result["error"]))
+        else:
+            self._finish_export_item(str(result["path"]))
+
+    def _finish_export_item(self, path: str) -> None:
+        if self._export_queue:
+            self._export_queue.pop(0)
+        self._export_paths.append(path)
+        self.export_progress.emit(
+            len(self._export_paths), self._export_total, path
+        )
+        self._export_next()
+
+    def _finish_single_export(self, path: str) -> None:
+        self._export_active = False
+        self.export_progress.emit(1, 1, path)
+        self.export_completed.emit([path])
+        self.message.emit(f"CSV exported: {path}")
+
+    def _fail_export(self, message: str) -> None:
+        self._export_active = False
+        self._export_queue.clear()
+        self.export_failed.emit(message)
 
     def load_session_data(self, session_id: str) -> dict[str, Any]:
         from .analysis_loader import read_recording
@@ -864,6 +972,8 @@ class DemoController(BaseController):
         self._timer = QTimer(self)
         self._timer.setInterval(100)
         self._timer.timeout.connect(self._tick)
+        self._export_active = False
+        self._export_thread: Thread | None = None
         self._seq = 0
         self._started_ns = time.perf_counter_ns()
         demo_day = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
@@ -932,6 +1042,9 @@ class DemoController(BaseController):
     def close(self) -> None:
         self._timer.stop()
 
+    def shutdown_daemon(self) -> None:
+        self.shutdown_completed.emit()
+
     def scan(self) -> None:
         self.scan_results_changed.emit(list(self.scan_results))
 
@@ -990,46 +1103,105 @@ class DemoController(BaseController):
         self.sessions_changed.emit(list(self.sessions))
 
     def export_session(self, session_id: str, output_path: str) -> None:
+        if self._export_active:
+            self.export_failed.emit("Another CSV export is already running")
+            return
         out = Path(output_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.writer(handle)
-            writer.writerow([
-                "session_id", "wheel", "seq", "timestamp_device_us",
-                "timestamp_pc_monotonic_ns", "ax_raw", "ay_raw", "az_raw",
-                "gx_raw", "gy_raw", "gz_raw"
-            ])
-            for i in range(20):
+        self._export_active = True
+        self.export_progress.emit(0, 1, "")
+
+        def write_one() -> None:
+            try:
+                self._write_demo_session_csv(session_id, out)
+            except Exception as exc:
+                self._export_active = False
+                self.export_failed.emit(str(exc))
+                return
+            self._export_active = False
+            self.export_progress.emit(1, 1, str(out))
+            self.export_completed.emit([str(out)])
+            self.message.emit(f"CSV exported: {out}")
+
+        self._export_thread = Thread(
+            target=write_one, name="WheelAthleteCsvExport", daemon=True
+        )
+        self._export_thread.start()
+
+    @staticmethod
+    def _write_demo_session_csv(session_id: str, output: Path) -> None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        created = False
+        try:
+            with output.open("x", newline="", encoding="utf-8") as handle:
+                created = True
+                writer = csv.writer(handle)
                 writer.writerow([
-                    session_id, "L" if i % 2 == 0 else "R", i, i * 10000,
-                    time.perf_counter_ns(), 100, 200, 16000, 10, 20, 30
+                    "session_id", "wheel", "seq", "timestamp_device_us",
+                    "timestamp_pc_monotonic_ns", "ax_raw", "ay_raw", "az_raw",
+                    "gx_raw", "gy_raw", "gz_raw"
                 ])
-        self.message.emit(f"CSV exported: {output_path}")
+                for i in range(20):
+                    writer.writerow([
+                        session_id, "L" if i % 2 == 0 else "R", i, i * 10000,
+                        time.perf_counter_ns(), 100, 200, 16000, 10, 20, 30
+                    ])
+        except BaseException:
+            if created:
+                output.unlink(missing_ok=True)
+            raise
 
     def export_sessions(
         self, sessions: list[dict[str, Any]], target_directory: str | Path
     ) -> list[str]:
         target_dir = Path(target_directory)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        exported: list[str] = []
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, ValueError) as exc:
+            self.export_failed.emit(f"Cannot create export folder: {exc}")
+            return []
+        if self._export_active:
+            self.export_failed.emit("Another CSV export is already running")
+            return []
+        reserved: set[Path] = set()
+        jobs: list[tuple[dict[str, Any], Path]] = []
         for item in sessions:
             session_id = str(item.get("session_id", "")).strip()
             if not session_id:
                 continue
-            topic = sanitize_name(item.get("topic") or "General")
-            trial = item.get("trial_number", 1)
-            trial_str = f"Trial{trial}" if str(trial).isdigit() else sanitize_name(str(trial))
-            athlete = sanitize_name(item.get("athlete") or "")
-            topic_folder = target_dir / topic
-            topic_folder.mkdir(parents=True, exist_ok=True)
-            if athlete:
-                out_file = topic_folder / f"{topic}_{trial_str}_{athlete}.csv"
-            else:
-                out_file = topic_folder / f"{topic}_{trial_str}.csv"
-            self.export_session(session_id, str(out_file))
-            exported.append(str(out_file))
-        self.message.emit(f"Demo exported {len(exported)} session CSV(s) to {target_dir}")
-        return exported
+            jobs.append((dict(item), _session_export_path(item, target_dir, reserved)))
+        self._export_active = bool(jobs)
+        self.export_progress.emit(0, len(jobs), "")
+        if not jobs:
+            self.export_completed.emit([])
+            return []
+
+        def write_exports() -> None:
+            exported: list[str] = []
+            try:
+                for item, output in jobs:
+                    if item.get("is_imported_csv"):
+                        path = copy_imported_csv_for_export(
+                            item, output.parent, file_name=output.name
+                        )
+                        exported_path = str(path)
+                    else:
+                        self._write_demo_session_csv(str(item["session_id"]), output)
+                        exported_path = str(output)
+                    exported.append(exported_path)
+                    self.export_progress.emit(len(exported), len(jobs), exported_path)
+            except Exception as exc:
+                self._export_active = False
+                self.export_failed.emit(str(exc))
+                return
+            self._export_active = False
+            self.export_completed.emit(exported)
+            self.message.emit(f"Demo exported {len(exported)} session CSV(s) to {target_dir}")
+
+        self._export_thread = Thread(
+            target=write_exports, name="WheelAthleteCsvExport", daemon=True
+        )
+        self._export_thread.start()
+        return [str(path) for _, path in jobs]
 
     def load_session_data(self, session_id: str) -> dict[str, Any]:
         match = next((s for s in self.sessions if s.get("session_id") == session_id), None)

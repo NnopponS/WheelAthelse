@@ -4,21 +4,21 @@
 
 WheelAthlete ซิงโครไนซ์เซนเซอร์ที่ล้อซ้ายและขวา บันทึกข้อมูลการเคลื่อนไหวแบบ research-grade และมี Windows application สำหรับเก็บข้อมูล ตรวจคุณภาพ จัดการผลลัพธ์ ส่งออกข้อมูล ดู diagnostics และวิเคราะห์ trajectory แบบ offline นอกจากนี้ระบบยังรองรับ IMU ตัวที่สามตำแหน่งกลางเก้าอี้ (`C`) สำหรับการเก็บข้อมูลและงานทดลอง
 
-> **Release ปัจจุบัน:** `v1.8.3` — Windows-first
-> **Windows application:** `1.8.3`
+> **Release ปัจจุบัน:** `v1.8.4` — Windows-first
+> **Windows application:** `1.8.4`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Mobile source:** `1.8.3+13` อยู่ในโหมด maintenance; release นี้ไม่เพิ่ม mobile source หรือ mobile binary ใหม่
+> **Mobile source:** `1.8.3+13` ไม่เปลี่ยนแปลงและอยู่นอกขอบเขต release นี้
 > **ภาษา:** [English](README.md) | ไทย
 
 ## สถานะ Release
 
-WheelAthlete 1.8.3 รวมงาน Windows application, firmware M5/XIAO, การรองรับเซนเซอร์ 3 ตัว, installer lifecycle, Results workflow, model bundle และระบบ release hardening ไว้ใน source line เดียว
+WheelAthlete 1.8.4 สร้าง Windows application ใหม่บนฐานเสถียร v1.8.3 และคืน source firmware XIAO/M5 ตาม snapshot อ้างอิง โดย firmware ยังคง version 1.8.2; mobile source ไม่เปลี่ยนและไม่อยู่ใน release นี้
 
 โครงสร้าง branch สาธารณะตั้งใจให้เหลือเพียง:
 
 - `main` — source หลักที่รวมงานทั้งหมดแล้ว
-- `release/main-v1.8.3` — release line ที่ชี้ไปยัง commit 1.8.3 ที่ผ่านการตรวจสอบ
+- `release/main-v1.8.4` — release line ที่ชี้ไปยัง commit 1.8.4 ที่ผ่านการตรวจสอบ
 
 Tag ของ version เก่ายังคงเก็บไว้เพื่อ trace ประวัติได้ แต่ branch พัฒนา/release เก่าที่ merge เรียบร้อยแล้วไม่จำเป็นต้องแสดงอยู่ต่อ
 
@@ -29,7 +29,16 @@ Repository รองรับการสร้างแพ็กเกจ Windo
 1. **Trusted Signed Release**: ต้องใช้ RSA Code Signing certificate ระดับองค์กร, timestamp URL และ subject ที่ตรงกัน (`is_signed=true`, `public_release_ready=true`)
 2. **Community / Unsigned Release**: รองรับ `ALLOW_UNSIGNED_RELEASE=true` หรือ community build mode โดยไม่จำเป็นต้องใช้ commercial certificate โดย release pipeline และ update manifest จะระบุ `is_signed=false` และฝังโมเดลที่พร้อมใช้งาน (`wheelathlete_biwheel3d_m4.onnx`, `BiWheel3D-XY-Yaw-current_best.json` และ PyTorch residual checkpoint) ลงในแพ็กเกจ installer และ portable ZIP โดยตรง
 
-ไฟล์ unsigned เหมาะสำหรับนักวิจัยและผู้ใช้งานชุมชนในการพัฒนา/ทดสอบ โดย SHA-256 ใช้ตรวจสอบความถูกต้องของไฟล์อย่างสมบูรณ์ สำหรับ Windows SmartScreen สามารถกดยืนยันผ่าน "More info" -> "Run anyway" ได้
+ไฟล์ unsigned ใช้สำหรับพัฒนาและทดสอบภายในเท่านั้น ไม่ถือเป็น trusted public release และไม่ผ่าน signing gate ของ Windows
+
+## การเปลี่ยนแปลงใน 1.8.4
+
+- คืนกราฟ trajectory 3D ที่หมุน/ซูมได้ พร้อมสเกล XYZ ที่รักษาระยะจริง และระบุชัดเมื่อโมเดลมีข้อมูลแค่ XY
+- เพิ่มการนำเข้า WheelAthlete CSV แบบเก็บสำเนาในพื้นที่ของแอป; ถ้าไม่มีวันที่ให้เลือกวันที่เอง แล้วส่งออกผ่าน Results flow เดิม
+- ย้ายการเขียน CSV ออกจาก GUI thread พร้อม progress และสถานะสำเร็จ/ผิดพลาด
+- แยก BLE loss counters ของรอบอัดปัจจุบันออกจากยอดสะสมใน Diagnostics และเพิ่มข้อมูล Windows/Bluetooth driver แบบตัดข้อมูลส่วนตัว
+- ปิดโปรแกรมด้วยการ finalize journal และรอ daemon ACK; ตัวเลือก cleanup ปิดไว้เป็นค่าเริ่มต้นและจำกัดเฉพาะตำแหน่งที่ WheelAthlete ดูแล
+- firmware XIAO/M5 ยังคงตาม snapshot อ้างอิง v1.8.2; ไม่มีการอ้างว่าผ่าน BLE acceptance ข้ามคอมพิวเตอร์
 
 ## สิ่งที่อยู่ใน WheelAthlete 1.8.3
 
@@ -115,16 +124,16 @@ Model ใหม่ที่นำเข้าแบบ portable ใช้ contra
 
 ### สถานะ Mobile
 
-Flutter Android/iOS source ที่มีอยู่เดิมยังเก็บไว้เพื่อ maintenance แต่ **การรวม v1.8.3 รอบนี้จะไม่เพิ่ม/แก้ mobile source สำหรับการ publish, ไม่สร้าง APK/AAB/IPA, ไม่มี mobile download และไม่มี mobile update offer**
+Flutter Android/iOS source ที่มีอยู่เดิมยังเก็บไว้เพื่อ maintenance แต่ **release v1.8.4 นี้ไม่เพิ่ม/แก้ mobile source, ไม่สร้าง APK/AAB/IPA, ไม่มี mobile download และไม่มี mobile update offer**
 
-ดังนั้น mobile ไม่ใช่ publication gate ของ v1.8.3 รอบนี้ หากจะกลับมาเผยแพร่ mobile ในอนาคตควรแยกเป็น release scope ที่ตรวจสอบต่างหาก
+ดังนั้น mobile ไม่ใช่ publication gate ของ v1.8.4 รอบนี้ หากจะกลับมาเผยแพร่ mobile ในอนาคตควรแยกเป็น release scope ที่ตรวจสอบต่างหาก
 
 ## โครงสร้าง Repository
 
 ```text
 WheelAthelse/
 ├── applications/
-│   ├── wheelathlete_windows/          # Windows v1.8.3 ที่ใช้งานหลัก
+│   ├── wheelathlete_windows/          # Windows v1.8.4 ที่ใช้งานหลัก
 │   └── wheelathlete_mobile/           # mobile source สำหรับ maintenance
 ├── hardware_firmware/
 │   ├── m5stickc_plus2/
@@ -200,7 +209,7 @@ Automated tests หรือการ build สำเร็จ **ไม่ใช
 
 ## ขอบเขต Acceptance ปัจจุบัน
 
-Source/software acceptance ของ 1.8.3 แยกออกจาก external gate 2 เรื่อง:
+Source/software acceptance ของ 1.8.4 แยกออกจาก external gate 2 เรื่อง:
 
 - **Trusted Windows signing** — ต้องมีก่อน publish Windows binaries และ update manifest
 - **Final L/R/C physical acceptance** — รอจนกว่าจะมี hardware กลับมาใช้งานอีกครั้ง
@@ -213,14 +222,14 @@ XIAO C firmware 1.8.2 มี partial runtime evidence ที่ดี แต่ 
 - [`.project/HANDOFF.md`](.project/HANDOFF.md) — ขั้นตอนต่อเนื่องที่ชัดเจน
 - [`.project/architecture.md`](.project/architecture.md) — runtime/data/model boundaries
 - [`.project/decisions.md`](.project/decisions.md) — active engineering decisions
-- [`release/RELEASE_NOTES_1.8.3.md`](release/RELEASE_NOTES_1.8.3.md) — release summary
+- [`release/RELEASE_NOTES_1.8.4.md`](release/RELEASE_NOTES_1.8.4.md) — release summary
 
 ## Version Matrix
 
 | Component | Version / status |
 |---|---|
-| Product release | `1.8.3` |
-| Windows Research Application | `1.8.3` |
+| Product release | `1.8.4` |
+| Windows Research Application | `1.8.4` |
 | M5StickC Plus2 firmware | `1.8.2` |
 | XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |

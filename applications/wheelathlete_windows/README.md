@@ -2,7 +2,7 @@
 
 The **WheelAthlete Windows Research Application** is the reliability-first Windows acquisition and research client. It uses a PySide6 operator interface and a separate Python acquisition daemon so BLE capture and authoritative raw-data recording remain isolated from UI rendering and optional analysis workloads.
 
-Current package version: `1.8.3`
+Current package version: `1.8.4`
 
 ## Architecture
 

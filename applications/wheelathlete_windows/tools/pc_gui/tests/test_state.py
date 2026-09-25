@@ -161,3 +161,38 @@ def test_app_state_accepts_optional_center_sensor():
         }
     )
     assert center.side == "C"
+
+
+def test_active_recording_faults_use_run_deltas_while_diagnostics_keep_totals():
+    board = BoardView.from_status(
+        "R",
+        {
+            "connected": True,
+            "sequence_gaps": 12,
+            "queue_overflow_faults": 5,
+            "malformed_packets": 7,
+            "health": {
+                "state": 2,
+                "queue_drops": 9,
+                "fifo_faults": 4,
+                "fifo_dropped_samples": 3,
+            },
+            "run_metrics": {
+                "sequence_gaps": 0,
+                "queue_overflow_faults": 0,
+                "malformed_packets": 0,
+            },
+            "run_health": {
+                "state": 2,
+                "queue_drops": 0,
+                "fifo_faults": 0,
+                "fifo_dropped_samples": 0,
+            },
+        },
+    )
+
+    assert board.fault_summary == "host sequence gap: 12"
+    assert board.firmware_queue_drops == 9
+    assert board.active_fault_summary is None
+    assert board.active_loss_count == 0
+    assert board.loss_count != 0

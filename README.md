@@ -4,21 +4,21 @@
 
 WheelAthlete synchronizes inertial sensors mounted on the left and right wheelchair wheels, records research-grade motion data, and provides a dedicated Windows workflow for acquisition, quality control, export, diagnostics, and optional offline trajectory analysis. An optional chair-center IMU (`C`) is supported for acquisition and research instrumentation.
 
-> **Current release:** `v1.8.3`
-> **Windows application:** `1.8.3`
+> **Current release:** `v1.8.4`
+> **Windows application:** `1.8.4`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
-> **Mobile source:** `1.8.3+13`; source/tests are release-gated, but no APK/AAB/IPA is published by the Windows release workflow
+> **Mobile source:** `1.8.3+13`; unchanged maintenance source, excluded from this release
 > **Language:** English | [ไทย](README.th.md)
 
 ## Release status
 
-WheelAthlete 1.8.3 consolidates the current Windows and mobile source changes while retaining firmware 1.8.2 and BLE protocol 1.8.0.
+WheelAthlete 1.8.4 rebuilds the Windows application from the stable v1.8.3 baseline and restores the XIAO/M5 firmware snapshot at v1.8.2. Mobile source remains unchanged and excluded; the BLE payload and protocol remain unchanged at v1.8.0.
 
 The public repository is intentionally organized around two branches:
 
 - `main` — integrated source of truth;
-- `release/main-v1.8.3` — exact tested 1.8.3 release line.
+- `release/main-v1.8.4` — exact tested 1.8.4 release line.
 
 Historical version tags are retained for traceability. Obsolete development/release branches do not need to remain visible after their work is fully integrated.
 
@@ -29,7 +29,16 @@ The repository provides two paths for packaging and distributing the Windows app
 1. **Trusted Signed Release**: Requires commercial RSA Code Signing certificate, timestamp URL, and matching publisher subject (`is_signed=true`, `public_release_ready=true`).
 2. **Community / Unsigned Release**: Supports `ALLOW_UNSIGNED_RELEASE=true` or community build mode without requiring a commercial certificate. The pipeline and update manifest record `is_signed=false`, allowing portable ZIP and installer packages to be built and evaluated with embedded baseline and experimental models (`wheelathlete_biwheel3d_m4.onnx`, `BiWheel3D-XY-Yaw-current_best.json`, and PyTorch residual checkpoint).
 
-An unsigned local package is suitable for development/testing and community distribution. SHA-256 protects artifact integrity; when installing unsigned packages on Windows, SmartScreen prompt can be dismissed via "More info" -> "Run anyway".
+Unsigned local packages are for development and testing only. They are not trusted public releases and do not satisfy the Windows signing gate.
+
+## What changed in 1.8.4
+
+- Restored the orbitable 3D trajectory view with equal-distance XYZ scaling and an explicit unavailable-Z state for XY-only models.
+- Added managed WheelAthlete CSV import, a date picker for undated files, and export through the existing Results flow.
+- Moved CSV writes off the GUI thread and added progress plus success/failure status.
+- Separated active-recording BLE loss counters from lifetime diagnostics and added sanitized Windows/Bluetooth driver details.
+- Closing the app now finalizes a recording and waits for the daemon shutdown acknowledgement. Cleanup choices are opt-in and limited to managed WheelAthlete locations.
+- M5/XIAO firmware remains at the v1.8.3 reference snapshot (firmware v1.8.2); no cross-computer BLE acceptance is claimed.
 
 ## What is included in 1.8.3
 
@@ -115,7 +124,7 @@ The authoritative research recording remains the `.waj` journal. MODEL output, p
 
 ### Mobile status
 
-The existing Flutter Android/iOS source remains in the repository as maintenance material. **No new mobile source changes, APK/AAB/IPA, mobile download, or mobile update offer are part of this v1.8.3 consolidation.**
+The existing Flutter Android/iOS source remains in the repository as maintenance material. **No new mobile source changes, APK/AAB/IPA, mobile download, or mobile update offer are part of this v1.8.4 release.**
 
 Mobile is therefore not a current publication gate for this release. Future mobile publication should be handled as a separately reviewed release scope.
 
@@ -124,7 +133,7 @@ Mobile is therefore not a current publication gate for this release. Future mobi
 ```text
 WheelAthelse/
 ├── applications/
-│   ├── wheelathlete_windows/          # active Windows v1.8.3 application
+│   ├── wheelathlete_windows/          # active Windows v1.8.4 application
 │   └── wheelathlete_mobile/           # retained mobile maintenance source
 ├── hardware_firmware/
 │   ├── m5stickc_plus2/
@@ -157,7 +166,7 @@ https://github.com/NnopponS/WheelAthelse/releases/latest/download/latest.json
 
 When a trusted signed release exists, WheelAthlete validates semantic version, repository-owned HTTPS URL, exact byte size, and SHA-256 before launching the installer. Update installation is blocked while Live preview, countdown, or recording is active.
 
-The current source-only v1.8.3 release intentionally publishes no `latest.json`, so installed clients receive no update offer yet.
+The current source-only v1.8.4 release intentionally publishes no `latest.json`, so installed clients receive no update offer yet.
 
 The release workflow is **manually dispatched** from [`.github/workflows/release.yml`](.github/workflows/release.yml). It tests the Windows application, requires the trusted signing configuration, builds/verifies the Windows package, generates `latest.json`, and publishes only after all release gates pass.
 
@@ -200,7 +209,7 @@ Automated tests and successful builds do **not** prove real RF throughput, physi
 
 ## Current acceptance boundary
 
-Software/source acceptance for 1.8.3 is separate from two external gates:
+Software/source acceptance for 1.8.4 is separate from two external gates:
 
 - **Trusted Windows signing** — required before public Windows binaries/update manifest are published.
 - **Final L/R/C physical acceptance** — deferred until the sensor hardware is available again.
@@ -213,14 +222,14 @@ The specific XIAO C 1.8.2 board has strong partial runtime evidence, but the fin
 - [`.project/HANDOFF.md`](.project/HANDOFF.md) — exact continuation instructions
 - [`.project/architecture.md`](.project/architecture.md) — runtime/data/model boundaries
 - [`.project/decisions.md`](.project/decisions.md) — active durable decisions
-- [`release/RELEASE_NOTES_1.8.3.md`](release/RELEASE_NOTES_1.8.3.md) — release summary
+- [`release/RELEASE_NOTES_1.8.4.md`](release/RELEASE_NOTES_1.8.4.md) — release summary
 
 ## Version matrix
 
 | Component | Version / status |
 |---|---|
-| Product release | `1.8.3` |
-| Windows Research Application | `1.8.3` |
+| Product release | `1.8.4` |
+| Windows Research Application | `1.8.4` |
 | M5StickC Plus2 firmware | `1.8.2` |
 | XIAO nRF52840 Sense firmware | `1.8.2` |
 | BLE protocol | `1.8.0` |

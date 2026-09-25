@@ -1,15 +1,15 @@
 # WheelAthlete runtime architecture
 
-Updated: 2026-09-10.
+Updated: 2026-09-25.
 
-WheelAthlete v1.8.2 is a Windows-first acquisition/research release with maintained M5/XIAO firmware. The stable sensing/model baseline is two wheel-hub IMUs (`L`, `R`); the acquisition stack also supports an optional chair-center IMU (`C`) for controlled experiments.
+WheelAthlete v1.8.4 is a Windows-first source release candidate with maintained M5/XIAO firmware. The stable sensing/model baseline is two wheel-hub IMUs (`L`, `R`); the acquisition stack also supports an optional chair-center IMU (`C`) for controlled experiments.
 
 ## Public product and repository boundaries
 
 ```text
 applications/
-  wheelathlete_windows/                 active v1.8.2 Windows application
-  wheelathlete_mobile/                  retained maintenance source; no v1.8.2 mobile publication
+  wheelathlete_windows/                 active v1.8.4 Windows application
+  wheelathlete_mobile/                  retained maintenance source; no v1.8.4 mobile publication
 hardware_firmware/
   m5stickc_plus2/                       ESP32/M5StickC Plus2 firmware
   xiao_nrf52840_sense/                  nRF52840/LSM6DS3 firmware
@@ -21,6 +21,8 @@ BiWheel3D/                              separate local research repository, neve
 ```
 
 `BiWheel3D/` is not a root submodule and must not become an installed runtime dependency. Generated packages, participant data and local evidence are outside the source-publication boundary.
+
+The v1.8.4 application candidate is based on the exact v1.8.3 application tag. Its firmware source is the supplied v1.8.3 snapshot and retains firmware identity 1.8.2 / BLE protocol 1.8.0. No firmware transport/backlog change is part of this candidate.
 
 ## Sensor roles
 
@@ -58,6 +60,10 @@ Acquisition daemon
 The GUI is not the authoritative raw-data path. Slow rendering, analysis or a GUI restart must not silently become a BLE recording bottleneck.
 
 Only one operator application may own a given sensor set at a time.
+
+The Acquisition page reports counter deltas from the current recording's start baseline. Diagnostics retains cumulative daemon/firmware totals. Firmware counters are not reset when a new recording starts; the Windows daemon derives each run's deltas from the observed baseline.
+
+Results import accepts the application's exported CSV schema, makes a create-only managed copy under WheelAthlete data, and stores an assigned session date when the CSV has no date. Imported sessions flow through the existing selection/export path. CSV writes run outside the GUI thread, report progress or completion/error state, and never overwrite an existing result.
 
 ## Storage and compatibility
 
@@ -110,7 +116,9 @@ verified Inno installer
 idle-only update -> clean app exit -> upgrade -> relaunch
 ```
 
-The current source-only v1.8.2 Release intentionally publishes no `latest.json`, so installed clients receive no update offer until a trusted signed Windows release exists.
+The current source-only v1.8.3 Release intentionally publishes no `latest.json`, so installed clients receive no update offer until a trusted signed Windows release exists. v1.8.4 remains a release candidate until its exact tested commit is published.
+
+Portable and installed cleanup defaults to preserving old application files and all user data. Explicit cleanup choices are opt-in and scoped to WheelAthlete-managed locations; removing user data requires a separate confirmation. The application asks the daemon to finalize an active journal and waits for shutdown acknowledgement before closing or running cleanup. If shutdown cannot be confirmed, the window remains open and reports the failure.
 
 ## Trust and release architecture
 
@@ -118,4 +126,4 @@ A signed build requires a trusted RSA Code Signing identity with Code Signing EK
 
 Unsigned local builds may be tested but are not public trusted binaries and do not solve SmartScreen/Application Control publisher trust.
 
-The intended public branch surface is `main` plus `release/main-v1.8.2`; release tag `v1.8.2` must point at the exact final tested commit.
+The intended public branch surface after v1.8.4 verification is `main` plus `release/main-v1.8.4`; tag `v1.8.4` must point at the exact final tested commit. Preserve `main` history and use normal fast-forward/merge operations only.

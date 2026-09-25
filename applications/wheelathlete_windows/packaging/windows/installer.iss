@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-#define MyAppVersion "1.8.3"
+#define MyAppVersion "1.8.4"
 #endif
 #define MyAppName "WheelAthlete"
 #define MyAppPublisher "WheelAthlete"
@@ -45,6 +45,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: checkedonce
+Name: "cleanoldapp"; Description: "Remove leftover files from the previous WheelAthlete application folder"; GroupDescription: "Optional cleanup:"; Flags: unchecked
+Name: "deletedata"; Description: "Delete WheelAthlete recordings, CSV, models, settings, and logs"; GroupDescription: "Optional cleanup:"; Flags: unchecked
 
 [Dirs]
 Name: "{app}\Application"
@@ -90,10 +92,63 @@ begin
       'Close WheelAthlete, wait for any recording to finish, and try again.';
 end;
 
+function DeleteManagedFolder(const Root, FolderName: String): Boolean;
+var
+  FolderPath: String;
+begin
+  FolderPath := AddBackslash(Root) + FolderName;
+  Result := (not DirExists(FolderPath)) or
+    DelTree(FolderPath, True, True, True);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  DocumentsRoot: String;
+  InstallRoot: String;
 begin
   ExtractTemporaryFile('stop_installed_daemon.ps1');
   Result := RunDaemonStop(ExpandConstant('{tmp}\stop_installed_daemon.ps1'));
+  if Result <> '' then
+    Exit;
+  if WizardIsTaskSelected('deletedata') and
+     (MsgBox('Permanently delete WheelAthlete recordings, imported/exported CSV, models, settings, and logs in the managed WheelAthlete folders?',
+       mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES) then
+  begin
+    Result := 'WheelAthlete data deletion was not confirmed. Setup has been canceled.';
+    Exit;
+  end;
+  if WizardIsTaskSelected('cleanoldapp') and
+     (not DelTree(ExpandConstant('{app}\Application'), True, True, True)) then
+  begin
+    Result := 'Could not remove old WheelAthlete application files.';
+    Exit;
+  end;
+  if WizardIsTaskSelected('deletedata') then
+  begin
+    DocumentsRoot := ExpandConstant('{userdocs}\WheelAthlete');
+    InstallRoot := ExpandConstant('{app}');
+    if (not DeleteManagedData(DocumentsRoot, True)) or
+       (not DeleteManagedData(InstallRoot, False)) then
+      Result := 'Could not remove all selected WheelAthlete data folders. Setup has been canceled.';
+  end;
+end;
+
+function DeleteManagedData(const Root: String; DeleteSettings: Boolean): Boolean;
+begin
+  Result := True;
+  if not DeleteManagedFolder(Root, 'PC Sessions') then Result := False;
+  if not DeleteManagedFolder(Root, 'Imported CSV') then Result := False;
+  if not DeleteManagedFolder(Root, 'Exports') then Result := False;
+  if not DeleteManagedFolder(Root, 'Model') then Result := False;
+  if not DeleteManagedFolder(Root, 'Logs') then Result := False;
+  if not DeleteManagedFolder(Root, 'Updates') then Result := False;
+  if DeleteSettings then
+  begin
+    if not DeleteFile(AddBackslash(Root) + 'gui_settings.json') then
+      if FileExists(AddBackslash(Root) + 'gui_settings.json') then Result := False;
+    if not DeleteFile(AddBackslash(Root) + 'experiments.json') then
+      if FileExists(AddBackslash(Root) + 'experiments.json') then Result := False;
+  end;
 end;
 
 function InitializeUninstall(): Boolean;

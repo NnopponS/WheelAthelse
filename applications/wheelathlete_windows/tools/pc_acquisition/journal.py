@@ -461,32 +461,39 @@ class JournalReader:
             "sequence_class",
             "missing_before",
         ]
-        with output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
-            writer.writeheader()
-            for record in records:
-                if record.kind is not RecordKind.SAMPLE or record.sample is None:
-                    continue
-                received = record.sample
-                sample = received.sample
-                writer.writerow(
-                    {
-                        "session_id": session_id,
-                        "wheel": received.side.value,
-                        "seq": sample.seq,
-                        "timestamp_device_us": sample.t_device_us,
-                        "timestamp_pc_monotonic_ns": received.arrival_ns,
-                        "ax_raw": sample.ax,
-                        "ay_raw": sample.ay,
-                        "az_raw": sample.az,
-                        "gx_raw": sample.gx,
-                        "gy_raw": sample.gy,
-                        "gz_raw": sample.gz,
-                        "packet_id": received.packet_id,
-                        "sequence_class": received.sequence_class,
-                        "missing_before": received.missing_before,
-                    }
-                )
+        created = False
+        try:
+            with output.open("x", newline="", encoding="utf-8") as handle:
+                created = True
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                for record in records:
+                    if record.kind is not RecordKind.SAMPLE or record.sample is None:
+                        continue
+                    received = record.sample
+                    sample = received.sample
+                    writer.writerow(
+                        {
+                            "session_id": session_id,
+                            "wheel": received.side.value,
+                            "seq": sample.seq,
+                            "timestamp_device_us": sample.t_device_us,
+                            "timestamp_pc_monotonic_ns": received.arrival_ns,
+                            "ax_raw": sample.ax,
+                            "ay_raw": sample.ay,
+                            "az_raw": sample.az,
+                            "gx_raw": sample.gx,
+                            "gy_raw": sample.gy,
+                            "gz_raw": sample.gz,
+                            "packet_id": received.packet_id,
+                            "sequence_class": received.sequence_class,
+                            "missing_before": received.missing_before,
+                        }
+                    )
+        except BaseException:
+            if created:
+                output.unlink(missing_ok=True)
+            raise
         return output
 
 

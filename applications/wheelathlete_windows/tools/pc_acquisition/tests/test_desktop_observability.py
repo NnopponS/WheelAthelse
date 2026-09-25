@@ -90,7 +90,17 @@ def test_scan_connect_and_status_expose_desktop_observability(tmp_path: Path):
     asyncio.run(scenario())
 
 
-def test_pc_sessions_export_and_diagnostic_report(tmp_path: Path):
+def test_pc_sessions_export_and_diagnostic_report(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "tools.pc_acquisition.service._collect_windows_diagnostics",
+        lambda: {
+            "windows": {"release": "10", "version": "10.0", "build": 26100},
+            "bluetooth_adapters": [
+                {"model": "Adapter", "driver_version": "1.2", "provider": "Vendor"}
+            ],
+        },
+    )
+
     async def scenario():
         session_id = str(uuid.uuid4())
         recorder = JournalRecorder(tmp_path, session_id=session_id)
@@ -136,12 +146,77 @@ def test_pc_sessions_export_and_diagnostic_report(tmp_path: Path):
         )
         assert report["output_path"] == str(report_path)
         payload = json.loads(report_path.read_text(encoding="utf-8"))
-        assert payload["journal_root"] == str(tmp_path)
+        assert "journal_root" not in payload
+        assert "journal_root" not in payload["status"]
         assert "boards" in payload["status"]
+        assert str(tmp_path) not in report_path.read_text(encoding="utf-8")
+        assert payload["environment"]["windows"]["build"] == 26100
+        assert payload["environment"]["bluetooth_adapters"][0]["driver_version"] == "1.2"
         assert journal.exists()
         await service.close()
 
     asyncio.run(scenario())
+
+
+def test_diagnostic_report_redacts_private_paths_and_device_identity():
+    from tools.pc_acquisition.service import _sanitize_diagnostic_report
+
+    report = _sanitize_diagnostic_report(
+        {
+            "journal_root": r"C:\Users\Alice\Documents\WheelAthlete",
+            "status": {
+                "journal_root": r"C:\Users\Alice\Documents\WheelAthlete\PC Sessions",
+                "incomplete_sessions": ["AthleteA_Sprint.open"],
+                "operator_email": "alice@example.com",
+                "boards": {
+                    "L": {
+                        "name": "WheelAthlete-L Alice",
+                        "device_id": "private-device-id",
+                        "metrics": {"sequence_gaps": 7, "queue_drops": 2},
+                        "fault_summary": r"failed at C:\Users\Alice\recording.waj AA:BB:CC:DD:EE:FF",
+                    }
+                },
+            },
+            "ipc": {"ready_clients": 1},
+        }
+    )
+
+    serialized = json.dumps(report)
+    assert "C:\\Users\\Alice" not in serialized
+    assert "private-device-id" not in serialized
+    assert "AthleteA_Sprint.open" not in serialized
+    assert "alice@example.com" not in serialized
+    assert "AA:BB:CC:DD:EE:FF" not in serialized
+    assert report["status"]["boards"]["L"]["metrics"] == {
+        "sequence_gaps": 7,
+        "queue_drops": 2,
+    }
+    assert report["ipc"]["ready_clients"] == 1
+
+
+def test_bluetooth_driver_diagnostics_keep_only_model_and_driver_fields():
+    from tools.pc_acquisition.service import _bluetooth_driver_rows
+
+    rows = _bluetooth_driver_rows(
+        json.dumps(
+            [
+                {
+                    "DeviceName": "Intel(R) Wireless Bluetooth(R)",
+                    "DriverVersion": "23.90.0.2",
+                    "DriverProviderName": "Intel",
+                    "DeviceID": r"C:\Users\Alice\private-device-id",
+                }
+            ]
+        )
+    )
+
+    assert rows == [
+        {
+            "model": "Intel(R) Wireless Bluetooth(R)",
+            "driver_version": "23.90.0.2",
+            "provider": "Intel",
+        }
+    ]
 
 
 def test_status_rate_remains_defined_on_equal_monotonic_tick(tmp_path: Path, monkeypatch):

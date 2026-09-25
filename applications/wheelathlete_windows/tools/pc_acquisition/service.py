@@ -4,7 +4,11 @@ import asyncio
 import dataclasses
 import json
 import os
+import platform
+import re
 import struct
+import subprocess
+import sys
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -29,6 +33,124 @@ from .lifecycle import StartResult, SyncLifecycleController
 
 
 EventSink = Callable[[str, dict[str, Any]], None]
+
+_PRIVATE_DIAGNOSTIC_KEYS = {
+    "journal_root",
+    "incomplete_sessions",
+    "session_id",
+    "athlete",
+    "topic",
+    "name",
+    "advertised_name",
+    "device_id",
+    "address",
+    "serial_number",
+    "output_path",
+    "path",
+    "file",
+    "request_id",
+    "mac",
+    "email",
+    "username",
+}
+_ABSOLUTE_PATH_RE = re.compile(
+    r"(?i)(?:\b[A-Z]:[\\/]|\\\\[^\\/\s]+[\\/][^\\/\s]+[\\/]|/home/|/Users/|/root/)[^\r\n\"']*"
+)
+_DEVICE_ADDRESS_RE = re.compile(r"(?i)\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
+
+
+def _sanitize_diagnostic_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            normalized = str(key).strip().lower().replace("-", "_")
+            if normalized in _PRIVATE_DIAGNOSTIC_KEYS or normalized.endswith(
+                ("_path", "_file", "_name", "_address")
+            ):
+                continue
+            sanitized[str(key)] = _sanitize_diagnostic_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_diagnostic_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_diagnostic_value(item) for item in value]
+    if isinstance(value, str):
+        value = _ABSOLUTE_PATH_RE.sub("[path redacted]", value)
+        value = _DEVICE_ADDRESS_RE.sub("[device id redacted]", value)
+        return _EMAIL_RE.sub("[email redacted]", value)
+    return value
+
+
+def _sanitize_diagnostic_report(report: dict[str, Any]) -> dict[str, Any]:
+    sanitized = _sanitize_diagnostic_value(report)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _bluetooth_driver_rows(raw_json: str) -> list[dict[str, str]]:
+    try:
+        decoded = json.loads(raw_json or "[]")
+    except json.JSONDecodeError:
+        return []
+    items = decoded if isinstance(decoded, list) else [decoded]
+    rows: list[dict[str, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        fields = {str(key).lower(): value for key, value in item.items()}
+        model = str(fields.get("devicename") or "").strip()
+        driver = str(fields.get("driverversion") or "").strip()
+        provider = str(fields.get("driverprovidername") or "").strip()
+        if not (model or driver or provider):
+            continue
+        rows.append(
+            {
+                "model": _ABSOLUTE_PATH_RE.sub("[redacted]", model)[:120],
+                "driver_version": driver[:80],
+                "provider": _ABSOLUTE_PATH_RE.sub("[redacted]", provider)[:80],
+            }
+        )
+        if len(rows) == 12:
+            break
+    return rows
+
+
+def _collect_windows_diagnostics() -> dict[str, Any]:
+    windows: dict[str, Any] = {
+        "release": platform.release(),
+        "version": platform.version(),
+    }
+    if sys.platform != "win32":
+        return {"windows": windows, "bluetooth_adapters": []}
+    try:
+        version = sys.getwindowsversion()
+        windows.update(
+            {
+                "release": platform.release(),
+                "version": f"{version.major}.{version.minor}",
+                "build": int(version.build),
+            }
+        )
+    except (AttributeError, OSError):
+        pass
+    command = (
+        "Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='Bluetooth'\" "
+        "| Select-Object DeviceName,DriverVersion,DriverProviderName "
+        "| ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        adapters = _bluetooth_driver_rows(result.stdout) if result.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError):
+        adapters = []
+    return {"windows": windows, "bluetooth_adapters": adapters}
 
 
 def _side(value: Any) -> WheelSide:
@@ -87,6 +209,33 @@ def _metrics_delta(current: IngestionMetrics, baseline: IngestionMetrics) -> Ing
         queue_high_water=current.queue_high_water,
         queue_overflow_faults=current.queue_overflow_faults - baseline.queue_overflow_faults,
     )
+
+
+_FIRMWARE_COUNTER_FIELDS = (
+    "produced",
+    "notified",
+    "queue_drops",
+    "transport_failures",
+    "fifo_faults",
+    "fifo_dropped_samples",
+)
+
+
+def _firmware_health_delta(
+    current: dict[str, Any], baseline: dict[str, Any]
+) -> dict[str, Any]:
+    """Keep instantaneous health fields while scoping cumulative counters to one run."""
+    delta = dict(current)
+    for key in _FIRMWARE_COUNTER_FIELDS:
+        try:
+            value = int(current.get(key, 0) or 0)
+            before = int(baseline.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            delta[key] = 0
+            continue
+        # Firmware restart resets its lifetime counter; count from the new epoch.
+        delta[key] = value - before if value >= before else value
+    return delta
 
 
 def _sanitize_storage_component(value: Any, *, fallback: str) -> str:
@@ -158,6 +307,7 @@ class AcquisitionService:
         self._record_started_utc_ms: int | None = None
         self._start_result: StartResult | None = None
         self._metric_baseline: dict[WheelSide, IngestionMetrics] = {}
+        self._firmware_baseline: dict[WheelSide, dict[str, Any]] = {}
         self._device_info: dict[WheelSide, dict[str, Any]] = {}
         self._last_preview: dict[WheelSide, ReceivedSample] = {}
         self._scan_cache: dict[str, dict[str, Any]] = {}
@@ -198,6 +348,7 @@ class AcquisitionService:
         self._record_started_utc_ms = None
         self._start_result = None
         self._record_metadata = None
+        self._firmware_baseline.clear()
         if self._started:
             await self.engine.stop()
             self._started = False
@@ -653,6 +804,10 @@ class AcquisitionService:
         self._metric_baseline = {
             side: dataclasses.replace(self.engine.metrics(side)) for side in sides
         }
+        self._firmware_baseline = {
+            side: dataclasses.asdict(health) if (health := self.lifecycle.health(side)) else {}
+            for side in sides
+        }
         acceptance = payload.get("acceptance")
         if acceptance is not None and not isinstance(acceptance, dict):
             raise ValueError("acceptance metadata must be an object")
@@ -732,6 +887,7 @@ class AcquisitionService:
             self._record_started_utc_ms = None
             self._start_result = None
             self._record_metadata = None
+            self._firmware_baseline.clear()
             raise
 
     async def _cmd_end_record(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -790,6 +946,7 @@ class AcquisitionService:
         journal.wait_until_idle()
 
         board_qc: list[BoardQcInput] = []
+        firmware_health_deltas: dict[str, dict[str, Any]] = {}
         for side in sides:
             current = self.engine.metrics(side)
             baseline = self._metric_baseline[side]
@@ -799,13 +956,21 @@ class AcquisitionService:
                     "sample_rate_hz", 100
                 )
             )
+            firmware_health = stop_results[side].health
+            if firmware_health is not None:
+                firmware_delta = _firmware_health_delta(
+                    dataclasses.asdict(firmware_health),
+                    self._firmware_baseline.get(side, {}),
+                )
+                firmware_health_deltas[side.value] = firmware_delta
+                firmware_health = dataclasses.replace(firmware_health, **firmware_delta)
             board_qc.append(
                 BoardQcInput(
                     side=side,
                     configured_rate_hz=rate,
                     duration_s=duration_s,
                     host_metrics=metrics,
-                    firmware_health=stop_results[side].health,
+                    firmware_health=firmware_health,
                     start_acknowledged=(
                         self._start_result is not None
                         and side in self._start_result.acknowledged
@@ -831,6 +996,7 @@ class AcquisitionService:
             "quality": qc.level.name,
             "duration_s": duration_s,
             "started_utc_ms": self._record_started_utc_ms,
+            "firmware_health_deltas": firmware_health_deltas,
             "journal": {
                 "samples_written": journal.metrics.samples_written,
                 "queue_high_water": journal.metrics.queue_high_water,
@@ -875,6 +1041,7 @@ class AcquisitionService:
         self._start_result = None
         self._record_metadata = None
         self._metric_baseline.clear()
+        self._firmware_baseline.clear()
         value = {
             "session_id": session_id,
             "journal_path": str(final_path),
@@ -951,7 +1118,17 @@ class AcquisitionService:
         output_raw = payload.get("output_path")
         output = Path(str(output_raw)) if output_raw else source.with_suffix(".csv")
         output.parent.mkdir(parents=True, exist_ok=True)
-        exported = JournalReader(source).export_csv(output)
+        candidate = output
+        suffix = 2
+        while True:
+            try:
+                exported = await asyncio.to_thread(
+                    JournalReader(source).export_csv, candidate
+                )
+                break
+            except FileExistsError:
+                candidate = output.with_name(f"{output.stem}_{suffix}{output.suffix}")
+                suffix += 1
         return {"session_id": session_id, "output_path": str(exported)}
 
     async def _cmd_delete_session(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1070,11 +1247,11 @@ class AcquisitionService:
         ipc_status = payload.get("_ipc_status")
         report = {
             "generated_utc_ms": int(time.time() * 1000),
-            "journal_root": str(self.journal_root),
             "status": self.status(),
             "ipc": dict(ipc_status) if isinstance(ipc_status, dict) else {},
+            "environment": await asyncio.to_thread(_collect_windows_diagnostics),
         }
-        self._write_json_atomic(output, report)
+        self._write_json_atomic(output, _sanitize_diagnostic_report(report))
         return {"output_path": str(output)}
 
     def _journal_path_for_session(self, session_id: str) -> Path:
@@ -1173,6 +1350,25 @@ class AcquisitionService:
                 and side in self._auto_reconnect_tasks
                 and not self._auto_reconnect_tasks[side].done()
             )
+            health = self.lifecycle.health(side)
+            recording_side = self._journal is not None and side in self._record_sides
+            run_metrics = (
+                dataclasses.asdict(
+                    _metrics_delta(
+                        metrics, self._metric_baseline.get(side, metrics)
+                    )
+                )
+                if recording_side
+                else None
+            )
+            health_values = dataclasses.asdict(health) if health is not None else None
+            run_health = (
+                _firmware_health_delta(
+                    health_values or {}, self._firmware_baseline.get(side, {})
+                )
+                if recording_side and health_values is not None
+                else None
+            )
             boards[side.value] = {
                 "connected": device_id is not None,
                 "reconnecting": reconnecting,
@@ -1188,15 +1384,15 @@ class AcquisitionService:
                 "queue_depth": self.engine.pending_notifications(side),
                 "queue_high_water": metrics.queue_high_water,
                 "queue_overflow_faults": metrics.queue_overflow_faults,
+                "run_metrics": run_metrics,
+                "run_health": run_health,
                 "notifications_hz": notifications_hz,
                 "samples_hz": samples_hz,
                 "fatal_fault": dataclasses.asdict(self.engine.fatal_fault(side))
                 if self.engine.fatal_fault(side)
                 else None,
                 "clock": self._clock_payload(side, model) if model else None,
-                "health": dataclasses.asdict(self.lifecycle.health(side))
-                if self.lifecycle.health(side)
-                else None,
+                "health": health_values,
             }
         journal = self._journal
         return {
@@ -1206,6 +1402,9 @@ class AcquisitionService:
             "recording_started_utc_ms": self._record_started_utc_ms,
             "live": bool(self._live_sides),
             "live_sides": [side.value for side in self._live_sides],
+            "recording_sides": [
+                side.value for side in self._record_sides
+            ] if journal is not None else [],
             "journal_root": str(self.journal_root),
             "session_id": journal.session_id if journal else None,
             "journal": {

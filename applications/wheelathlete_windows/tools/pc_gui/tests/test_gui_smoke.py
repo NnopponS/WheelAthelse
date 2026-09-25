@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import tempfile
+import time
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QFrame, QLineEdit, QMessageBox, QPushButton
 
@@ -131,8 +132,24 @@ def test_results_page_batch_export_and_session_folder():
 
     # Test batch export to temporary folder creating Topic_trial_athlete naming
     with tempfile.TemporaryDirectory() as tmpdir:
+        progress = []
+        completed = []
+        failed = []
+        controller.export_progress.connect(lambda *args: progress.append(args))
+        controller.export_completed.connect(completed.append)
+        controller.export_failed.connect(failed.append)
         exported = controller.export_sessions(selected, tmpdir)
         assert len(exported) == len(selected)
+        deadline = time.monotonic() + 5
+        while not completed and not failed and time.monotonic() < deadline:
+            _APP.processEvents()
+            time.sleep(0.01)
+        assert not failed
+        assert completed == [exported]
+        assert progress[0][:2] == (0, len(exported))
+        assert progress[-1][:2] == (len(exported), len(exported))
+        assert not results.export_progress_bar.isHidden()
+        assert "Export complete" in results.export_progress_bar.format()
         for path_str in exported:
             p = Path(path_str)
             assert p.exists()
@@ -165,6 +182,24 @@ def test_results_page_batch_export_and_session_folder():
         assert Path(results.folder_label.text()).samefile(custom_folder)
 
     controller.close()
+    window.close()
+
+
+def test_results_export_failure_is_visible_without_blocking_dialogs():
+    controller = DemoController()
+    window = MainWindow(controller, demo=True)
+    window.show()
+    window.results._on_export_progress(0, 1, "")
+    assert window.results.export_progress_bar.minimum() == 0
+    assert window.results.export_progress_bar.maximum() == 0
+    window.results._on_export_failed("destination is not writable")
+    _APP.processEvents()
+
+    bar = window.results.export_progress_bar
+    assert not bar.isHidden()
+    assert bar.format() == "CSV export failed"
+    assert bar.toolTip() == "destination is not writable"
+
     window.close()
     window.deleteLater()
     _APP.processEvents()
