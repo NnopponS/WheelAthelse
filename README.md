@@ -4,12 +4,16 @@
 
 WheelAthlete synchronizes inertial sensors mounted on the left and right wheelchair wheels, records research-grade motion data, and provides a dedicated Windows workflow for acquisition, quality control, export, diagnostics, and optional offline trajectory analysis. An optional chair-center IMU (`C`) is supported for acquisition and research instrumentation.
 
-> **Current release:** `v1.8.4`
+[Technical overview](https://nnoppons.github.io/#work) · [Source release v1.8.4](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.4) · [Windows application guide](applications/wheelathlete_windows/README.md)
+
+> **Current source release:** `v1.8.4`
 > **Windows application:** `1.8.4`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
 > **Mobile source:** `1.8.3+13`; unchanged maintenance source, excluded from this release
 > **Language:** English | [ไทย](README.th.md)
+
+The public v1.8.4 release contains source only, with no Windows installer or portable binary attached. The Windows build instructions remain below.
 
 ## Release status
 

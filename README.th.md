@@ -4,12 +4,16 @@
 
 WheelAthlete ซิงโครไนซ์เซนเซอร์ที่ล้อซ้ายและขวา บันทึกข้อมูลการเคลื่อนไหวแบบ research-grade และมี Windows application สำหรับเก็บข้อมูล ตรวจคุณภาพ จัดการผลลัพธ์ ส่งออกข้อมูล ดู diagnostics และวิเคราะห์ trajectory แบบ offline นอกจากนี้ระบบยังรองรับ IMU ตัวที่สามตำแหน่งกลางเก้าอี้ (`C`) สำหรับการเก็บข้อมูลและงานทดลอง
 
-> **Release ปัจจุบัน:** `v1.8.4` — Windows-first
+[ภาพรวมโปรเจกต์](https://nnoppons.github.io/#work) · [ซอร์สโค้ดรุ่น v1.8.4](https://github.com/NnopponS/WheelAthelse/releases/tag/v1.8.4) · [คู่มือ Windows](applications/wheelathlete_windows/README.md)
+
+> **รุ่นซอร์สโค้ดปัจจุบัน:** `v1.8.4` — Windows-first
 > **Windows application:** `1.8.4`
 > **Firmware:** `1.8.2`
 > **BLE protocol:** `1.8.0`
 > **Mobile source:** `1.8.3+13` ไม่เปลี่ยนแปลงและอยู่นอกขอบเขต release นี้
 > **ภาษา:** [English](README.md) | ไทย
+
+รุ่น v1.8.4 ที่เผยแพร่มีเฉพาะซอร์สโค้ด ไม่มีไฟล์ติดตั้งหรือไฟล์ portable สำหรับ Windows ดูวิธีสร้างจากซอร์สได้ด้านล่าง
 
 ## สถานะ Release
 
